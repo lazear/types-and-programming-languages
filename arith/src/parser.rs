@@ -1,4 +1,4 @@
-use crate::lexer::{Lexer, Token, TokenSpan};
+use crate::lexer::{Lexer, Token};
 use crate::span::Span;
 use std::iter::Peekable;
 
@@ -15,12 +15,14 @@ pub enum Term {
 
 pub struct Parser<'s> {
     diagnostic: Diagnostic<'s>,
+    /// [`Lexer`] impls [`Iterator`] over [`TokenSpan`],
+    /// so we can just directly wrap it in a [`Peekable`]
     lexer: Peekable<Lexer<'s>>,
     span: Span,
 }
 
 /// Struct that handles collecting and reporting Parser errors and diagnostics
-/// 
+///
 /// The length of `messages` and `spans` must always be equal
 pub struct Diagnostic<'s> {
     src: &'s str,
@@ -46,19 +48,19 @@ impl Diagnostic<'_> {
         self.messages.len()
     }
 
-    /// Remove the last error message 
+    /// Remove the last error message
     pub fn pop(&mut self) -> Option<String> {
         let msg = self.messages.pop()?;
         let span = self.spans.pop()?;
         let line = self.src.lines().skip(span.start.line as usize).next()?;
         Some(format!(
-                "Error occuring at line {}, col: {}: {}\n{}\n{}^~~~\n",
-                span.start.line,
-                span.start.col,
-                msg,
-                &line,
-                (0..span.start.col).map(|_| ' ').collect::<String>(),
-            ))
+            "Error occuring at line {}, col: {}: {}\n{}\n{}^~~~\n",
+            span.start.line,
+            span.start.col,
+            msg,
+            &line,
+            (0..span.start.col).map(|_| ' ').collect::<String>(),
+        ))
     }
 
     /// Emit all remaining error message, if there are any
