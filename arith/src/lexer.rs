@@ -14,15 +14,15 @@ pub enum Token {
     If,
     Then,
     Else,
-    Semicolon,
     True,
     False,
     IsZero,
+
+    Semicolon,
     LParen,
     RParen,
 
     Invalid,
-    EOF,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
@@ -38,6 +38,7 @@ impl std::ops::Deref for TokenSpan {
     }
 }
 
+#[derive(Clone)]
 pub struct Lexer<'s> {
     input: Peekable<Chars<'s>>,
     current: Location,
@@ -55,7 +56,7 @@ impl<'s> Lexer<'s> {
         }
     }
 
-    pub fn peek(&mut self) -> Option<char> {
+    fn peek(&mut self) -> Option<char> {
         self.input.peek().cloned()
     }
 
@@ -93,15 +94,14 @@ impl<'s> Lexer<'s> {
         Spanned::new(Span::new(start, self.current), s)
     }
 
+    /// Eat whitespace
     fn consume_delimiter(&mut self) {
         let _ = self.consume_while(|ch| ch.is_whitespace());
     }
 
     fn number(&mut self) -> Option<TokenSpan> {
         let Spanned { data, span } = self.consume_while(char::is_numeric);
-        let kind = Token::Int(
-            data.parse::<u32>().expect("only numeric chars")
-        );
+        let kind = Token::Int(data.parse::<u32>().expect("only numeric chars"));
         Some(TokenSpan { kind, span })
     }
 
@@ -116,10 +116,78 @@ impl<'s> Lexer<'s> {
             "succ" => Token::Succ,
             "pred" => Token::Pred,
             "iszero" => Token::IsZero,
-            _ => Token::Invalid
+            "zero" => Token::Int(0),
+            _ => Token::Invalid,
         };
         Some(TokenSpan { kind, span })
     }
 
+    fn eat(&mut self, ch: char, token: Token) -> Option<TokenSpan> {
+        let loc = self.current;
+        let n = self.consume()?;
+        let kind = if n == ch { token } else { Token::Invalid };
+        Some(TokenSpan {
+            span: Span::new(loc, self.current),
+            kind,
+        })
+    }
 
+    fn lex(&mut self) -> Option<TokenSpan> {
+        self.consume_delimiter();
+        match self.peek()? {
+            x if x.is_ascii_alphabetic() => self.keyword(),
+            x if x.is_numeric() => self.number(),
+            '(' => self.eat('(', Token::LParen),
+            ')' => self.eat(')', Token::RParen),
+            ';' => self.eat(';', Token::Semicolon),
+            _ => self.eat(' ', Token::Invalid),
+        }
+    }
+}
+
+impl<'s> Iterator for Lexer<'s> {
+    type Item = TokenSpan;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.lex()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use Token::*;
+    #[test]
+    fn valid() {
+        let input = "succ(succ(succ(0)))";
+        let expected = vec![
+            Succ,
+            LParen,
+            Succ,
+            LParen,
+            Succ,
+            LParen,
+            Int(0),
+            RParen,
+            RParen,
+            RParen,
+        ];
+        let output = Lexer::new(input.chars())
+            .into_iter()
+            .map(|t| t.kind)
+            .collect::<Vec<Token>>();
+        assert_eq!(expected, output);
+    }
+
+    #[test]
+    fn invalid() {
+        let input = "succ(succ(succ(xyz)))";
+        let expected = vec![
+            Succ, LParen, Succ, LParen, Succ, LParen, Invalid, RParen, RParen, RParen,
+        ];
+        let output = Lexer::new(input.chars())
+            .into_iter()
+            .map(|t| t.kind)
+            .collect::<Vec<Token>>();
+        assert_eq!(expected, output);
+    }
 }

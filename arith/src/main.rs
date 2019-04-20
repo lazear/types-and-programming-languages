@@ -1,18 +1,14 @@
-mod span;
 mod lexer;
+mod parser;
+mod span;
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub enum Term {
-    TmTrue,
-    TmFalse,
-    TmIf(Box<Term>, Box<Term>, Box<Term>),
-    TmZero,
-    TmSucc(Box<Term>),
-    TmPred(Box<Term>),
-    TmIsZero(Box<Term>),
-}
-
+use lexer::Lexer;
+use parser::{Parser, Term};
 
 fn main() {
-    println!("Hello, world!");
+    let input = "iszero(succ(succ(succ(0))))";
+    let mut p = Parser::new(input);
+    while let Some(tm) = p.parse_term() {
+        println!("{:?}", tm);
+    }
 }

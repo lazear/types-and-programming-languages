@@ -64,7 +64,8 @@ impl<T> Spanned<T> {
 }
 
 impl<T, E> Spanned<Result<T, E>> {
-    /// Transpose a [`Spanned<Result<T, E>>`] into a [`Result<Spanned<T>, Spanned<E>>`]
+    /// Transpose a [`Spanned<Result<T, E>>`] into a [`Result<Spanned<T>,
+    /// Spanned<E>>`]
     pub fn map_result(self) -> Result<Spanned<T>, Spanned<E>> {
         let Spanned { span, data } = self;
         data.map(|t| Spanned::new(span, t))
