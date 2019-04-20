@@ -14,12 +14,14 @@ pub enum Term {
 }
 
 pub struct Parser<'s> {
-    src: &'s str,
     diagnostic: Diagnostic<'s>,
     lexer: Peekable<Lexer<'s>>,
     span: Span,
 }
 
+/// Struct that handles collecting and reporting Parser errors and diagnostics
+/// 
+/// The length of `messages` and `spans` must always be equal
 pub struct Diagnostic<'s> {
     src: &'s str,
     messages: Vec<String>,
@@ -44,16 +46,36 @@ impl Diagnostic<'_> {
         self.messages.len()
     }
 
+    /// Remove the last error message 
+    pub fn pop(&mut self) -> Option<String> {
+        let msg = self.messages.pop()?;
+        let span = self.spans.pop()?;
+        let line = self.src.lines().skip(span.start.line as usize).next()?;
+        Some(format!(
+                "Error occuring at line {}, col: {}: {}\n{}\n{}^~~~\n",
+                span.start.line,
+                span.start.col,
+                msg,
+                &line,
+                (0..span.start.col).map(|_| ' ').collect::<String>(),
+            ))
+    }
+
+    /// Emit all remaining error message, if there are any
     pub fn emit(mut self) -> String {
         let mut s = String::new();
         assert_eq!(self.messages.len(), self.spans.len());
 
         let lines = self.src.lines().collect::<Vec<&str>>();
-        for i in 0 .. self.messages.len() {
+        for i in 0..self.messages.len() {
             let msg = &self.messages[i];
             let span = self.spans[i];
 
-            s.push_str(&format!("Error occuring at line {}, col: {}: {}\n{}\n{}^~~~\n", span.start.line, span.start.col, msg, 
+            s.push_str(&format!(
+                "Error occuring at line {}, col: {}: {}\n{}\n{}^~~~\n",
+                span.start.line,
+                span.start.col,
+                msg,
                 &lines[span.start.line as usize],
                 (0..span.start.col).map(|_| ' ').collect::<String>(),
             ));
@@ -65,19 +87,18 @@ impl Diagnostic<'_> {
 }
 
 impl<'s> Parser<'s> {
+    /// Create a new [`Parser`] for the input `&str`
     pub fn new(input: &'s str) -> Parser<'s> {
         Parser {
-            src: input,
             diagnostic: Diagnostic::new(input),
             lexer: Lexer::new(input.chars()).peekable(),
             span: Span::default(),
         }
     }
 
-    fn peek(&mut self) -> Option<Token> {
-        let ts = self.lexer.peek()?;
-        self.span = ts.span;
-        Some(ts.kind)
+    /// Return the last parsing error as a formatted message, if it exists
+    pub fn last_error(&mut self) -> Option<String> {
+        self.diagnostic.pop()
     }
 
     fn consume(&mut self) -> Option<Token> {
@@ -120,13 +141,12 @@ impl<'s> Parser<'s> {
             Token::Semicolon => return self.parse_term(),
             Token::Int(x) => baptize(x),
             Token::Then | Token::Else | Token::RParen => {
-                //panic!("out of place token! @ {:?}", self.span)
                 self.diagnostic.push("Out of place token", self.span);
-                return self.parse_term()
+                return self.parse_term();
             }
             Token::Invalid => {
                 self.diagnostic.push("Invalid token", self.span);
-                return self.parse_term()
+                return self.parse_term();
             }
         };
         Some(kind)
@@ -148,22 +168,31 @@ fn baptize(int: u32) -> Term {
 
 /// Convert from church encoding to natural number
 fn sin(term: Term) -> Option<u32> {
-    let mut n = 0;
+    let mut n: i32 = 0;
     let mut ptr = term;
-    while let Term::TmSucc(t) = ptr {
-        n += 1;
-        ptr = *t;
-        if let Term::TmZero = ptr {
-            return Some(n);
+    loop {
+        match ptr {
+            Term::TmSucc(next) => {
+                n += 1;
+                ptr = *next;
+            }
+            Term::TmPred(next) => {
+                n -= 1;
+                ptr = *next;
+            }
+            Term::TmZero => return Some(n as u32),
+            _ => return None,
         }
     }
-    None
 }
 
 impl Drop for Diagnostic<'_> {
     fn drop(&mut self) {
         if self.error_count() != 0 {
-            panic!("parser::Diagnostic dropped without handling {} errors!", self.error_count());
+            panic!(
+                "parser::Diagnostic dropped without handling {} errors!",
+                self.error_count()
+            );
         }
     }
 }
@@ -183,7 +212,7 @@ mod test {
     fn baptism_by_fire() {
         let s = succ!(succ!(succ!(succ!(TmZero))));
         assert_eq!(baptize(4), s);
-        assert_eq!(sin(baptize(4)), Some(4));
+        assert_eq!(sin(TmPred(Box::new(baptize(4)))), Some(3));
     }
 
 }
