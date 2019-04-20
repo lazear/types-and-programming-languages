@@ -1,9 +1,7 @@
-use crate::span::{Location, Span, Spanned};
+use util::span::{Location, Span, Spanned};
 
 use std::char;
-use std::fmt;
 use std::iter::Peekable;
-use std::rc::Rc;
 use std::str::Chars;
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
@@ -96,7 +94,7 @@ impl<'s> Lexer<'s> {
 
     /// Eat whitespace
     fn consume_delimiter(&mut self) {
-        let _ = self.consume_while(|ch| ch.is_whitespace());
+        let _ = self.consume_while(char::is_whitespace);
     }
 
     fn number(&mut self) -> Option<TokenSpan> {

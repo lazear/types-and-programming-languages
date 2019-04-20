@@ -1,2 +1,2 @@
 [workspace]
-members = ["arith"]
+members = ["arith", "util"]

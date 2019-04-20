@@ -1,7 +1,5 @@
 mod lexer;
 mod parser;
-mod span;
-
 use parser::{Parser, Term};
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
@@ -74,7 +72,8 @@ pub fn eval(t: Term) -> Term {
 }
 
 fn main() {
-    let input = "succ(succ(succ(succ(0)))); iszero(0); iszero(1); iszero(pred(succ(0))";
+    println!("λ");
+    let input = "if iszero(succ(zero)) then false else succ(4)";
     let mut p = Parser::new(input);
     while let Some(tm) = p.parse_term() {
         print!("{:?} ==> ", tm);
