@@ -10,6 +10,20 @@ pub struct Location {
     pub abs: u32,
 }
 
+
+impl Location {
+    pub fn new(line: u32, col: u32, abs: u32) -> Location {
+        Location { line, col, abs }
+    }
+}
+
+impl fmt::Display for Location {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.line, self.col)
+    }
+}
+
+
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Default)]
 /// A span of code
 pub struct Span {
@@ -23,11 +37,6 @@ pub struct Spanned<T> {
     pub data: T,
 }
 
-impl Location {
-    pub fn new(line: u32, col: u32, abs: u32) -> Location {
-        Location { line, col, abs }
-    }
-}
 
 impl Span {
     pub fn new(start: Location, end: Location) -> Span {
@@ -57,6 +66,10 @@ impl<T> Spanned<T> {
         }
     }
 
+    pub fn as_tuple(self) -> (Span, T) {
+        (self.span, self.data)
+    }
+
     /// Consume self, returning the wrapped `T`
     pub fn into_inner(self) -> T {
         self.data
@@ -77,12 +90,6 @@ impl<T> Spanned<Option<T>> {
     pub fn map_option(self) -> Option<Spanned<T>> {
         let Spanned { span, data } = self;
         data.map(|t| Spanned::new(span, t))
-    }
-}
-
-impl fmt::Display for Location {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{}", self.line, self.col)
     }
 }
 
@@ -115,3 +122,13 @@ impl<T: Clone> Clone for Spanned<T> {
 }
 
 impl<T: Copy> Copy for Spanned<T> {}
+
+impl std::ops::Add<Span> for Span {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        Span {
+            start: self.start,
+            end: rhs.end,
+        }
+    }
+}

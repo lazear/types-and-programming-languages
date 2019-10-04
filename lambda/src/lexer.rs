@@ -14,19 +14,6 @@ pub enum Token {
     Invalid,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
-pub struct TokenSpan {
-    pub kind: Token,
-    pub span: Span,
-}
-
-impl std::ops::Deref for TokenSpan {
-    type Target = Token;
-    fn deref(&self) -> &Self::Target {
-        &self.kind
-    }
-}
-
 #[derive(Clone)]
 pub struct Lexer<'s> {
     input: Peekable<Chars<'s>>,
@@ -88,17 +75,14 @@ impl<'s> Lexer<'s> {
         let _ = self.consume_while(char::is_whitespace);
     }
 
-    fn eat(&mut self, ch: char, token: Token) -> Option<TokenSpan> {
+    fn eat(&mut self, ch: char, token: Token) -> Option<Spanned<Token>> {
         let loc = self.current;
         let n = self.consume()?;
         let kind = if n == ch { token } else { Token::Invalid };
-        Some(TokenSpan {
-            span: Span::new(loc, self.current),
-            kind,
-        })
+        Some(Spanned::new(Span::new(loc, self.current), kind))
     }
 
-    fn lex(&mut self) -> Option<TokenSpan> {
+    fn lex(&mut self) -> Option<Spanned<Token>> {
         self.consume_delimiter();
         match self.peek()? {
             '(' => self.eat('(', Token::LParen),
@@ -111,7 +95,7 @@ impl<'s> Lexer<'s> {
 }
 
 impl<'s> Iterator for Lexer<'s> {
-    type Item = TokenSpan;
+    type Item = Spanned<Token>;
     fn next(&mut self) -> Option<Self::Item> {
         self.lex()
     }
