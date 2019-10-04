@@ -26,7 +26,7 @@ impl std::fmt::Debug for Term {
         match self {
             Term::TmVar(_, v) => write!(f, "{}", v),
             Term::TmAbs(_, tm) => write!(f, "λ.{:?}", tm),
-            Term::TmApp(_, t, b) => write!(f, "({:?}) {:?}", t, b),
+            Term::TmApp(_, t, b) => write!(f, "{:?} {:?}", t, b),
         }
     }
 }
@@ -108,14 +108,12 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn parse_paren(&mut self) -> Option<Term> {
-        let e = self.parse_term();
-        self.expect(Token::RParen);
-        e
+    fn peek(&mut self) -> Option<Token> {
+        self.lexer.peek().map(|s| s.data)
     }
 
-    fn parse_lambda(&mut self) -> Option<Term> {
-        let start = self.span;
+    fn lambda(&mut self) -> Option<Term> {
+        let start = self.expect(Token::Lambda)?.span;
 
         let var = self.consume()?;
 
@@ -137,36 +135,60 @@ impl<'s> Parser<'s> {
         self.ctx = ctx;
 
         let _ = self.expect(Token::Dot)?;
-        let body = self.parse_term()?;
+        let body = dbg!(self.term()?);
         let end = self.span;
 
         // Return to previous context
         self.ctx = prev_ctx;
-        Some(Term::TmAbs(start + end, body.into()))
+        dbg!(Some(Term::TmAbs(start + end, body.into())))
     }
 
-    fn tm_app(var: Term, body: Term) -> Term {
-        Term::TmApp(var.span() + body.span(), var.into(), body.into())
+    fn term(&mut self) -> Option<Term> {
+        match self.peek()? {
+            Token::Lambda => self.lambda(),
+            _ => self.application(),
+        }
+    }
+
+    /// Parse an application of form:
+    /// application = atom application' | atom
+    /// application' = atom application' | empty
+    fn application(&mut self) -> Option<Term> {
+        let mut lhs = dbg!(self.atom()?);
+        let span = self.span;
+        while let Some(rhs) = dbg!(self.atom()) {
+            lhs = Term::TmApp(span + self.span, lhs.into(), rhs.into());
+        }
+        dbg!(Some(lhs))
+    }
+
+    /// Parse an atomic term
+    /// LPAREN term RPAREN | var
+    fn atom(&mut self) -> Option<Term> {
+        match self.peek()? {
+            Token::LParen => {
+                self.expect(Token::LParen)?;
+                let term = dbg!(self.term()?);
+                self.expect(Token::RParen)?;
+                Some(term)
+            }
+            Token::Var(ch) => {
+                let sp = self.consume()?.span;
+                match self.ctx.lookup(format!("{}", ch)) {
+                    Some(idx) => Some(Term::TmVar(sp, idx)),
+                    None => {
+                        self.diagnostic.push(format!("Unbound variable {}", ch), sp);
+                        None
+                    }
+                }
+            }
+
+            _ => None,
+        }
     }
 
     pub fn parse_term(&mut self) -> Option<Term> {
-        let spanned = self.consume()?;
-        match spanned.data {
-            Token::LParen => Some(Self::tm_app(self.parse_paren()?, self.parse_term()?)),
-            Token::Lambda => self.parse_lambda(),
-            Token::Var(ch) => match self.ctx.lookup(format!("{}", ch)) {
-                Some(idx) => Some(Term::TmVar(spanned.span, idx)),
-                None => {
-                    self.diagnostic
-                        .push(format!("Unbound variable {}", ch), spanned.span);
-                    None
-                }
-            },
-            Token::Invalid | Token::RParen | Token::Dot => {
-                self.diagnostic.push("Invalid token", self.span);
-                self.parse_term()
-            }
-        }
+        self.term()
     }
 
     pub fn diagnostic(self) -> Diagnostic<'s> {

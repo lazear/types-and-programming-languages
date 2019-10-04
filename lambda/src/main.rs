@@ -4,7 +4,7 @@ mod parser;
 use parser::Parser;
 
 fn main() {
-    let input = "(λ x. λ y. x) z";
+    let input = "(λ x. x x) (λ x. x x)";
     let mut p = Parser::new(input);
     while let Some(tm) = p.parse_term() {
         println!("{:?}", tm);
