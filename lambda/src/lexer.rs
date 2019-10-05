@@ -33,7 +33,7 @@ impl<'s> Lexer<'s> {
     }
 
     fn peek(&mut self) -> Option<char> {
-        self.input.peek().cloned()
+        self.input.peek().copied()
     }
 
     /// Consume the next [`char`] and advance internal source position

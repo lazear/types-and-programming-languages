@@ -135,12 +135,12 @@ impl<'s> Parser<'s> {
         self.ctx = ctx;
 
         let _ = self.expect(Token::Dot)?;
-        let body = dbg!(self.term()?);
+        let body = self.term()?;
         let end = self.span;
 
         // Return to previous context
         self.ctx = prev_ctx;
-        dbg!(Some(Term::TmAbs(start + end, body.into())))
+        Some(Term::TmAbs(start + end, body.into()))
     }
 
     fn term(&mut self) -> Option<Term> {
@@ -154,12 +154,12 @@ impl<'s> Parser<'s> {
     /// application = atom application' | atom
     /// application' = atom application' | empty
     fn application(&mut self) -> Option<Term> {
-        let mut lhs = dbg!(self.atom()?);
+        let mut lhs = self.atom()?;
         let span = self.span;
-        while let Some(rhs) = dbg!(self.atom()) {
+        while let Some(rhs) = self.atom() {
             lhs = Term::TmApp(span + self.span, lhs.into(), rhs.into());
         }
-        dbg!(Some(lhs))
+        Some(lhs)
     }
 
     /// Parse an atomic term
@@ -168,7 +168,7 @@ impl<'s> Parser<'s> {
         match self.peek()? {
             Token::LParen => {
                 self.expect(Token::LParen)?;
-                let term = dbg!(self.term()?);
+                let term = self.term()?;
                 self.expect(Token::RParen)?;
                 Some(term)
             }
@@ -189,6 +189,10 @@ impl<'s> Parser<'s> {
 
     pub fn parse_term(&mut self) -> Option<Term> {
         self.term()
+    }
+
+    pub fn ctx(&self) -> &Context {
+        &self.ctx
     }
 
     pub fn diagnostic(self) -> Diagnostic<'s> {

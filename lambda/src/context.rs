@@ -16,7 +16,7 @@ impl Context {
         } else {
             let mut ctx = self.clone();
             let idx = ctx.size();
-            ctx.inner.push(hint);
+            ctx.inner.insert(0, hint);
             (ctx, idx)
         }
     }
