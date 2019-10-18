@@ -10,7 +10,6 @@ pub struct Location {
     pub abs: u32,
 }
 
-
 impl Location {
     pub fn new(line: u32, col: u32, abs: u32) -> Location {
         Location { line, col, abs }
@@ -22,7 +21,6 @@ impl fmt::Display for Location {
         write!(f, "{}:{}", self.line, self.col)
     }
 }
-
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Default)]
 /// A span of code
@@ -36,7 +34,6 @@ pub struct Spanned<T> {
     pub span: Span,
     pub data: T,
 }
-
 
 impl Span {
     pub fn new(start: Location, end: Location) -> Span {

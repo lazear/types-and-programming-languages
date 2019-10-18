@@ -139,5 +139,4 @@ mod test {
         assert_eq!(baptize(4), s);
         assert_eq!(sin(TmPred(Box::new(baptize(4)))), Some(3));
     }
-
 }
