@@ -31,9 +31,9 @@ impl std::fmt::Debug for Term {
     }
 }
 
-impl Into<RcTerm> for Term {
-    fn into(self) -> RcTerm {
-        RcTerm(Rc::new(self))
+impl From<Term> for RcTerm {
+    fn from(term: Term) -> RcTerm {
+        RcTerm(Rc::new(term))
     }
 }
 
@@ -112,7 +112,7 @@ impl<'s> Parser<'s> {
         self.lexer.peek().map(|s| s.data)
     }
 
-    fn lambda(&mut self) -> Option<Term> {
+    fn lambda(&mut self) -> Option<RcTerm> {
         let start = self.expect(Token::Lambda)?.span;
 
         let var = self.consume()?;
@@ -140,10 +140,10 @@ impl<'s> Parser<'s> {
 
         // Return to previous context
         self.ctx = prev_ctx;
-        Some(Term::TmAbs(start + end, body.into()))
+        Some(Term::TmAbs(start + end, body.into()).into())
     }
 
-    fn term(&mut self) -> Option<Term> {
+    fn term(&mut self) -> Option<RcTerm> {
         match self.peek()? {
             Token::Lambda => self.lambda(),
             _ => self.application(),
@@ -153,18 +153,18 @@ impl<'s> Parser<'s> {
     /// Parse an application of form:
     /// application = atom application' | atom
     /// application' = atom application' | empty
-    fn application(&mut self) -> Option<Term> {
+    fn application(&mut self) -> Option<RcTerm> {
         let mut lhs = self.atom()?;
         let span = self.span;
         while let Some(rhs) = self.atom() {
-            lhs = Term::TmApp(span + self.span, lhs.into(), rhs.into());
+            lhs = Term::TmApp(span + self.span, lhs, rhs).into();
         }
-        Some(lhs)
+        Some(lhs.into())
     }
 
     /// Parse an atomic term
     /// LPAREN term RPAREN | var
-    fn atom(&mut self) -> Option<Term> {
+    fn atom(&mut self) -> Option<RcTerm> {
         match self.peek()? {
             Token::LParen => {
                 self.expect(Token::LParen)?;
@@ -175,7 +175,7 @@ impl<'s> Parser<'s> {
             Token::Var(ch) => {
                 let sp = self.consume()?.span;
                 match self.ctx.lookup(format!("{}", ch)) {
-                    Some(idx) => Some(Term::TmVar(sp, idx)),
+                    Some(idx) => Some(Term::TmVar(sp, idx).into()),
                     None => {
                         self.diagnostic.push(format!("Unbound variable {}", ch), sp);
                         None
@@ -187,7 +187,7 @@ impl<'s> Parser<'s> {
         }
     }
 
-    pub fn parse_term(&mut self) -> Option<Term> {
+    pub fn parse_term(&mut self) -> Option<RcTerm> {
         self.term()
     }
 
