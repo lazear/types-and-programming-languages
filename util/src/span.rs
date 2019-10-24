@@ -63,12 +63,20 @@ impl<T> Spanned<T> {
         }
     }
 
-    pub fn as_tuple(self) -> (Span, T) {
-        (self.span, self.data)
-    }
-
     /// Consume self, returning the wrapped `T`
     pub fn into_inner(self) -> T {
+        self.data
+    }
+
+    #[inline]
+    pub fn span(&self) -> Span {
+        self.span
+    }
+}
+
+impl<T: Copy> Spanned<T> {
+    #[inline]
+    pub fn data(&self) -> T {
         self.data
     }
 }
