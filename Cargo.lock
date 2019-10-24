@@ -15,6 +15,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "typedarith"
+version = "0.1.0"
+dependencies = [
+ "util 0.1.0",
+]
+
+[[package]]
 name = "util"
 version = "0.1.0"
 
