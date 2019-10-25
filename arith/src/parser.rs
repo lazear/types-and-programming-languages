@@ -32,11 +32,6 @@ impl<'s> Parser<'s> {
         }
     }
 
-    /// Return the last parsing error as a formatted message, if it exists
-    pub fn last_error(&mut self) -> Option<String> {
-        self.diagnostic.pop()
-    }
-
     fn consume(&mut self) -> Option<Token> {
         let ts = self.lexer.next()?;
         self.span = ts.span;

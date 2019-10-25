@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::VecDeque;
 
 pub enum Binding {
     Name,
@@ -6,7 +6,7 @@ pub enum Binding {
 
 #[derive(Clone, Debug, Default)]
 pub struct Context {
-    inner: Vec<String>,
+    inner: VecDeque<String>,
 }
 
 impl Context {
@@ -16,7 +16,7 @@ impl Context {
         } else {
             let mut ctx = self.clone();
             let idx = ctx.size();
-            ctx.inner.insert(0, hint);
+            ctx.inner.push_front(hint);
             (ctx, idx)
         }
     }

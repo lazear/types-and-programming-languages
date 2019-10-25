@@ -9,11 +9,11 @@ use util::span::*;
 #[derive(Clone, PartialEq, PartialOrd)]
 pub struct RcTerm(pub Rc<Term>);
 
-// impl From<Term> for RcTerm {
-//     fn from(tm: Term) -> Self {
-//         RcTerm(Rc::new(tm))
-//     }
-// }
+impl From<Term> for RcTerm {
+    fn from(term: Term) -> RcTerm {
+        RcTerm(Rc::new(term))
+    }
+}
 
 impl std::fmt::Debug for RcTerm {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -28,12 +28,6 @@ impl std::fmt::Debug for Term {
             Term::TmAbs(_, tm) => write!(f, "λ.{:?}", tm),
             Term::TmApp(_, t, b) => write!(f, "{:?} {:?}", t, b),
         }
-    }
-}
-
-impl From<Term> for RcTerm {
-    fn from(term: Term) -> RcTerm {
-        RcTerm(Rc::new(term))
     }
 }
 

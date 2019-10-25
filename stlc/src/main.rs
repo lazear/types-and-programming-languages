@@ -26,6 +26,12 @@ macro_rules! if_ {
     };
 }
 
+macro_rules! arrow {
+    ($a:expr, $b:expr) => {
+        Type::Arrow(Box::new($a), Box::new($b))
+    };
+}
+
 fn main() {
     println!("Hello, world!");
 
@@ -40,7 +46,12 @@ fn main() {
         )),
     );
 
-    let t = app!(Var("x".into()), Var("y".into()));
-    let id = abs!("x", Type::Bool, Var("x".into()));
-    dbg!(&id);
+    let id = abs!("x", Type::Bool, var!("x"));
+    let f = app!(id.clone(), False);
+
+    let mistyped = if_!(f.clone(), id.clone(), False);
+
+    assert_eq!(root.type_of(&id), Ok(arrow!(Type::Bool, Type::Bool)));
+    assert_eq!(root.type_of(&f), Ok(Type::Bool));
+    assert_eq!(root.type_of(&mistyped), Err(term::TypeError::ArmMismatch));
 }

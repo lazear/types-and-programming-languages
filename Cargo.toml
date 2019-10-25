@@ -1,2 +1,2 @@
 [workspace]
-members = ["arith", "lambda", "typedarith", "util"]
+members = ["arith", "lambda", "typedarith", "stlc", "util"]

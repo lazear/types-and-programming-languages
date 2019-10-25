@@ -18,11 +18,13 @@ pub enum Type {
     Bool,
     Arrow(Box<Type>, Box<Type>),
 }
+
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum TypeError {
     Guard,
     ArmMismatch,
     ParameterMismatch,
+    UnknownVariable,
     ExpectedArrow,
 }
 
@@ -80,7 +82,7 @@ impl<'a> Context<'a> {
             }
             Var(s) => match self.get(s) {
                 Some(Binding::Variable(ty)) => Ok(ty.clone()),
-                _ => Err(TypeError::ParameterMismatch),
+                _ => Err(TypeError::UnknownVariable),
             },
             Abs(v, ty, body) => {
                 let ctx = self.add(v.clone(), Binding::Variable(ty.clone()));
