@@ -2,9 +2,8 @@ use util;
 mod ast;
 mod lexer;
 mod parser;
-use parser::Parser;
 use ast::*;
-
+use parser::Parser;
 
 fn main() {
     let input = "if iszero(succ(zero)) then pred(0) else succ(4)";

@@ -1,5 +1,5 @@
-use std::rc::Rc;
 use std::ops::Deref;
+use std::rc::Rc;
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub enum Type {
@@ -18,7 +18,6 @@ pub enum Term {
     TmIsZero(RcTerm),
 }
 
-
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub enum TyError {
     TypingError,
@@ -29,40 +28,32 @@ pub fn typing(tm: RcTerm) -> Result<Type, TyError> {
         Term::TmTrue => Ok(Type::Bool),
         Term::TmFalse => Ok(Type::Bool),
         Term::TmZero => Ok(Type::Nat),
-        Term::TmSucc(t) => {
-            match typing(t.clone()) {
-                Ok(Type::Nat) => Ok(Type::Nat),
-                _ => Err(TyError::TypingError),
-            }
-        }
-        Term::TmPred(t) => {
-            match typing(t.clone()) {
-                Ok(Type::Nat) => Ok(Type::Nat),
-                _ => Err(TyError::TypingError),
-            }
+        Term::TmSucc(t) => match typing(t.clone()) {
+            Ok(Type::Nat) => Ok(Type::Nat),
+            _ => Err(TyError::TypingError),
         },
-        Term::TmIsZero(t) => {
-            match typing(t.clone()) {
-                Ok(Type::Nat) => Ok(Type::Bool),
-                _ => Err(TyError::TypingError),
-            }
+        Term::TmPred(t) => match typing(t.clone()) {
+            Ok(Type::Nat) => Ok(Type::Nat),
+            _ => Err(TyError::TypingError),
         },
-        Term::TmIf(a, b, c) => {
-            match typing(a.clone()) {
-                Ok(Type::Bool) => {
-                    let ty_b = typing(b.clone())?;
-                    let ty_c = typing(c.clone())?;
-                    if ty_b == ty_c {
-                        Ok(ty_b)
-                    } else {
-                        Err(TyError::TypingError)
-                    }
-                },
-                _ =>  Err(TyError::TypingError)
+        Term::TmIsZero(t) => match typing(t.clone()) {
+            Ok(Type::Nat) => Ok(Type::Bool),
+            _ => Err(TyError::TypingError),
+        },
+        Term::TmIf(a, b, c) => match typing(a.clone()) {
+            Ok(Type::Bool) => {
+                let ty_b = typing(b.clone())?;
+                let ty_c = typing(c.clone())?;
+                if ty_b == ty_c {
+                    Ok(ty_b)
+                } else {
+                    Err(TyError::TypingError)
+                }
             }
-        }
+            _ => Err(TyError::TypingError),
+        },
     }
-} 
+}
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub struct RcTerm(pub Rc<Term>);

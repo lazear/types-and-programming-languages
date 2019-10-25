@@ -1,8 +1,8 @@
+use crate::ast::{RcTerm, Term};
 use crate::lexer::{Lexer, Token};
 use std::iter::Peekable;
 use util::diagnostic::Diagnostic;
 use util::span::Span;
-use crate::ast::{Term, RcTerm};
 
 pub struct Parser<'s> {
     diagnostic: Diagnostic<'s>,
