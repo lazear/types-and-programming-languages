@@ -1,5 +1,7 @@
 use crate::typing::Type;
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+use std::fmt;
+
+#[derive(Clone, PartialEq, PartialOrd)]
 pub enum Term {
     True,
     False,
@@ -12,27 +14,40 @@ pub enum Term {
     If(Box<Term>, Box<Term>, Box<Term>),
 }
 
+impl fmt::Debug for Term {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Term::True => write!(f, "true"),
+            Term::False => write!(f, "false"),
+            Term::Var(idx) => write!(f, "{}", idx),
+            Term::Abs(ty, body) => write!(f, "λ_:{:?}. {:?}", ty, body),
+            Term::App(t1, t2) => write!(f, "({:?}) {:?}", t1, t2),
+            Term::If(a, b, c) => write!(f, "if {:?} then {:?} else {:?}", a, b, c),
+        }
+    }
+}
+
 macro_rules! app {
     ($ex:expr, $xy:expr) => {
-        App(Box::new($ex), Box::new($xy))
+        crate::term::Term::App(Box::new($ex), Box::new($xy))
     };
 }
 
 macro_rules! abs {
     ($ty:expr, $body:expr) => {
-        Abs($ty, Box::new($body))
+        crate::term::Term::Abs($ty, Box::new($body))
     };
 }
 
 macro_rules! var {
     ($var:expr) => {
-        Var($var)
+        crate::term::Term::Var($var)
     };
 }
 
 macro_rules! if_ {
     ($a:expr, $b:expr, $c:expr) => {
-        If(Box::new($a), Box::new($b), Box::new($c))
+        crate::term::Term::If(Box::new($a), Box::new($b), Box::new($c))
     };
 }
 

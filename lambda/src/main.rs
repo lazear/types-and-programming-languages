@@ -85,7 +85,7 @@ fn eval1(ctx: &Context, tm: RcTerm) -> RcTerm {
 fn main() {
     // let input = "(λ x. x x) (λ x. x x) λ x. λ y. y λ x. λ x. x";
     //
-    let input = "(λ x. x) (λ y. y)";
+    let input = "(λ x. (λ y. y) x) (λ x. x)";
     let mut p = Parser::new(input);
     while let Some(tm) = p.parse_term() {
         println!("{:?}", tm);
