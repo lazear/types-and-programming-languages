@@ -19,6 +19,8 @@ pub enum Token {
     If,
     Then,
     Else,
+    Let,
+    In,
     IsZero,
     Semicolon,
     Colon,
@@ -27,6 +29,7 @@ pub enum Token {
     RParen,
     LBrace,
     RBrace,
+    Equals,
     Invalid,
 }
 
@@ -110,6 +113,8 @@ impl<'s> Lexer<'s> {
             "zero" => Token::Nat(0),
             "Bool" => Token::TyBool,
             "Nat" => Token::TyNat,
+            "let" => Token::Let,
+            "in" => Token::In,
             _ => Token::Ident(data),
         });
         Some(tok)
@@ -136,6 +141,7 @@ impl<'s> Lexer<'s> {
             '\\' => self.eat('\\', Token::Lambda),
             'λ' => self.eat('λ', Token::Lambda),
             '.' => self.eat('.', Token::Proj),
+            '=' => self.eat('=', Token::Equals),
             '-' => {
                 self.consume()?;
                 self.eat('>', Token::TyArrow)

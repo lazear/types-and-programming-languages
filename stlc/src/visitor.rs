@@ -14,6 +14,7 @@ pub trait Visitor<T> {
     fn visit_abs(&mut self, ty: Type, body: Rc<Term>) -> T;
     fn visit_app(&mut self, t1: Rc<Term>, t2: Rc<Term>) -> T;
     fn visit_if(&mut self, guard: Rc<Term>, csq: Rc<Term>, alt: Rc<Term>) -> T;
+    fn visit_let(&mut self, bind: Rc<Term>, body: Rc<Term>) -> T;
     fn visit_succ(&mut self, t: Rc<Term>) -> T;
     fn visit_pred(&mut self, t: Rc<Term>) -> T;
     fn visit_iszero(&mut self, t: Rc<Term>) -> T;
@@ -79,6 +80,15 @@ impl Visitor<Rc<Term>> for Shifting {
         Term::If(guard.accept(self), csq.accept(self), alt.accept(self)).into()
     }
 
+    fn visit_let(&mut self, bind: Rc<Term>, body: Rc<Term>) -> Rc<Term> {
+        self.cutoff += 1;
+        let bind_ = bind.accept(self);
+
+        let body_ = body.accept(self);
+        self.cutoff -= 1;
+        Term::Let(bind_, body_).into()
+    }
+
     fn visit_succ(&mut self, t: Rc<Term>) -> Rc<Term> {
         Term::Succ(t.accept(self)).into()
     }
@@ -130,6 +140,14 @@ impl Visitor<Rc<Term>> for Substitution {
 
     fn visit_if(&mut self, guard: Rc<Term>, csq: Rc<Term>, alt: Rc<Term>) -> Rc<Term> {
         Term::If(guard.accept(self), csq.accept(self), alt.accept(self)).into()
+    }
+
+    fn visit_let(&mut self, bind: Rc<Term>, body: Rc<Term>) -> Rc<Term> {
+        self.cutoff += 1;
+        let bind_ = bind.accept(self);
+        let body_ = body.accept(self);
+        self.cutoff -= 1;
+        Term::Let(bind_, body_).into()
     }
 
     fn visit_succ(&mut self, t: Rc<Term>) -> Rc<Term> {

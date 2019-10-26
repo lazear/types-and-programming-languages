@@ -82,25 +82,38 @@ impl<'s> Parser<'s> {
         self.lexer.peek().map(|s| s.data.clone())
     }
 
+    fn bind_name(&mut self) -> Option<(NameContext, Term)> {
+        let span = self.consume()?;
+        let var = match span.data {
+            Token::Ident(s) => s,
+            x => {
+                self.diagnostic
+                    .push(format!("Expected variable, found {:?}", x), span.span);
+                return None;
+            }
+        };
+        let (ctx, idx) = self.ctx.bind(var);
+        Some((ctx, Term::Var(idx)))
+    }
+
     fn lambda(&mut self) -> Option<Rc<Term>> {
         let start = self.expect(Token::Lambda)?.span;
-
-        let var = self.consume()?;
 
         // Bind variable into a new context before parsing the body
         // of the lambda abstraction
         let prev_ctx = self.ctx.clone();
-        let (ctx, var) = match var.data {
-            Token::Ident(s) => {
-                let (ctx, idx) = self.ctx.bind(format!("{}", s));
-                (ctx, Term::Var(idx))
-            }
-            x => {
-                self.diagnostic
-                    .push(format!("Expected variable, found {:?}", x), var.span);
-                return None;
-            }
-        };
+        // let (ctx, var) = match var.data {
+        //     Token::Ident(s) => {
+        //         let (ctx, idx) = self.ctx.bind(format!("{}", s));
+        //         (ctx, Term::Var(idx))
+        //     }
+        //     x => {
+        //         self.diagnostic
+        //             .push(format!("Expected variable, found {:?}", x), var.span);
+        //         return None;
+        //     }
+        // };
+        let (ctx, var) = self.bind_name()?;
 
         self.ctx = ctx;
         let _ = self.expect(Token::Colon)?;
@@ -112,6 +125,24 @@ impl<'s> Parser<'s> {
         // Return to previous context
         self.ctx = prev_ctx;
         Some(Term::Abs(ty, body.into()).into())
+    }
+
+    fn let_expr(&mut self) -> Option<Rc<Term>> {
+        let start = self.expect(Token::Let)?;
+
+        let ctx = self.ctx.clone();
+        let (ctx_, var) = self.bind_name()?;
+        self.ctx = ctx_;
+
+        let _ = self.expect(Token::Equals)?;
+        let bind = self.term()?;
+        let _ = self.expect(Token::In)?;
+
+        // dbg!(&self.ctx);
+        let body = self.term()?;
+        // dbg!(&body);
+        self.ctx = ctx;
+        Some(Term::Let(bind, body).into())
     }
 
     fn term(&mut self) -> Option<Rc<Term>> {
@@ -194,6 +225,7 @@ impl<'s> Parser<'s> {
                 Some(Term::False.into())
             }
             Token::If => self.if_expr(),
+            Token::Let => self.let_expr(),
             Token::Nat(i) => {
                 self.consume()?;
                 Some(Term::Zero.into())

@@ -18,6 +18,7 @@ pub enum Term {
     // Application (t1 t2)
     App(Rc<Term>, Rc<Term>),
     If(Rc<Term>, Rc<Term>, Rc<Term>),
+    Let(Rc<Term>, Rc<Term>),
 }
 
 impl<V, T> Visitable<V, T> for Rc<Term>
@@ -34,6 +35,7 @@ where
             Term::Abs(ty, term) => visitor.visit_abs(ty.clone(), term.clone()),
             Term::App(t1, t2) => visitor.visit_app(t1.clone(), t2.clone()),
             Term::If(a, b, c) => visitor.visit_if(a.clone(), b.clone(), c.clone()),
+            Term::Let(bind, body) => visitor.visit_let(bind.clone(), body.clone()),
         }
     }
 }
@@ -66,6 +68,7 @@ impl fmt::Display for Term {
             Term::Abs(ty, body) => write!(f, "λ_:{:?}. {}", ty, body),
             Term::App(t1, t2) => write!(f, "({}) {}", t1, t2),
             Term::If(a, b, c) => write!(f, "if {} then {} else {}", a, b, c),
+            Term::Let(bind, body) => write!(f, "let x={} in {}", bind, body),
         }
     }
 }

@@ -15,7 +15,7 @@ use visitor::{Visitable, Visitor};
 
 fn ev(term: Rc<Term>) -> Result<Rc<Term>, eval::Error> {
     let ctx = Context::default();
-    println!("EVAL {}  TYPE: {:?}", &term, ctx.type_of(&term));
+    println!("EVAL {:?}  TYPE: {:?}", &term, ctx.type_of(&term));
     let r = eval::eval(&ctx, term)?;
     println!("===> {}", &r);
     println!("type {:?}", ctx.type_of(&r));
@@ -53,14 +53,21 @@ fn main() {
 
     let input = "(λx: Bool -> Bool. x true) (λx: Bool. if x then false else true) ";
     // parse(input);
-    parse("iszero pred succ 0");
-    parse("(\\ y: Nat -> Bool. (\\x: Nat. if y x then true else false))");
-    parse("(\\x: Nat. \\y: Nat. if iszero x then iszero y else false) (succ 0)");
-    parse("(\\z: Nat. iszero z)");
-    parse("(\\x: Nat->Bool. \\y: Nat. if x y then true else false) (\\z: Nat. iszero z) succ 0");
-    parse("(\\x: Nat->Nat. (\\y: Nat. x succ y)) (\\x: Nat. x) succ 0");
+    // parse("iszero pred succ 0");
+    // parse("(\\ y: Nat -> Bool. (\\x: Nat. if y x then true else false))");
+    // parse("(\\x: Nat. \\y: Nat. if iszero x then iszero y else false) (succ 0)");
+    // parse("(\\z: Nat. iszero z)");
+    // parse("(\\x: Nat->Bool. \\y: Nat. if x y then true else false) (\\z: Nat. iszero z) succ 0");
+    // parse("(\\x: Nat->Nat. (\\y: Nat. x succ y)) (\\x: Nat. x) succ 0");
+    //
 
-    let mut eval = eval::Evaluator { context: &root };
+    // parse("let not = (\\x: Bool. if x then false else true) in not false");
+    parse("let not = (\\x: Bool. if x then false else true) in let x = succ 0 in let y = not iszero x in y");
 
-    dbg!(Rc::new(f).accept(&mut eval));
+    // let mut eval = eval::Evaluator { context: &root };
+
+    // dbg!(Rc::new(f).accept(&mut eval));
+    //
+    //
+    //
 }

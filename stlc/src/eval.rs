@@ -8,6 +8,13 @@ pub enum Error {
     NoRuleApplies,
 }
 
+#[inline]
+fn subst(val: Rc<Term>, body: Rc<Term>) -> Rc<Term> {
+    let mut sub = Substitution::new(val.accept(&mut Shifting::new(Direction::Up)));
+    body.accept(&mut sub)
+        .accept(&mut Shifting::new(Direction::Down))
+}
+
 fn value(ctx: &Context, term: &Term) -> bool {
     match term {
         Term::True | Term::False | Term::Abs(_, _) | Term::Zero => true,
@@ -20,11 +27,7 @@ fn eval1(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
     match term.as_ref() {
         Term::App(t1, ref t2) if value(ctx, &t2) => {
             if let Term::Abs(_, body) = t1.as_ref() {
-                let mut sub = Substitution::new(t2.accept(&mut Shifting::new(Direction::Up)));
-                // Ok(subst_top(t2.clone(), body.clone()))
-                Ok(body
-                    .accept(&mut sub)
-                    .accept(&mut Shifting::new(Direction::Down)))
+                Ok(subst(t2.clone(), body.clone()))
             } else if value(ctx, &t1) {
                 let t_prime = eval1(ctx, t2.clone())?;
                 Ok(Term::App(t1.clone(), t_prime).into())
@@ -49,6 +52,14 @@ fn eval1(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
                 Ok(Term::If(t_prime, csq.clone(), alt.clone()).into())
             }
         },
+        Term::Let(bind, body) => {
+            if value(ctx, bind) {
+                Ok(subst(bind.clone(), body.clone()))
+            } else {
+                let t = eval1(ctx, bind.clone())?;
+                Ok(Term::Let(t, body.clone()).into())
+            }
+        }
         Term::Succ(t) => {
             let t_prime = eval1(ctx, t.clone())?;
             Ok(Term::Succ(t_prime).into())
@@ -142,6 +153,10 @@ impl<'a> Visitor<Result<Rc<Term>, TypeError>> for Evaluator<'a> {
                 Ok(Term::App(t1.clone(), t_prime).into())
             }
         }
+    }
+
+    fn visit_let(&mut self, bind: Rc<Term>, body: Rc<Term>) -> Result<Rc<Term>, TypeError> {
+        Err(TypeError::UnknownVariable)
     }
 
     fn visit_var(&mut self, var: usize) -> Result<Rc<Term>, TypeError> {
