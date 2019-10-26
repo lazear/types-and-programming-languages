@@ -1,4 +1,4 @@
-use super::visitor::Visitor;
+use super::visitor::{Visitable, Visitor};
 use crate::typing::Type;
 use std::fmt;
 use std::rc::Rc;
@@ -20,15 +20,16 @@ pub enum Term {
     If(Rc<Term>, Rc<Term>, Rc<Term>),
 }
 
-impl Term {
-    pub fn accept<V: Visitor<Rc<Term>>>(&self, visitor: &mut V) -> Rc<Term> {
-        match self {
-            Term::True => visitor.visit_bool(true),
-            Term::False => visitor.visit_bool(false),
-            Term::Zero => visitor.visit_nat(0),
-            Term::Succ(t) => Term::Succ(t.accept(visitor)).into(),
-            Term::Pred(t) => Term::Pred(t.accept(visitor)).into(),
-            Term::IsZero(t) => Term::IsZero(t.accept(visitor)).into(),
+impl<V, T> Visitable<V, T> for Rc<Term>
+where
+    V: Visitor<T>,
+{
+    fn accept(&self, visitor: &mut V) -> T {
+        match self.as_ref() {
+            Term::True | Term::False | Term::Zero => visitor.visit_const(self.clone()),
+            Term::Succ(t) => visitor.visit_succ(t.clone()),
+            Term::Pred(t) => visitor.visit_pred(t.clone()),
+            Term::IsZero(t) => visitor.visit_iszero(t.clone()),
             Term::Var(idx) => visitor.visit_var(*idx),
             Term::Abs(ty, term) => visitor.visit_abs(ty.clone(), term.clone()),
             Term::App(t1, t2) => visitor.visit_app(t1.clone(), t2.clone()),
@@ -36,6 +37,21 @@ impl Term {
         }
     }
 }
+
+// impl Term {
+//     pub fn accept<V: Visitor<Rc<Term>>>(&self, visitor: &mut V) -> Rc<Term> {
+//         match self {
+//             Term::True | Term::False | Term::Zero => visitor.visit_const(self.clone()),
+//             Term::Succ(t) => visitor.visit_succ(t.clone()),
+//             Term::Pred(t) => visitor.visit_pred(t.clone()),
+//             Term::IsZero(t) => visitor.visit_iszero(t.clone()),
+//             Term::Var(idx) => visitor.visit_var(*idx),
+//             Term::Abs(ty, term) => visitor.visit_abs(ty.clone(), term.clone()),
+//             Term::App(t1, t2) => visitor.visit_app(t1.clone(), t2.clone()),
+//             Term::If(a, b, c) => visitor.visit_if(a.clone(), b.clone(), c.clone()),
+//         }
+//     }
+// }
 
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

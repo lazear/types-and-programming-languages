@@ -1,61 +1,7 @@
 use super::term::Term;
 use super::typing::{Context, Type, TypeError};
-use super::visitor::{Shifting, Substitution};
+use super::visitor::{Shifting, Substitution, Visitable, Visitor};
 use std::rc::Rc;
-
-fn map_var<F: Fn(usize, usize) -> Rc<Term>>(f: &F, c: usize, t: Rc<Term>) -> Rc<Term> {
-    match t.as_ref() {
-        Term::True | Term::False | Term::Zero => t,
-        Term::Pred(t) => Term::Pred(map_var(f, c, t.clone())).into(),
-        Term::Succ(t) => Term::Succ(map_var(f, c, t.clone())).into(),
-        Term::IsZero(t) => Term::IsZero(map_var(f, c, t.clone())).into(),
-        Term::Abs(ty, t1) => Term::Abs(ty.clone(), map_var(f, c + 1, t1.clone())).into(),
-        Term::App(t1, t2) => Term::App(map_var(f, c, t1.clone()), map_var(f, c, t2.clone())).into(),
-        Term::If(t1, t2, t3) => Term::If(
-            map_var(f, c, t1.clone()),
-            map_var(f, c, t2.clone()),
-            map_var(f, c, t3.clone()),
-        )
-        .into(),
-        Term::Var(idx) => f(c, *idx).into(),
-    }
-}
-
-fn shift_above(d: isize, c: usize, t: Rc<Term>) -> Rc<Term> {
-    map_var(
-        &|c, x| {
-            if x >= c {
-                Term::Var(x + d as usize).into()
-            } else {
-                Term::Var(x).into()
-            }
-        },
-        c,
-        t,
-    )
-}
-
-fn shift(d: isize, t: Rc<Term>) -> Rc<Term> {
-    shift_above(d, 0, t)
-}
-
-fn subst(j: usize, s: Rc<Term>, t: Rc<Term>) -> Rc<Term> {
-    map_var(
-        &|c, x| {
-            if x == c {
-                shift(j as isize, s.clone())
-            } else {
-                Term::Var(x).into()
-            }
-        },
-        j,
-        t.clone(),
-    )
-}
-
-pub fn subst_top(s: Rc<Term>, t: Rc<Term>) -> Rc<Term> {
-    shift(-1, subst(0, shift(1, s), t))
-}
 
 #[derive(Debug)]
 pub enum Error {

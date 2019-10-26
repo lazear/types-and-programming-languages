@@ -2,13 +2,22 @@ use super::*;
 use std::default::Default;
 use std::rc::Rc;
 
+pub trait Visitable<V, T>
+where
+    V: Visitor<T>,
+{
+    fn accept(&self, visitor: &mut V) -> T;
+}
+
 pub trait Visitor<T> {
     fn visit_var(&mut self, var: usize) -> T;
     fn visit_abs(&mut self, ty: Type, body: Rc<Term>) -> T;
     fn visit_app(&mut self, t1: Rc<Term>, t2: Rc<Term>) -> T;
     fn visit_if(&mut self, guard: Rc<Term>, csq: Rc<Term>, alt: Rc<Term>) -> T;
-    fn visit_bool(&mut self, val: bool) -> T;
-    fn visit_nat(&mut self, nat: u32) -> T;
+    fn visit_succ(&mut self, t: Rc<Term>) -> T;
+    fn visit_pred(&mut self, t: Rc<Term>) -> T;
+    fn visit_iszero(&mut self, t: Rc<Term>) -> T;
+    fn visit_const(&mut self, c: Rc<Term>) -> T;
 }
 
 #[derive(Debug)]
@@ -60,15 +69,20 @@ impl Visitor<Rc<Term>> for Shifting {
         Term::If(guard.accept(self), csq.accept(self), alt.accept(self)).into()
     }
 
-    fn visit_bool(&mut self, val: bool) -> Rc<Term> {
-        match val {
-            true => Rc::new(Term::True),
-            false => Rc::new(Term::False),
-        }
+    fn visit_succ(&mut self, t: Rc<Term>) -> Rc<Term> {
+        Term::Succ(t.accept(self)).into()
     }
 
-    fn visit_nat(&mut self, val: u32) -> Rc<Term> {
-        Term::Zero.into()
+    fn visit_pred(&mut self, t: Rc<Term>) -> Rc<Term> {
+        Term::Pred(t.accept(self)).into()
+    }
+
+    fn visit_iszero(&mut self, t: Rc<Term>) -> Rc<Term> {
+        Term::IsZero(t.accept(self)).into()
+    }
+
+    fn visit_const(&mut self, c: Rc<Term>) -> Rc<Term> {
+        c
     }
 }
 
@@ -108,14 +122,19 @@ impl Visitor<Rc<Term>> for Substitution {
         Term::If(guard.accept(self), csq.accept(self), alt.accept(self)).into()
     }
 
-    fn visit_bool(&mut self, val: bool) -> Rc<Term> {
-        match val {
-            true => Rc::new(Term::True),
-            false => Rc::new(Term::False),
-        }
+    fn visit_succ(&mut self, t: Rc<Term>) -> Rc<Term> {
+        Term::Succ(t.accept(self)).into()
     }
 
-    fn visit_nat(&mut self, val: u32) -> Rc<Term> {
-        Term::Zero.into()
+    fn visit_pred(&mut self, t: Rc<Term>) -> Rc<Term> {
+        Term::Pred(t.accept(self)).into()
+    }
+
+    fn visit_iszero(&mut self, t: Rc<Term>) -> Rc<Term> {
+        Term::IsZero(t.accept(self)).into()
+    }
+
+    fn visit_const(&mut self, c: Rc<Term>) -> Rc<Term> {
+        c
     }
 }

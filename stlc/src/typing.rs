@@ -1,5 +1,7 @@
 use crate::term::Term;
+use crate::visitor::{Visitable, Visitor};
 use std::fmt;
+use std::rc::Rc;
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub enum Type {
@@ -36,6 +38,47 @@ pub enum TypeError {
 pub struct Context<'a> {
     parent: Option<&'a Context<'a>>,
     ty: Option<Type>,
+}
+
+impl<'a> Visitor<Result<Type, TypeError>> for Context<'a> {
+    fn visit_var(&mut self, var: usize) -> Result<Type, TypeError> {
+        self.get(var).cloned().ok_or(TypeError::UnknownVariable)
+    }
+
+    fn visit_abs(&mut self, ty: Type, body: Rc<Term>) -> Result<Type, TypeError> {
+        let mut ctx = self.add(ty.clone());
+        let ty_body = body.accept(&mut ctx)?;
+        Ok(Type::Arrow(Box::new(ty.clone()), Box::new(ty_body)))
+    }
+
+    fn visit_app(&mut self, t1: Rc<Term>, t2: Rc<Term>) -> Result<Type, TypeError> {
+        Ok(Type::Nat)
+    }
+
+    fn visit_if(
+        &mut self,
+        guard: Rc<Term>,
+        csq: Rc<Term>,
+        alt: Rc<Term>,
+    ) -> Result<Type, TypeError> {
+        Ok(Type::Nat)
+    }
+
+    fn visit_succ(&mut self, t: Rc<Term>) -> Result<Type, TypeError> {
+        Ok(Type::Nat)
+    }
+
+    fn visit_pred(&mut self, t: Rc<Term>) -> Result<Type, TypeError> {
+        Ok(Type::Nat)
+    }
+
+    fn visit_iszero(&mut self, t: Rc<Term>) -> Result<Type, TypeError> {
+        Ok(Type::Nat)
+    }
+
+    fn visit_const(&mut self, c: Rc<Term>) -> Result<Type, TypeError> {
+        Ok(Type::Nat)
+    }
 }
 
 impl<'a> Context<'a> {

@@ -11,6 +11,7 @@ use std::rc::Rc;
 use term::Term;
 use term::Term::*;
 use typing::{Context, Type, TypeError};
+use visitor::{Visitable, Visitor};
 
 fn ev(term: Rc<Term>) -> Result<Rc<Term>, eval::Error> {
     let ctx = Context::default();
@@ -43,25 +44,25 @@ fn exercises() {
 
     // Exercise 6.2.2 part 1
     let arr = arrow!(Type::Bool, Type::Bool);
-    let ex1 = abs!(
+    let ex1 = Rc::new(abs!(
         arr.clone(),
         abs!(arr.clone(), app!(app!(var!(1), var!(0)), var!(2)))
-    );
+    ));
     dbg!(ex1.accept(&mut v));
 
     // Exercise 6.2.2 part 2
-    let ex2 = abs!(
+    let ex2 = Rc::new(abs!(
         arr.clone(),
         app!(
             app!(var!(0), var!(1)),
             abs!(Type::Bool, app!(app!(var!(0), var!(1)), var!(2)))
         )
-    );
+    ));
     dbg!(ex2.accept(&mut v));
 }
 
 fn main() {
-    let root: Context = Context::default();
+    let mut root: Context = Context::default();
 
     let id = abs!(Type::Bool, var!(0));
     let f = app!(id.clone(), False);
@@ -71,6 +72,8 @@ fn main() {
     assert_eq!(root.type_of(&id), Ok(arrow!(Type::Bool, Type::Bool)));
     assert_eq!(root.type_of(&f), Ok(Type::Bool));
     assert_eq!(root.type_of(&mistyped), Err(TypeError::ArmMismatch));
+
+    dbg!(Rc::new(id).accept(&mut root));
 
     let input = "(λx: Bool -> Bool. x true) (λx: Bool. if x then false else true) ";
     // parse(input);
