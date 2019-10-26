@@ -1,4 +1,5 @@
 use super::*;
+use std::default::Default;
 use std::rc::Rc;
 
 pub trait Visitor<T> {
@@ -14,6 +15,21 @@ pub trait Visitor<T> {
 pub struct Shifting {
     pub cutoff: usize,
     pub shift: isize,
+}
+
+impl Default for Shifting {
+    fn default() -> Self {
+        Shifting {
+            cutoff: 0,
+            shift: 1,
+        }
+    }
+}
+
+impl Shifting {
+    pub fn new(shift: isize) -> Self {
+        Shifting { cutoff: 0, shift }
+    }
 }
 
 impl Visitor<Rc<Term>> for Shifting {
@@ -58,41 +74,30 @@ impl Visitor<Rc<Term>> for Shifting {
 
 #[derive(Debug)]
 pub struct Substitution {
+    pub cutoff: usize,
     pub term: Rc<Term>,
-    pub shift: Shifting,
 }
 
 impl Substitution {
     pub fn new(term: Rc<Term>) -> Substitution {
-        Substitution {
-            term,
-            shift: Shifting {
-                cutoff: 0,
-                shift: 1,
-            },
-        }
+        Substitution { cutoff: 0, term }
     }
 }
 
 impl Visitor<Rc<Term>> for Substitution {
     fn visit_var(&mut self, var: usize) -> Rc<Term> {
-        if var == 0 {
-            self.term.clone()
+        if var == self.cutoff {
+            self.term.accept(&mut Shifting::default())
         } else {
             Rc::new(Term::Var(var))
         }
     }
 
     fn visit_abs(&mut self, ty: Type, body: Rc<Term>) -> Rc<Term> {
-        let _t = self.term.clone();
-        self.term = _t.accept(&mut self.shift);
-        // dbg!(&body);
-        dbg!(&self.term);
+        self.cutoff += 1;
         let r = Term::Abs(ty, body.accept(self));
-        // dbg!(&r);
-        self.term = _t;
-        self.shift.shift = -1;
-        r.accept(&mut self.shift)
+        self.cutoff -= 1;
+        r.into()
     }
 
     fn visit_app(&mut self, t1: Rc<Term>, t2: Rc<Term>) -> Rc<Term> {

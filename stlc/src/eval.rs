@@ -1,6 +1,6 @@
 use super::term::Term;
 use super::typing::{Context, Type, TypeError};
-use super::visitor::Substitution;
+use super::visitor::{Shifting, Substitution};
 use std::rc::Rc;
 
 fn map_var<F: Fn(usize, usize) -> Rc<Term>>(f: &F, c: usize, t: Rc<Term>) -> Rc<Term> {
@@ -74,9 +74,9 @@ fn eval1(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
     match term.as_ref() {
         Term::App(t1, ref t2) if value(ctx, &t2) => {
             if let Term::Abs(_, body) = t1.as_ref() {
-                let mut sub = Substitution::new(t2.clone());
-                Ok(subst_top(t2.clone(), body.clone()))
-            // Ok(body.accept(&mut sub))
+                let mut sub = Substitution::new(t2.accept(&mut Shifting::default()));
+                // Ok(subst_top(t2.clone(), body.clone()))
+                Ok(body.accept(&mut sub).accept(&mut Shifting::new(-1)))
             } else if value(ctx, &t1) {
                 let t_prime = eval1(ctx, t2.clone())?;
                 Ok(Term::App(t1.clone(), t_prime).into())

@@ -74,10 +74,10 @@ fn main() {
 
     let input = "(λx: Bool -> Bool. x true) (λx: Bool. if x then false else true) ";
     // parse(input);
-    // parse("iszero pred succ 0");
-    // parse("(\\ y: Nat -> Bool. (\\x: Nat. if y x then true else false))");
-    // parse("(\\x: Nat. \\y: Nat. if iszero x then iszero y else false) (succ 0)");
-    // parse("(\\z: Nat. iszero z)");
+    parse("iszero pred succ 0");
+    parse("(\\ y: Nat -> Bool. (\\x: Nat. if y x then true else false))");
+    parse("(\\x: Nat. \\y: Nat. if iszero x then iszero y else false) (succ 0)");
+    parse("(\\z: Nat. iszero z)");
     parse("(\\x: Nat->Bool. \\y: Nat. if x y then true else false) (\\z: Nat. iszero z) succ 0");
-    parse("(\\x: Nat->Nat. (\\y: Nat. x y)) (\\x: Nat. x)");
+    parse("(\\x: Nat->Nat. (\\y: Nat. x succ y)) (\\x: Nat. x) succ 0");
 }
