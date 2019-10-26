@@ -3,6 +3,7 @@ use crate::term::Term;
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Type {
     Bool,
+    Nat,
     Arrow(Box<Type>, Box<Type>),
 }
 
@@ -16,35 +17,34 @@ pub enum TypeError {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, PartialOrd)]
+/// A typing context, Γ
+///
+/// Much simpler than the binding list suggested in the book, and used
+/// in the other directories, but this should be more efficient, and
+/// a vec is really overkill here
 pub struct Context<'a> {
     parent: Option<&'a Context<'a>>,
-    bind: Option<Binding>,
-}
-
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub enum Binding {
-    Name,
-    Variable(Type),
+    ty: Option<Type>,
 }
 
 impl<'a> Context<'a> {
-    pub fn add<'ctx>(&'ctx self, bind: Binding) -> Context<'ctx> {
-        if self.bind.is_none() {
+    pub fn add<'ctx>(&'ctx self, ty: Type) -> Context<'ctx> {
+        if self.ty.is_none() {
             Context {
                 parent: self.parent.clone(),
-                bind: Some(bind),
+                ty: Some(ty),
             }
         } else {
             Context {
                 parent: Some(self),
-                bind: Some(bind),
+                ty: Some(ty),
             }
         }
     }
 
-    pub fn get(&self, idx: usize) -> Option<&Binding> {
+    pub fn get(&self, idx: usize) -> Option<&Type> {
         if idx == 0 {
-            self.bind.as_ref()
+            self.ty.as_ref()
         } else {
             if let Some(ctx) = self.parent {
                 ctx.get(idx - 1)
@@ -73,11 +73,11 @@ impl<'a> Context<'a> {
                 }
             }
             Var(s) => match self.get(*s) {
-                Some(Binding::Variable(ty)) => Ok(ty.clone()),
+                Some(ty) => Ok(ty.clone()),
                 _ => Err(TypeError::UnknownVariable),
             },
             Abs(ty, body) => {
-                let ctx = self.add(Binding::Variable(ty.clone()));
+                let ctx = self.add(ty.clone());
                 let ty_body = ctx.type_of(body)?;
                 Ok(Type::Arrow(Box::new(ty.clone()), Box::new(ty_body)))
             }

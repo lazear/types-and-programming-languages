@@ -1,6 +1,8 @@
 #[macro_use]
 mod term;
 mod eval;
+mod lexer;
+mod parser;
 mod typing;
 mod visitor;
 
@@ -68,4 +70,16 @@ fn main() {
 
     let c = abs!(Type::Bool, abs!(Type::Bool, if_!(var!(0), var!(1), False)));
     ev(app!(app!(c, True), False).into());
+
+    let input = "(λx: Bool -> Bool. x true) (λx: Bool. if x then false else true)";
+    let mut p = parser::Parser::new(input);
+    while let Some(tok) = p.parse_term() {
+        ev(tok);
+    }
+
+    let diag = p.diagnostic();
+    if diag.error_count() > 0 {
+        println!("\n{} error(s) detected while parsing!", diag.error_count());
+        println!("{}", diag.emit());
+    }
 }
