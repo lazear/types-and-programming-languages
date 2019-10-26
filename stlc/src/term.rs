@@ -1,3 +1,4 @@
+use super::visitor::Visitor;
 use crate::typing::Type;
 use std::fmt;
 use std::rc::Rc;
@@ -13,6 +14,19 @@ pub enum Term {
     // Application (t1 t2)
     App(Rc<Term>, Rc<Term>),
     If(Rc<Term>, Rc<Term>, Rc<Term>),
+}
+
+impl Term {
+    pub fn accept<V: Visitor<Rc<Term>>>(&self, visitor: &mut V) -> Rc<Term> {
+        match self {
+            Term::True => visitor.visit_bool(true),
+            Term::False => visitor.visit_bool(false),
+            Term::Var(idx) => visitor.visit_var(*idx),
+            Term::Abs(ty, term) => visitor.visit_abs(ty.clone(), term.clone()),
+            Term::App(t1, t2) => visitor.visit_app(t1.clone(), t2.clone()),
+            Term::If(a, b, c) => visitor.visit_if(a.clone(), b.clone(), c.clone()),
+        }
+    }
 }
 
 impl fmt::Debug for Term {

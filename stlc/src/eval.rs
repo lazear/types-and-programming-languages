@@ -69,8 +69,8 @@ fn eval1(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
     match term.as_ref() {
         Term::App(t1, ref t2) if value(ctx, &t2) => {
             if let Term::Abs(ty, body) = t1.as_ref() {
-                Err(Error::NoRuleApplies)
-            // Ok(subst_top(t2.clone(), body.clone()))
+                // Err(Error::NoRuleApplies)
+                Ok(subst_top(t2.clone(), body.clone()))
             } else {
                 Err(Error::NoRuleApplies)
             }
