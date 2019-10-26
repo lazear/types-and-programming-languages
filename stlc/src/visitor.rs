@@ -50,23 +50,6 @@ impl Shifting {
     }
 }
 
-struct Guard<'a> {
-    flag: &'a mut usize,
-}
-
-impl<'a> Guard<'a> {
-    pub fn guard(flag: &'a mut usize) -> Guard {
-        *flag += 1;
-        Guard { flag }
-    }
-}
-
-impl<'a> std::ops::Drop for Guard<'a> {
-    fn drop(&mut self) {
-        *self.flag -= 1;
-    }
-}
-
 impl Visitor<Rc<Term>> for Shifting {
     fn visit_var(&mut self, var: usize) -> Rc<Term> {
         if var >= self.cutoff {
