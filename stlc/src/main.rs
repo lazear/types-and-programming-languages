@@ -3,15 +3,15 @@ mod term;
 mod eval;
 mod typing;
 
-use eval::subst_top;
+use std::rc::Rc;
 use term::Term;
 use term::Term::*;
 use typing::{Context, Type, TypeError};
 
-fn ev(term: Term) -> Result<Term, eval::Error> {
+fn ev(term: Term) -> Result<Rc<Term>, eval::Error> {
     let ctx = Context::default();
     println!("eval {:?}", &term);
-    let r = eval::eval(&ctx, term)?;
+    let r = eval::eval(&ctx, Rc::new(term))?;
     println!("===> {:?}", &r);
     println!("type {:?}", ctx.type_of(&r));
     Ok(r)
@@ -36,12 +36,10 @@ fn main() {
         app!(abs!(Type::Bool, if_!(var!(1), var!(0), False)), True)
     );
 
-    let i = abs!(Type::Bool, var!(0));
-    let k = abs!(Type::Bool, abs!(Type::Bool, var!(1)));
-    // let s = abs!(arrow!(Type::Bool, Type::Bool), abs!());
-
-    // if false then true else false
-
-    // ev(app!(i, True));
-    ev(i);
+    // The simply typed lambda calculus cannot type divergent combinator
+    // or fixpoint
+    let x = abs!(arrow!(Type::Bool, Type::Bool), app!(var!(0), var!(0)));
+    let omega = app!(x.clone(), x.clone());
+    ev(x);
+    ev(omega);
 }

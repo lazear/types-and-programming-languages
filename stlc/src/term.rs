@@ -1,5 +1,6 @@
 use crate::typing::Type;
 use std::fmt;
+use std::rc::Rc;
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub enum Term {
@@ -8,10 +9,10 @@ pub enum Term {
     // DeBrujin index
     Var(usize),
     // Type of bound variable, and body of abstraction
-    Abs(Type, Box<Term>),
+    Abs(Type, Rc<Term>),
     // Application (t1 t2)
-    App(Box<Term>, Box<Term>),
-    If(Box<Term>, Box<Term>, Box<Term>),
+    App(Rc<Term>, Rc<Term>),
+    If(Rc<Term>, Rc<Term>, Rc<Term>),
 }
 
 impl fmt::Debug for Term {
@@ -29,13 +30,13 @@ impl fmt::Debug for Term {
 
 macro_rules! app {
     ($ex:expr, $xy:expr) => {
-        crate::term::Term::App(Box::new($ex), Box::new($xy))
+        crate::term::Term::App(std::rc::Rc::new($ex), std::rc::Rc::new($xy))
     };
 }
 
 macro_rules! abs {
     ($ty:expr, $body:expr) => {
-        crate::term::Term::Abs($ty, Box::new($body))
+        crate::term::Term::Abs($ty, std::rc::Rc::new($body))
     };
 }
 
@@ -47,7 +48,11 @@ macro_rules! var {
 
 macro_rules! if_ {
     ($a:expr, $b:expr, $c:expr) => {
-        crate::term::Term::If(Box::new($a), Box::new($b), Box::new($c))
+        crate::term::Term::If(
+            std::rc::Rc::new($a),
+            std::rc::Rc::new($b),
+            std::rc::Rc::new($c),
+        )
     };
 }
 
