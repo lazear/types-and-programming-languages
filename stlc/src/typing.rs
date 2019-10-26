@@ -1,4 +1,4 @@
-use crate::term::Term;
+use crate::term::{Record, Term};
 use crate::visitor::{Shifting, Substitution, Visitable, Visitor};
 use std::fmt;
 use std::rc::Rc;
@@ -8,6 +8,7 @@ pub enum Type {
     Bool,
     Nat,
     Arrow(Box<Type>, Box<Type>),
+    Record(Vec<Type>),
 }
 
 impl fmt::Debug for Type {
@@ -16,6 +17,14 @@ impl fmt::Debug for Type {
             Type::Bool => write!(f, "Bool"),
             Type::Nat => write!(f, "Nat"),
             Type::Arrow(a, b) => write!(f, "{:?}->{:?}", a, b),
+            Type::Record(r) => write!(
+                f,
+                "{{{}}}",
+                r.iter()
+                    .map(|x| format!("{:?}", x))
+                    .collect::<Vec<String>>()
+                    .join(",")
+            ),
         }
     }
 }
@@ -27,6 +36,8 @@ pub enum TypeError {
     ParameterMismatch,
     UnknownVariable,
     ExpectedArrow,
+    InvalidProjection,
+    NotRecordType,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, PartialOrd)]
@@ -87,6 +98,15 @@ impl<'a> Visitor<Result<Type, TypeError>> for Context<'a> {
             _ => unreachable!(),
         }
     }
+
+    fn visit_record(&mut self, rec: Rc<Record>) -> Result<Type, TypeError> {
+        let tys = rec
+            .fields
+            .iter()
+            .map(|f| f.accept(self))
+            .collect::<Result<Vec<Type>, TypeError>>()?;
+        Ok(Type::Record(tys))
+    }
 }
 
 impl<'a> Context<'a> {
@@ -122,6 +142,21 @@ impl<'a> Context<'a> {
             True => Ok(Type::Bool),
             False => Ok(Type::Bool),
             Zero => Ok(Type::Nat),
+            Record(rec) => {
+                let tys = rec
+                    .fields
+                    .iter()
+                    .map(|f| self.type_of(f))
+                    .collect::<Result<Vec<Type>, TypeError>>()?;
+                Ok(Type::Record(tys))
+            }
+            Projection(r, idx) => {
+                let rty = self.type_of(r)?;
+                match rty {
+                    Type::Record(v) => v.get(*idx).cloned().ok_or(TypeError::InvalidProjection),
+                    _ => Err(TypeError::NotRecordType),
+                }
+            }
             IsZero(t) => {
                 if let Ok(Type::Nat) = self.type_of(t) {
                     Ok(Type::Bool)

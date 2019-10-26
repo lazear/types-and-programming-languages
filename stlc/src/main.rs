@@ -8,8 +8,8 @@ mod typing;
 mod visitor;
 
 use std::rc::Rc;
-use term::Term;
 use term::Term::*;
+use term::{Record, Term};
 use typing::{Context, Type, TypeError};
 use visitor::{Visitable, Visitor};
 
@@ -62,12 +62,16 @@ fn main() {
     //
 
     // parse("let not = (\\x: Bool. if x then false else true) in not false");
-    parse("let not = (\\x: Bool. if x then false else true) in let x = succ 0 in let y = not iszero x in y");
+    parse(
+        "let not = (\\x: Bool. if x then false else true) 
+            in let x = succ 0 
+                in let y = not iszero x 
+                    in y",
+    );
 
-    // let mut eval = eval::Evaluator { context: &root };
-
-    // dbg!(Rc::new(f).accept(&mut eval));
-    //
-    //
-    //
+    let record = Record::new(vec![True, True, Zero].into_iter().map(Rc::new).collect());
+    let proj = Term::Projection(record.clone(), 1);
+    dbg!(root.type_of(&record));
+    dbg!(root.type_of(&proj));
+    dbg!(ev(proj.into()));
 }

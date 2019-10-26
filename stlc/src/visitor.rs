@@ -19,6 +19,7 @@ pub trait Visitor<T> {
     fn visit_pred(&mut self, t: Rc<Term>) -> T;
     fn visit_iszero(&mut self, t: Rc<Term>) -> T;
     fn visit_const(&mut self, c: Rc<Term>) -> T;
+    fn visit_record(&mut self, c: Rc<Record>) -> T;
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -104,6 +105,10 @@ impl Visitor<Rc<Term>> for Shifting {
     fn visit_const(&mut self, c: Rc<Term>) -> Rc<Term> {
         c
     }
+
+    fn visit_record(&mut self, rec: Rc<Record>) -> Rc<Term> {
+        Term::Record(rec).into()
+    }
 }
 
 #[derive(Debug)]
@@ -164,5 +169,9 @@ impl Visitor<Rc<Term>> for Substitution {
 
     fn visit_const(&mut self, c: Rc<Term>) -> Rc<Term> {
         c
+    }
+
+    fn visit_record(&mut self, rec: Rc<Record>) -> Rc<Term> {
+        Term::Record(rec).into()
     }
 }
