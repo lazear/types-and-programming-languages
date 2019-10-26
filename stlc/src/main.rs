@@ -73,7 +73,8 @@ fn main() {
     assert_eq!(root.type_of(&f), Ok(Type::Bool));
     assert_eq!(root.type_of(&mistyped), Err(TypeError::ArmMismatch));
 
-    dbg!(Rc::new(id).accept(&mut root));
+    let ty: Result<Type, TypeError> = Rc::new(id).accept(&mut root);
+    dbg!(ty);
 
     let input = "(λx: Bool -> Bool. x true) (λx: Bool. if x then false else true) ";
     // parse(input);
@@ -83,4 +84,8 @@ fn main() {
     parse("(\\z: Nat. iszero z)");
     parse("(\\x: Nat->Bool. \\y: Nat. if x y then true else false) (\\z: Nat. iszero z) succ 0");
     parse("(\\x: Nat->Nat. (\\y: Nat. x succ y)) (\\x: Nat. x) succ 0");
+
+    let mut eval = eval::Evaluator { context: &root };
+
+    dbg!(Rc::new(f).accept(&mut eval));
 }
