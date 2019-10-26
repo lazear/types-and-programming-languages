@@ -14,9 +14,9 @@ use typing::{Context, Type, TypeError};
 
 fn ev(term: Rc<Term>) -> Result<Rc<Term>, eval::Error> {
     let ctx = Context::default();
-    println!("EVAL {:?}  TYPE: {:?}", &term, ctx.type_of(&term));
+    println!("EVAL {}  TYPE: {:?}", &term, ctx.type_of(&term));
     let r = eval::eval(&ctx, term)?;
-    println!("===> {:?}", &r);
+    println!("===> {}", &r);
     println!("type {:?}", ctx.type_of(&r));
     Ok(r)
 }
@@ -75,6 +75,9 @@ fn main() {
     let input = "(λx: Bool -> Bool. x true) (λx: Bool. if x then false else true) ";
     // parse(input);
     // parse("iszero pred succ 0");
-    parse("((\\ y: Nat -> Bool. (\\x: Nat. if y x then true else false)) 0) (\\x: Nat. iszero x)");
-    // parse("(\\x: Nat. iszero x) 0");
+    // parse("(\\ y: Nat -> Bool. (\\x: Nat. if y x then true else false))");
+    // parse("(\\x: Nat. \\y: Nat. if iszero x then iszero y else false) (succ 0)");
+    // parse("(\\z: Nat. iszero z)");
+    parse("(\\x: Nat->Bool. \\y: Nat. if x y then true else false) (\\z: Nat. iszero z) succ 0");
+    parse("(\\x: Nat->Nat. (\\y: Nat. x y)) (\\x: Nat. x)");
 }

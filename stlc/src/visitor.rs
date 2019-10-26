@@ -10,6 +10,7 @@ pub trait Visitor<T> {
     fn visit_nat(&mut self, nat: u32) -> T;
 }
 
+#[derive(Debug)]
 pub struct Shifting {
     pub cutoff: usize,
     pub shift: isize,
@@ -58,6 +59,19 @@ impl Visitor<Rc<Term>> for Shifting {
 #[derive(Debug)]
 pub struct Substitution {
     pub term: Rc<Term>,
+    pub shift: Shifting,
+}
+
+impl Substitution {
+    pub fn new(term: Rc<Term>) -> Substitution {
+        Substitution {
+            term,
+            shift: Shifting {
+                cutoff: 0,
+                shift: 1,
+            },
+        }
+    }
 }
 
 impl Visitor<Rc<Term>> for Substitution {
@@ -70,18 +84,15 @@ impl Visitor<Rc<Term>> for Substitution {
     }
 
     fn visit_abs(&mut self, ty: Type, body: Rc<Term>) -> Rc<Term> {
-        let mut shift = Shifting {
-            cutoff: 0,
-            shift: 1,
-        };
         let _t = self.term.clone();
-        self.term = _t.accept(&mut shift);
+        self.term = _t.accept(&mut self.shift);
         // dbg!(&body);
+        dbg!(&self.term);
         let r = Term::Abs(ty, body.accept(self));
         // dbg!(&r);
         self.term = _t;
-        shift.shift = -1;
-        r.accept(&mut shift)
+        self.shift.shift = -1;
+        r.accept(&mut self.shift)
     }
 
     fn visit_app(&mut self, t1: Rc<Term>, t2: Rc<Term>) -> Rc<Term> {
