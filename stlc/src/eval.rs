@@ -1,57 +1,58 @@
 use super::term::Term;
 use super::typing::{Context, Type, TypeError};
+use super::visitor::Substitution;
 use std::rc::Rc;
 
-fn map_var<F: Fn(usize, usize) -> Term>(f: &F, c: usize, t: Rc<Term>) -> Rc<Term> {
-    match t.as_ref() {
-        Term::True | Term::False => t,
-        Term::Abs(ty, t1) => Term::Abs(ty.clone(), map_var(f, c + 1, t1.clone())).into(),
-        Term::App(t1, t2) => Term::App(map_var(f, c, t1.clone()), map_var(f, c, t2.clone())).into(),
-        Term::If(t1, t2, t3) => Term::If(
-            map_var(f, c, t1.clone()),
-            map_var(f, c, t2.clone()),
-            map_var(f, c, t3.clone()),
-        )
-        .into(),
-        Term::Var(idx) => f(c, *idx).into(),
-    }
-}
+// fn map_var<F: Fn(usize, usize) -> Term>(f: &F, c: usize, t: Rc<Term>) -> Rc<Term> {
+//     match t.as_ref() {
+//         Term::True | Term::False => t,
+//         Term::Abs(ty, t1) => Term::Abs(ty.clone(), map_var(f, c + 1, t1.clone())).into(),
+//         Term::App(t1, t2) => Term::App(map_var(f, c, t1.clone()), map_var(f, c, t2.clone())).into(),
+//         Term::If(t1, t2, t3) => Term::If(
+//             map_var(f, c, t1.clone()),
+//             map_var(f, c, t2.clone()),
+//             map_var(f, c, t3.clone()),
+//         )
+//         .into(),
+//         Term::Var(idx) => f(c, *idx).into(),
+//     }
+// }
 
-fn shift_above(d: isize, c: usize, t: Rc<Term>) -> Rc<Term> {
-    map_var(
-        &|c, x| {
-            if x >= c {
-                Term::Var(x + d as usize)
-            } else {
-                Term::Var(x)
-            }
-        },
-        c,
-        t,
-    )
-}
+// fn shift_above(d: isize, c: usize, t: Rc<Term>) -> Rc<Term> {
+//     map_var(
+//         &|c, x| {
+//             if x >= c {
+//                 Term::Var(x + d as usize)
+//             } else {
+//                 Term::Var(x)
+//             }
+//         },
+//         c,
+//         t,
+//     )
+// }
 
-fn shift(d: isize, t: Rc<Term>) -> Rc<Term> {
-    shift_above(d, 0, t)
-}
+// fn shift(d: isize, t: Rc<Term>) -> Rc<Term> {
+//     shift_above(d, 0, t)
+// }
 
-fn subst(j: usize, s: Rc<Term>, t: Rc<Term>) -> Rc<Term> {
-    map_var(
-        &|c, x| {
-            if x == c {
-                Rc::try_unwrap(shift(j as isize, s.clone())).unwrap()
-            } else {
-                Term::Var(x)
-            }
-        },
-        j,
-        t.clone(),
-    )
-}
+// fn subst(j: usize, s: Rc<Term>, t: Rc<Term>) -> Rc<Term> {
+//     map_var(
+//         &|c, x| {
+//             if x == c {
+//                 Rc::try_unwrap(shift(j as isize, s.clone())).unwrap()
+//             } else {
+//                 Term::Var(x)
+//             }
+//         },
+//         j,
+//         t.clone(),
+//     )
+// }
 
-pub fn subst_top(s: Rc<Term>, t: Rc<Term>) -> Rc<Term> {
-    shift(-1, subst(0, shift(1, s), t))
-}
+// pub fn subst_top(s: Rc<Term>, t: Rc<Term>) -> Rc<Term> {
+//     shift(-1, subst(0, shift(1, s), t))
+// }
 
 #[derive(Debug)]
 pub enum Error {
@@ -70,7 +71,11 @@ fn eval1(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
         Term::App(t1, ref t2) if value(ctx, &t2) => {
             if let Term::Abs(ty, body) = t1.as_ref() {
                 // Err(Error::NoRuleApplies)
-                Ok(subst_top(t2.clone(), body.clone()))
+                dbg!(body, t2);
+                let mut sub = Substitution {
+                    term: t2.clone().into(),
+                };
+                Ok(body.accept(&mut sub))
             } else {
                 Err(Error::NoRuleApplies)
             }

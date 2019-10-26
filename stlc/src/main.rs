@@ -9,10 +9,10 @@ use term::Term;
 use term::Term::*;
 use typing::{Context, Type, TypeError};
 
-fn ev(term: Term) -> Result<Rc<Term>, eval::Error> {
+fn ev(term: Rc<Term>) -> Result<Rc<Term>, eval::Error> {
     let ctx = Context::default();
     println!("eval {:?}", &term);
-    let r = eval::eval(&ctx, Rc::new(term))?;
+    let r = eval::eval(&ctx, term)?;
     println!("===> {:?}", &r);
     println!("type {:?}", ctx.type_of(&r));
     Ok(r)
@@ -59,13 +59,9 @@ fn main() {
     dbg!(ex2.accept(&mut v));
 
     let a = abs!(arr.clone(), app!(app!(var!(1), var!(0)), var!(2)));
-    let a_ = abs!(arr.clone(), var!(0));
-
     let b = abs!(arr.clone(), app!(var!(1), var!(0)));
-    dbg!(&b);
 
-    let mut sub = visitor::Substitution { term: a_.into() };
-    dbg!(&a.accept(&mut sub));
-
-    // ev(a_);
+    let c = abs!(Type::Bool, abs!(arr.clone(), a.clone()));
+    let r = ev(app!(c, True).into()).unwrap();
+    let r = ev(Term::App(r, Rc::new(False)).into());
 }

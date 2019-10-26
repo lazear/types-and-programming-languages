@@ -24,6 +24,10 @@ impl Visitor<Rc<Term>> for Shifting {
     }
 
     fn visit_abs(&mut self, ty: Type, body: Rc<Term>) -> Rc<Term> {
+        // While I understand the rationale for incrementing the
+        // cutoff here, I'm also not sure if it's strictly necessary
+        // since we later go through and decrement everything by one
+        // -- I need to grok the text more
         self.cutoff += 1;
         let inner = body.accept(self);
         self.cutoff -= 1;
@@ -46,6 +50,7 @@ impl Visitor<Rc<Term>> for Shifting {
     }
 }
 
+#[derive(Debug)]
 pub struct Substitution {
     pub term: Rc<Term>,
 }
@@ -64,10 +69,11 @@ impl Visitor<Rc<Term>> for Substitution {
             cutoff: 0,
             shift: 1,
         };
-
         let _t = self.term.clone();
         self.term = _t.accept(&mut shift);
+        // dbg!(&body);
         let r = Term::Abs(ty, body.accept(self));
+        // dbg!(&r);
         self.term = _t;
         shift.shift = -1;
         r.accept(&mut shift)
