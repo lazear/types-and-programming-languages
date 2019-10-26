@@ -34,7 +34,6 @@ fn main() {
     // or fixpoint
     let x = abs!(arrow!(Type::Bool, Type::Bool), app!(var!(0), var!(0)));
     let omega = app!(x.clone(), x.clone());
-
     let mut v = visitor::Shifting {
         cutoff: 0,
         shift: 2,
@@ -46,7 +45,7 @@ fn main() {
         arr.clone(),
         abs!(arr.clone(), app!(app!(var!(1), var!(0)), var!(2)))
     );
-    dbg!(ex1.accept(&mut v));
+    // dbg!(ex1.accept(&mut v));
 
     // Exercise 6.2.2 part 2
     let ex2 = abs!(
@@ -56,12 +55,17 @@ fn main() {
             abs!(Type::Bool, app!(app!(var!(0), var!(1)), var!(2)))
         )
     );
-    dbg!(ex2.accept(&mut v));
+    // dbg!(ex2.accept(&mut v));
 
     let a = abs!(arr.clone(), app!(app!(var!(1), var!(0)), var!(2)));
     let b = abs!(arr.clone(), app!(var!(1), var!(0)));
 
-    let c = abs!(Type::Bool, abs!(arr.clone(), a.clone()));
-    let r = ev(app!(c, True).into()).unwrap();
-    let r = ev(Term::App(r, Rc::new(False)).into());
+    // \ y: Bool (\ x: Bool if x then y else false)
+
+    let c = abs!(Type::Bool, abs!(Type::Bool, if_!(var!(0), var!(1), False)));
+    // let r = ev(app!(c, True).into()).unwrap();
+    // ev(Term::App(r, Term::False.into()).into());
+
+    let c = abs!(Type::Bool, abs!(Type::Bool, if_!(var!(0), var!(1), False)));
+    ev(app!(app!(c, True), False).into());
 }

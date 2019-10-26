@@ -70,24 +70,24 @@ fn eval1(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
     match term.as_ref() {
         Term::App(t1, ref t2) if value(ctx, &t2) => {
             if let Term::Abs(ty, body) = t1.as_ref() {
-                // Err(Error::NoRuleApplies)
-                dbg!(body, t2);
                 let mut sub = Substitution {
                     term: t2.clone().into(),
                 };
                 Ok(body.accept(&mut sub))
             } else {
-                Err(Error::NoRuleApplies)
+                let t_prime = eval1(ctx, t1.clone())?;
+                Ok(Term::App(t_prime, t2.clone()).into())
             }
         }
         Term::App(t1, t2) if value(ctx, &t1) => {
             let t_prime = eval1(ctx, t2.clone())?;
             Ok(Term::App(t1.clone(), t_prime).into())
         }
-        Term::App(t1, t2) => {
-            let t_prime = eval1(ctx, t1.clone())?;
-            Ok(Term::App(t_prime, t2.clone()).into())
-        }
+        // Term::App(t1, t2) => {
+        //     println!("eval t1 first");
+        //     let t_prime = eval1(ctx, t1.clone())?;
+        //     Ok(Term::App(t_prime, t2.clone()).into())
+        // }
         Term::If(guard, csq, alt) => match **guard {
             Term::True => Ok(csq.clone()),
             Term::False => Ok(alt.clone()),
@@ -105,7 +105,10 @@ pub fn eval(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
     loop {
         match eval1(ctx, tp.clone()) {
             Ok(r) => tp = r,
-            Err(_) => return Ok(tp),
+            Err(e) => {
+                // dbg!(&tp, e);
+                return Ok(tp);
+            }
         }
     }
 }
