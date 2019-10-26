@@ -20,41 +20,68 @@ pub trait Visitor<T> {
     fn visit_const(&mut self, c: Rc<Term>) -> T;
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
+pub enum Direction {
+    Up,
+    Down,
+}
+
+#[derive(Copy, Clone, Debug)]
 pub struct Shifting {
     pub cutoff: usize,
-    pub shift: isize,
+    pub direction: Direction,
 }
 
 impl Default for Shifting {
     fn default() -> Self {
         Shifting {
             cutoff: 0,
-            shift: 1,
+            direction: Direction::Up,
         }
     }
 }
 
 impl Shifting {
-    pub fn new(shift: isize) -> Self {
-        Shifting { cutoff: 0, shift }
+    pub fn new(direction: Direction) -> Self {
+        Shifting {
+            cutoff: 0,
+            direction,
+        }
+    }
+}
+
+struct Guard<'a> {
+    flag: &'a mut usize,
+}
+
+impl<'a> Guard<'a> {
+    pub fn guard(flag: &'a mut usize) -> Guard {
+        *flag += 1;
+        Guard { flag }
+    }
+}
+
+impl<'a> std::ops::Drop for Guard<'a> {
+    fn drop(&mut self) {
+        *self.flag -= 1;
     }
 }
 
 impl Visitor<Rc<Term>> for Shifting {
     fn visit_var(&mut self, var: usize) -> Rc<Term> {
         if var >= self.cutoff {
-            Rc::new(Term::Var((var as isize + self.shift) as usize))
+            // NB: Substracting 1 from the usize here is safe, as long as
+            // a shift Down is only called *after* a shift/substitute cycle
+            match self.direction {
+                Direction::Up => Term::Var(var + 1).into(),
+                Direction::Down => Term::Var(var - 1).into(),
+            }
         } else {
             Rc::new(Term::Var(var))
         }
     }
 
     fn visit_abs(&mut self, ty: Type, body: Rc<Term>) -> Rc<Term> {
-        // While I understand the rationale for incrementing the
-        // cutoff here, I'm also not sure if it's strictly necessary
-        // since we later go through and decrement everything by one
-        // -- I need to grok the text more
         self.cutoff += 1;
         let inner = body.accept(self);
         self.cutoff -= 1;

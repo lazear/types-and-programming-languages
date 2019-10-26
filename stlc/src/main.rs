@@ -36,31 +36,6 @@ fn parse(input: &str) {
     }
 }
 
-fn exercises() {
-    let mut v = visitor::Shifting {
-        cutoff: 0,
-        shift: 2,
-    };
-
-    // Exercise 6.2.2 part 1
-    let arr = arrow!(Type::Bool, Type::Bool);
-    let ex1 = Rc::new(abs!(
-        arr.clone(),
-        abs!(arr.clone(), app!(app!(var!(1), var!(0)), var!(2)))
-    ));
-    dbg!(ex1.accept(&mut v));
-
-    // Exercise 6.2.2 part 2
-    let ex2 = Rc::new(abs!(
-        arr.clone(),
-        app!(
-            app!(var!(0), var!(1)),
-            abs!(Type::Bool, app!(app!(var!(0), var!(1)), var!(2)))
-        )
-    ));
-    dbg!(ex2.accept(&mut v));
-}
-
 fn main() {
     let mut root: Context = Context::default();
 
