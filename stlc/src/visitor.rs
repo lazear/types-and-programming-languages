@@ -1,4 +1,5 @@
 use super::*;
+use crate::term::{RecordField, Term};
 use std::default::Default;
 use std::rc::Rc;
 
@@ -19,7 +20,9 @@ pub trait Visitor<T> {
     fn visit_pred(&mut self, t: Rc<Term>) -> T;
     fn visit_iszero(&mut self, t: Rc<Term>) -> T;
     fn visit_const(&mut self, c: Rc<Term>) -> T;
-    fn visit_record(&mut self, c: Rc<Record>) -> T;
+    fn visit_record(&mut self, c: &[RecordField]) -> T;
+    fn visit_proj(&mut self, c: Rc<Term>, proj: Rc<String>) -> T;
+    fn visit_typedecl(&mut self, name: Rc<String>, ty: &Type) -> T;
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -106,8 +109,25 @@ impl Visitor<Rc<Term>> for Shifting {
         c
     }
 
-    fn visit_record(&mut self, rec: Rc<Record>) -> Rc<Term> {
-        Term::Record(rec).into()
+    fn visit_record(&mut self, fields: &[RecordField]) -> Rc<Term> {
+        Term::Record(
+            fields
+                .iter()
+                .map(|rf| RecordField {
+                    label: rf.label.clone(),
+                    data: rf.data.accept(self),
+                })
+                .collect(),
+        )
+        .into()
+    }
+
+    fn visit_proj(&mut self, c: Rc<Term>, proj: Rc<String>) -> Rc<Term> {
+        Term::Projection(c.accept(self), proj).into()
+    }
+
+    fn visit_typedecl(&mut self, name: Rc<String>, ty: &Type) -> Rc<Term> {
+        Term::TypeDecl(name, ty.clone()).into()
     }
 }
 
@@ -171,7 +191,24 @@ impl Visitor<Rc<Term>> for Substitution {
         c
     }
 
-    fn visit_record(&mut self, rec: Rc<Record>) -> Rc<Term> {
-        Term::Record(rec).into()
+    fn visit_record(&mut self, fields: &[RecordField]) -> Rc<Term> {
+        Term::Record(
+            fields
+                .iter()
+                .map(|rf| RecordField {
+                    label: rf.label.clone(),
+                    data: rf.data.accept(self),
+                })
+                .collect(),
+        )
+        .into()
+    }
+
+    fn visit_proj(&mut self, c: Rc<Term>, proj: Rc<String>) -> Rc<Term> {
+        Term::Projection(c.accept(self), proj.clone()).into()
+    }
+
+    fn visit_typedecl(&mut self, name: Rc<String>, ty: &Type) -> Rc<Term> {
+        Term::TypeDecl(name, ty.clone()).into()
     }
 }

@@ -4,21 +4,18 @@ use std::fmt;
 use std::rc::Rc;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub struct Record {
-    pub fields: Vec<Rc<Term>>,
-}
-
-impl Record {
-    pub fn new(fields: Vec<Rc<Term>>) -> Rc<Term> {
-        Term::Record(Record { fields }.into()).into()
-    }
+pub struct RecordField {
+    pub label: Rc<String>,
+    pub data: Rc<Term>,
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Term {
+    Unit,
     True,
     False,
     Zero,
+    TypeDecl(Rc<String>, Type),
     Succ(Rc<Term>),
     Pred(Rc<Term>),
     IsZero(Rc<Term>),
@@ -30,8 +27,17 @@ pub enum Term {
     App(Rc<Term>, Rc<Term>),
     If(Rc<Term>, Rc<Term>, Rc<Term>),
     Let(Rc<Term>, Rc<Term>),
-    Record(Rc<Record>),
-    Projection(Rc<Term>, usize),
+    Record(Vec<RecordField>),
+    Projection(Rc<Term>, Rc<String>),
+}
+
+pub fn record_access(fields: &[RecordField], projection: &str) -> Option<Rc<Term>> {
+    for f in fields {
+        if f.label.as_ref() == projection {
+            return Some(f.data.clone());
+        }
+    }
+    None
 }
 
 impl<V, T> Visitable<V, T> for Rc<Term>
@@ -40,7 +46,7 @@ where
 {
     fn accept(&self, visitor: &mut V) -> T {
         match self.as_ref() {
-            Term::True | Term::False | Term::Zero => visitor.visit_const(self.clone()),
+            Term::Unit | Term::True | Term::False | Term::Zero => visitor.visit_const(self.clone()),
             Term::Succ(t) => visitor.visit_succ(t.clone()),
             Term::Pred(t) => visitor.visit_pred(t.clone()),
             Term::IsZero(t) => visitor.visit_iszero(t.clone()),
@@ -49,8 +55,9 @@ where
             Term::App(t1, t2) => visitor.visit_app(t1.clone(), t2.clone()),
             Term::If(a, b, c) => visitor.visit_if(a.clone(), b.clone(), c.clone()),
             Term::Let(bind, body) => visitor.visit_let(bind.clone(), body.clone()),
-            Term::Projection(rec, proj) => unimplemented!(),
-            Term::Record(rec) => visitor.visit_record(rec.clone()),
+            Term::Projection(rec, proj) => visitor.visit_proj(rec.clone(), proj.clone()),
+            Term::Record(fields) => visitor.visit_record(fields),
+            Term::TypeDecl(name, ty) => visitor.visit_typedecl(name.clone(), ty),
         }
     }
 }
@@ -58,6 +65,8 @@ where
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Term::TypeDecl(name, ty) => write!(f, "type {} = {:?}", &name, ty),
+            Term::Unit => write!(f, "unit"),
             Term::True => write!(f, "true"),
             Term::False => write!(f, "false"),
             Term::Zero => write!(f, "Z"),
@@ -72,9 +81,8 @@ impl fmt::Display for Term {
             Term::Record(rec) => write!(
                 f,
                 "{{{}}}",
-                rec.fields
-                    .iter()
-                    .map(|x| format!("{}", x))
+                rec.iter()
+                    .map(|x| format!("{}:{}", x.label, x.data))
                     .collect::<Vec<String>>()
                     .join(",")
             ),

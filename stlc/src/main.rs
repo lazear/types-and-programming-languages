@@ -8,26 +8,25 @@ mod typing;
 mod visitor;
 
 use std::rc::Rc;
+use term::Term;
 use term::Term::*;
-use term::{Record, Term};
 use typing::{Context, Type, TypeError};
-use visitor::{Visitable, Visitor};
+use visitor::Visitable;
 
-fn ev(term: Rc<Term>) -> Result<Rc<Term>, eval::Error> {
-    let ctx = Context::default();
-    println!("EVAL {:?}  TYPE: {:?}", &term, ctx.type_of(&term));
+fn ev(ctx: &mut Context, term: Rc<Term>) -> Result<Rc<Term>, eval::Error> {
+    let ty: Result<Type, TypeError> = term.accept(ctx);
+    println!("TYPE: {:?}", ty);
     let r = eval::eval(&ctx, term)?;
     println!("===> {}", &r);
-    println!("type {:?}", ctx.type_of(&r));
+    println!("type {:?}", r.accept(ctx));
     Ok(r)
 }
 
-fn parse(input: &str) {
+fn parse(ctx: &mut Context, input: &str) {
     let mut p = parser::Parser::new(input);
     while let Some(tok) = p.parse_term() {
-        ev(tok);
+        ev(ctx, tok).unwrap();
     }
-    println!("");
 
     let diag = p.diagnostic();
     if diag.error_count() > 0 {
@@ -49,8 +48,6 @@ fn main() {
     assert_eq!(root.type_of(&mistyped), Err(TypeError::ArmMismatch));
 
     let ty: Result<Type, TypeError> = Rc::new(id).accept(&mut root);
-    dbg!(ty);
-
     let input = "(λx: Bool -> Bool. x true) (λx: Bool. if x then false else true) ";
     // parse(input);
     // parse("iszero pred succ 0");
@@ -63,15 +60,19 @@ fn main() {
 
     // parse("let not = (\\x: Bool. if x then false else true) in not false");
     parse(
+        &mut root,
         "let not = (\\x: Bool. if x then false else true) 
             in let x = succ 0 
                 in let y = not iszero x 
                     in y",
     );
 
-    let record = Record::new(vec![True, True, Zero].into_iter().map(Rc::new).collect());
-    let proj = Term::Projection(record.clone(), 1);
-    dbg!(root.type_of(&record));
-    dbg!(root.type_of(&proj));
-    dbg!(ev(proj.into()));
+    parse(&mut root, "let not = \\x: Bool. if x then false else true in {a: 0, b: \\x: Bool. not x, c: unit}.b true");
+    parse(&mut root, "type Struct = {valid: Bool, number: Nat}");
+    // parse(&mut root, "(\\x: Struct. x.number) {valid: true, number: succ 0}");
+    parse(
+        &mut root,
+        "(\\x: Struct. x.extra) {valid: false, number: succ 0, extra: unit}",
+    )
+    // dbg!(root);
 }

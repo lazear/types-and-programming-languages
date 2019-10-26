@@ -1,19 +1,24 @@
-use crate::term::{Record, Term};
-use crate::visitor::{Shifting, Substitution, Visitable, Visitor};
+use crate::term::{RecordField, Term};
+use crate::visitor::{Visitable, Visitor};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub enum Type {
+    Unit,
     Bool,
     Nat,
+    Var(String),
     Arrow(Box<Type>, Box<Type>),
-    Record(Vec<Type>),
+    Record(Vec<(Rc<String>, Type)>),
 }
 
 impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Type::Unit => write!(f, "Unit"),
             Type::Bool => write!(f, "Bool"),
             Type::Nat => write!(f, "Nat"),
             Type::Arrow(a, b) => write!(f, "{:?}->{:?}", a, b),
@@ -21,10 +26,11 @@ impl fmt::Debug for Type {
                 f,
                 "{{{}}}",
                 r.iter()
-                    .map(|x| format!("{:?}", x))
+                    .map(|x| format!("{:?}", x.1))
                     .collect::<Vec<String>>()
                     .join(",")
             ),
+            Type::Var(s) => write!(f, "{}", s),
         }
     }
 }
@@ -40,13 +46,14 @@ pub enum TypeError {
     NotRecordType,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Default)]
 /// A typing context, Γ
 ///
 /// Much simpler than the binding list suggested in the book, and used
 /// in the other directories, but this should be more efficient, and
 /// a vec is really overkill here
 pub struct Context<'a> {
+    types: Rc<RefCell<HashMap<String, Type>>>,
     parent: Option<&'a Context<'a>>,
     ty: Option<Type>,
 }
@@ -57,9 +64,18 @@ impl<'a> Visitor<Result<Type, TypeError>> for Context<'a> {
     }
 
     fn visit_abs(&mut self, ty: Type, body: Rc<Term>) -> Result<Type, TypeError> {
+        let ty = match ty {
+            Type::Var(name) => self
+                .types
+                .borrow()
+                .get(&name)
+                .cloned()
+                .ok_or(TypeError::UnknownVariable)?,
+            x => x,
+        };
         let mut ctx = self.add(ty.clone());
         let ty_body: Result<Type, TypeError> = body.accept(&mut ctx);
-        Ok(Type::Arrow(Box::new(ty.clone()), Box::new(ty_body?)))
+        Ok(Type::Arrow(Box::new(ty), Box::new(ty_body?)))
     }
 
     fn visit_app(&mut self, t1: Rc<Term>, t2: Rc<Term>) -> Result<Type, TypeError> {
@@ -93,31 +109,60 @@ impl<'a> Visitor<Result<Type, TypeError>> for Context<'a> {
 
     fn visit_const(&mut self, c: Rc<Term>) -> Result<Type, TypeError> {
         match c.as_ref() {
+            Term::Unit => Ok(Type::Unit),
             Term::Zero => Ok(Type::Nat),
             Term::True | Term::False => Ok(Type::Bool),
             _ => unreachable!(),
         }
     }
 
-    fn visit_record(&mut self, rec: Rc<Record>) -> Result<Type, TypeError> {
+    fn visit_record(&mut self, rec: &[RecordField]) -> Result<Type, TypeError> {
         let tys = rec
-            .fields
             .iter()
-            .map(|f| f.accept(self))
-            .collect::<Result<Vec<Type>, TypeError>>()?;
+            .map(|f| f.data.accept(self).map(|ty| (f.label.clone(), ty)))
+            .collect::<Result<Vec<(Rc<String>, Type)>, TypeError>>()?;
         Ok(Type::Record(tys))
+    }
+
+    fn visit_proj(&mut self, c: Rc<Term>, proj: Rc<String>) -> Result<Type, TypeError> {
+        match c.accept(self)? {
+            Type::Record(fields) => {
+                for f in &fields {
+                    if f.0 == proj {
+                        return Ok(f.1.clone());
+                    }
+                }
+                Err(TypeError::InvalidProjection)
+            }
+            _ => Err(TypeError::NotRecordType),
+        }
+    }
+
+    fn visit_typedecl(&mut self, name: Rc<String>, ty: &Type) -> Result<Type, TypeError> {
+        self.bind(name.to_string(), ty.clone());
+        Ok(Type::Unit)
     }
 }
 
 impl<'a> Context<'a> {
-    pub fn add<'ctx>(&'ctx self, ty: Type) -> Context<'ctx> {
+    pub fn bind(&self, name: String, ty: Type) {
+        self.types.borrow_mut().insert(name, ty);
+    }
+
+    pub fn lookup(&self, name: &str) -> Option<Type> {
+        self.types.borrow().get(name).cloned()
+    }
+
+    pub fn add(&self, ty: Type) -> Context {
         if self.ty.is_none() {
             Context {
-                parent: self.parent.clone(),
+                types: self.types.clone(),
+                parent: self.parent,
                 ty: Some(ty),
             }
         } else {
             Context {
+                types: self.types.clone(),
                 parent: Some(self),
                 ty: Some(ty),
             }
@@ -127,36 +172,36 @@ impl<'a> Context<'a> {
     pub fn get(&self, idx: usize) -> Option<&Type> {
         if idx == 0 {
             self.ty.as_ref()
+        } else if let Some(ctx) = self.parent {
+            ctx.get(idx - 1)
         } else {
-            if let Some(ctx) = self.parent {
-                ctx.get(idx - 1)
-            } else {
-                None
-            }
+            None
         }
     }
 
     pub fn type_of(&self, term: &Term) -> Result<Type, TypeError> {
         use Term::*;
         match term {
+            TypeDecl(_, _) => Ok(Type::Unit),
+            Unit => Ok(Type::Unit),
             True => Ok(Type::Bool),
             False => Ok(Type::Bool),
             Zero => Ok(Type::Nat),
             Record(rec) => {
                 let tys = rec
-                    .fields
                     .iter()
-                    .map(|f| self.type_of(f))
-                    .collect::<Result<Vec<Type>, TypeError>>()?;
+                    .map(|f| self.type_of(&f.data).map(|ty| (f.label.clone(), ty)))
+                    .collect::<Result<Vec<(Rc<String>, Type)>, TypeError>>()?;
                 Ok(Type::Record(tys))
             }
-            Projection(r, idx) => {
-                let rty = self.type_of(r)?;
-                match rty {
-                    Type::Record(v) => v.get(*idx).cloned().ok_or(TypeError::InvalidProjection),
-                    _ => Err(TypeError::NotRecordType),
-                }
-            }
+            Projection(r, proj) => match r.as_ref() {
+                Term::Record(fields) => self.type_of(
+                    crate::term::record_access(fields, &proj)
+                        .ok_or(TypeError::InvalidProjection)?
+                        .as_ref(),
+                ),
+                _ => Err(TypeError::NotRecordType),
+            },
             IsZero(t) => {
                 if let Ok(Type::Nat) = self.type_of(t) {
                     Ok(Type::Bool)

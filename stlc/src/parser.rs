@@ -1,5 +1,5 @@
 use crate::lexer::{Lexer, Token};
-use crate::term::Term;
+use crate::term::{RecordField, Term};
 use crate::typing::Type;
 use std::collections::VecDeque;
 use std::iter::Peekable;
@@ -24,9 +24,9 @@ impl NameContext {
         }
     }
 
-    pub fn lookup(&self, key: String) -> Option<usize> {
+    pub fn lookup(&self, key: &str) -> Option<usize> {
         for (idx, s) in self.inner.iter().enumerate() {
-            if key == *s {
+            if key == s {
                 return Some(idx);
             }
         }
@@ -45,6 +45,12 @@ pub struct Parser<'s> {
     /// so we can just directly wrap it in a [`Peekable`]
     lexer: Peekable<Lexer<'s>>,
     span: Span,
+}
+
+pub enum ParseError {
+    ExpectedAtom,
+    ExpectedIdent,
+    ExpectedToken(Token),
 }
 
 impl<'s> Parser<'s> {
@@ -78,8 +84,23 @@ impl<'s> Parser<'s> {
         }
     }
 
+    fn expect_term(&mut self) -> Option<Rc<Term>> {
+        match self.term() {
+            Some(term) => Some(term),
+            None => {
+                let sp = self.peek_span();
+                self.diagnostic.push("Expected term".to_string(), sp);
+                None
+            }
+        }
+    }
+
     fn peek(&mut self) -> Option<Token> {
         self.lexer.peek().map(|s| s.data.clone())
+    }
+
+    fn peek_span(&mut self) -> Span {
+        self.lexer.peek().map(|s| s.span).unwrap_or(self.span)
     }
 
     fn bind_name(&mut self) -> Option<(NameContext, Term)> {
@@ -102,17 +123,7 @@ impl<'s> Parser<'s> {
         // Bind variable into a new context before parsing the body
         // of the lambda abstraction
         let prev_ctx = self.ctx.clone();
-        // let (ctx, var) = match var.data {
-        //     Token::Ident(s) => {
-        //         let (ctx, idx) = self.ctx.bind(format!("{}", s));
-        //         (ctx, Term::Var(idx))
-        //     }
-        //     x => {
-        //         self.diagnostic
-        //             .push(format!("Expected variable, found {:?}", x), var.span);
-        //         return None;
-        //     }
-        // };
+
         let (ctx, var) = self.bind_name()?;
 
         self.ctx = ctx;
@@ -124,7 +135,7 @@ impl<'s> Parser<'s> {
 
         // Return to previous context
         self.ctx = prev_ctx;
-        Some(Term::Abs(ty, body.into()).into())
+        Some(Term::Abs(ty, body).into())
     }
 
     fn let_expr(&mut self) -> Option<Rc<Term>> {
@@ -135,25 +146,25 @@ impl<'s> Parser<'s> {
         self.ctx = ctx_;
 
         let _ = self.expect(Token::Equals)?;
-        let bind = self.term()?;
+        let bind = self.expect_term()?;
         let _ = self.expect(Token::In)?;
 
         // dbg!(&self.ctx);
-        let body = self.term()?;
+        let body = self.expect_term()?;
         // dbg!(&body);
         self.ctx = ctx;
         Some(Term::Let(bind, body).into())
     }
 
-    fn term(&mut self) -> Option<Rc<Term>> {
-        match self.peek()? {
-            Token::Lambda => self.lambda(),
-            _ => self.application(),
-        }
+    fn ty_record_field(&mut self) -> Option<(Rc<String>, Type)> {
+        let label = self.ident()?;
+        self.expect(Token::Colon)?;
+        let data = self.ty()?;
+        Some((label.data.into(), data))
     }
 
     fn ty_atom(&mut self) -> Option<Type> {
-        match self.peek()? {
+        match &self.peek()? {
             Token::TyBool => {
                 self.consume()?;
                 Some(Type::Bool)
@@ -161,6 +172,24 @@ impl<'s> Parser<'s> {
             Token::TyNat => {
                 self.consume()?;
                 Some(Type::Nat)
+            }
+            Token::TyUnit => {
+                self.consume()?;
+                Some(Type::Unit)
+            }
+            Token::LBrace => {
+                self.consume()?;
+                let mut fields = vec![self.ty_record_field()?];
+                while let Some(Token::Comma) = self.peek() {
+                    self.expect(Token::Comma)?;
+                    fields.push(self.ty_record_field()?);
+                }
+                self.expect(Token::RBrace)?;
+                Some(Type::Record(fields))
+            }
+            Token::Ident(s) if s.starts_with(|ch: char| ch.is_ascii_uppercase()) => {
+                self.ident();
+                Some(Type::Var(s.clone()))
             }
             _ => None,
         }
@@ -171,7 +200,8 @@ impl<'s> Parser<'s> {
         let mut lhs = match self.ty_atom() {
             Some(ty) => ty,
             None => {
-                self.diagnostic.push(format!("Expected type"), span);
+                let sp = self.peek_span();
+                self.diagnostic.push("Expected type".to_string(), sp);
                 return None;
             }
         };
@@ -199,16 +229,54 @@ impl<'s> Parser<'s> {
         while let Some(rhs) = self.atom() {
             lhs = Term::App(lhs, rhs).into();
         }
-        Some(lhs.into())
+
+        if let Some(Token::Proj) = self.peek() {
+            self.expect(Token::Proj)?;
+            let accessor = self.ident()?;
+            lhs = Term::Projection(lhs, accessor.data.into()).into();
+        }
+        Some(lhs)
+    }
+
+    fn ident(&mut self) -> Option<Spanned<String>> {
+        let spanned = self.consume()?;
+        match spanned.data {
+            Token::Ident(s) => Some(Spanned::new(spanned.span, s)),
+            x => {
+                self.diagnostic
+                    .push(format!("Expected identifier, found {:?}", x), spanned.span);
+                None
+            }
+        }
+    }
+
+    fn record_field(&mut self) -> Option<RecordField> {
+        let label = self.ident()?;
+        self.expect(Token::Colon)?;
+        let data = self.expect_term()?;
+        Some(RecordField {
+            label: label.data.into(),
+            data,
+        })
+    }
+
+    fn record(&mut self) -> Option<Rc<Term>> {
+        let mut fields = vec![self.record_field()?];
+        let span = self.span;
+        while let Some(Token::Comma) = self.peek() {
+            self.expect(Token::Comma)?;
+            fields.push(self.record_field()?);
+        }
+        Some(Term::Record(fields).into())
     }
 
     fn if_expr(&mut self) -> Option<Rc<Term>> {
         let _ = self.expect(Token::If)?;
-        let guard = self.term()?;
+        let guard = self.expect_term()?;
         let _ = self.expect(Token::Then)?;
-        let csq = self.term()?;
+        let csq = self.expect_term()?;
         let _ = self.expect(Token::Else)?;
-        let alt = self.term()?;
+        let alt = self.expect_term()?;
         Some(Term::If(guard, csq, alt).into())
     }
 
@@ -248,10 +316,20 @@ impl<'s> Parser<'s> {
                 self.expect(Token::RParen)?;
                 Some(term)
             }
+            Token::LBrace => {
+                self.expect(Token::LBrace)?;
+                let term = self.record()?;
+                self.expect(Token::RBrace)?;
+                Some(term)
+            }
+            Token::Unit => {
+                self.expect(Token::Unit)?;
+                Some(Term::Unit.into())
+            }
             Token::Lambda => self.lambda(),
             Token::Ident(s) => {
                 let sp = self.consume()?.span;
-                match self.ctx.lookup(format!("{}", s)) {
+                match self.ctx.lookup(&s) {
                     Some(idx) => Some(Term::Var(idx).into()),
                     None => {
                         self.diagnostic.push(format!("Unbound variable {}", s), sp);
@@ -259,8 +337,24 @@ impl<'s> Parser<'s> {
                     }
                 }
             }
-
             _ => None,
+        }
+    }
+
+    fn type_decl(&mut self) -> Option<Rc<Term>> {
+        self.expect(Token::TypeDecl)?;
+        let name = self.ident()?;
+        self.expect(Token::Equals)?;
+        let ty = self.ty()?;
+
+        Some(Term::TypeDecl(name.data.into(), ty).into())
+    }
+
+    fn term(&mut self) -> Option<Rc<Term>> {
+        match self.peek()? {
+            // Token::Lambda => self.lambda(),
+            Token::TypeDecl => self.type_decl(),
+            _ => self.application(),
         }
     }
 

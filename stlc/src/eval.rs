@@ -1,6 +1,6 @@
-use super::term::Term;
-use super::typing::{Context, Type, TypeError};
-use super::visitor::{Direction, Shifting, Substitution, Visitable, Visitor};
+use super::term::*;
+use super::typing::{Context};
+use super::visitor::{Direction, Shifting, Substitution, Visitable};
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -17,11 +17,11 @@ fn subst(val: Rc<Term>, body: Rc<Term>) -> Rc<Term> {
 
 fn value(ctx: &Context, term: &Term) -> bool {
     match term {
-        Term::True | Term::False | Term::Abs(_, _) | Term::Zero => true,
+        Term::Unit | Term::True | Term::False | Term::Abs(_, _) | Term::Zero => true,
         Term::Succ(t) | Term::Pred(t) | Term::IsZero(t) => value(ctx, t),
         Term::Record(rec) => {
-            for field in &rec.fields {
-                if !value(ctx, field) {
+            for field in rec {
+                if !value(ctx, &field.data) {
                     return false;
                 }
             }
@@ -85,13 +85,19 @@ fn eval1(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
             _ => Ok(Term::IsZero(eval1(ctx, t.clone())?).into()),
         },
 
-        Term::Projection(rec, idx) if value(ctx, rec) => match rec.as_ref() {
-            Term::Record(rec) => rec.fields.get(*idx).cloned().ok_or(Error::NoRuleApplies),
-            _ => Ok(Term::Projection(eval1(ctx, rec.clone())?, *idx).into()),
+        Term::Projection(rec, proj) if value(ctx, rec) => match rec.as_ref() {
+            Term::Record(rec) => crate::term::record_access(rec, proj).ok_or(Error::NoRuleApplies),
+            _ => Ok(Term::Projection(eval1(ctx, rec.clone())?, proj.clone()).into()),
         },
 
-        Term::Projection(rec, idx) => Ok(Term::Projection(eval1(ctx, rec.clone())?, *idx).into()),
+        Term::Projection(rec, proj) => {
+            Ok(Term::Projection(eval1(ctx, rec.clone())?, proj.clone()).into())
+        }
 
+        // Term::TypeDecl(name, ty) => {
+        //     ctx.bind(name.to_string(), ty.clone());
+        //     Ok(Term::Unit.into())
+        // }
         _ => Err(Error::NoRuleApplies),
     }
 }
