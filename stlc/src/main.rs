@@ -1,3 +1,4 @@
+#![allow(unused_variables)]
 #[macro_use]
 mod term;
 mod eval;
@@ -13,11 +14,50 @@ use typing::{Context, Type, TypeError};
 
 fn ev(term: Rc<Term>) -> Result<Rc<Term>, eval::Error> {
     let ctx = Context::default();
-    println!("eval {:?}", &term);
+    println!("EVAL {:?}  TYPE: {:?}", &term, ctx.type_of(&term));
     let r = eval::eval(&ctx, term)?;
     println!("===> {:?}", &r);
     println!("type {:?}", ctx.type_of(&r));
     Ok(r)
+}
+
+fn parse(input: &str) {
+    let mut p = parser::Parser::new(input);
+    while let Some(tok) = p.parse_term() {
+        ev(tok);
+    }
+    println!("");
+
+    let diag = p.diagnostic();
+    if diag.error_count() > 0 {
+        println!("\n{} error(s) detected while parsing!", diag.error_count());
+        println!("{}", diag.emit());
+    }
+}
+
+fn exercises() {
+    let mut v = visitor::Shifting {
+        cutoff: 0,
+        shift: 2,
+    };
+
+    // Exercise 6.2.2 part 1
+    let arr = arrow!(Type::Bool, Type::Bool);
+    let ex1 = abs!(
+        arr.clone(),
+        abs!(arr.clone(), app!(app!(var!(1), var!(0)), var!(2)))
+    );
+    dbg!(ex1.accept(&mut v));
+
+    // Exercise 6.2.2 part 2
+    let ex2 = abs!(
+        arr.clone(),
+        app!(
+            app!(var!(0), var!(1)),
+            abs!(Type::Bool, app!(app!(var!(0), var!(1)), var!(2)))
+        )
+    );
+    dbg!(ex2.accept(&mut v));
 }
 
 fn main() {
@@ -32,54 +72,9 @@ fn main() {
     assert_eq!(root.type_of(&f), Ok(Type::Bool));
     assert_eq!(root.type_of(&mistyped), Err(TypeError::ArmMismatch));
 
-    // The simply typed lambda calculus cannot type divergent combinator
-    // or fixpoint
-    let x = abs!(arrow!(Type::Bool, Type::Bool), app!(var!(0), var!(0)));
-    let omega = app!(x.clone(), x.clone());
-    let mut v = visitor::Shifting {
-        cutoff: 0,
-        shift: 2,
-    };
-
-    // Exercise 6.2.2 part 1
-    let arr = arrow!(Type::Bool, Type::Bool);
-    let ex1 = abs!(
-        arr.clone(),
-        abs!(arr.clone(), app!(app!(var!(1), var!(0)), var!(2)))
-    );
-    // dbg!(ex1.accept(&mut v));
-
-    // Exercise 6.2.2 part 2
-    let ex2 = abs!(
-        arr.clone(),
-        app!(
-            app!(var!(0), var!(1)),
-            abs!(Type::Bool, app!(app!(var!(0), var!(1)), var!(2)))
-        )
-    );
-    // dbg!(ex2.accept(&mut v));
-
-    let a = abs!(arr.clone(), app!(app!(var!(1), var!(0)), var!(2)));
-    let b = abs!(arr.clone(), app!(var!(1), var!(0)));
-
-    // \ y: Bool (\ x: Bool if x then y else false)
-
-    let c = abs!(Type::Bool, abs!(Type::Bool, if_!(var!(0), var!(1), False)));
-    // let r = ev(app!(c, True).into()).unwrap();
-    // ev(Term::App(r, Term::False.into()).into());
-
-    let c = abs!(Type::Bool, abs!(Type::Bool, if_!(var!(0), var!(1), False)));
-    ev(app!(app!(c, True), False).into());
-
-    let input = "(λx: Bool -> Bool. x true) (λx: Bool. if x then false else true)";
-    let mut p = parser::Parser::new(input);
-    while let Some(tok) = p.parse_term() {
-        ev(tok);
-    }
-
-    let diag = p.diagnostic();
-    if diag.error_count() > 0 {
-        println!("\n{} error(s) detected while parsing!", diag.error_count());
-        println!("{}", diag.emit());
-    }
+    let input = "(λx: Bool -> Bool. x true) (λx: Bool. if x then false else true) ";
+    // parse(input);
+    // parse("iszero pred succ 0");
+    parse("((\\ y: Nat -> Bool. (\\x: Nat. if y x then true else false)) 0) (\\x: Nat. iszero x)");
+    // parse("(\\x: Nat. iszero x) 0");
 }

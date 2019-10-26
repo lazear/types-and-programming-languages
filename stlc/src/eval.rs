@@ -61,7 +61,8 @@ pub enum Error {
 
 fn value(ctx: &Context, term: &Term) -> bool {
     match term {
-        Term::True | Term::False | Term::Abs(_, _) => true,
+        Term::True | Term::False | Term::Abs(_, _) | Term::Zero => true,
+        Term::Succ(t) | Term::Pred(t) | Term::IsZero(t) => value(ctx, t),
         _ => false,
     }
 }
@@ -69,7 +70,7 @@ fn value(ctx: &Context, term: &Term) -> bool {
 fn eval1(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
     match term.as_ref() {
         Term::App(t1, ref t2) if value(ctx, &t2) => {
-            if let Term::Abs(ty, body) = t1.as_ref() {
+            if let Term::Abs(_, body) = t1.as_ref() {
                 let mut sub = Substitution {
                     term: t2.clone().into(),
                 };
@@ -83,11 +84,11 @@ fn eval1(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
             let t_prime = eval1(ctx, t2.clone())?;
             Ok(Term::App(t1.clone(), t_prime).into())
         }
-        // Term::App(t1, t2) => {
-        //     println!("eval t1 first");
-        //     let t_prime = eval1(ctx, t1.clone())?;
-        //     Ok(Term::App(t_prime, t2.clone()).into())
-        // }
+        Term::App(t1, t2) => {
+            println!("******** degenerate Term::App case");
+            let t_prime = eval1(ctx, t1.clone())?;
+            Ok(Term::App(t_prime, t2.clone()).into())
+        }
         Term::If(guard, csq, alt) => match **guard {
             Term::True => Ok(csq.clone()),
             Term::False => Ok(alt.clone()),
@@ -96,6 +97,26 @@ fn eval1(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
                 Ok(Term::If(t_prime, csq.clone(), alt.clone()).into())
             }
         },
+        Term::Succ(t) => {
+            let t_prime = eval1(ctx, t.clone())?;
+            Ok(Term::Succ(t_prime).into())
+        }
+
+        Term::Pred(t) => match t.as_ref() {
+            Term::Zero => Ok(t.clone()),
+            Term::Succ(n) => Ok(n.clone()),
+            _ => Ok(Term::Pred(eval1(ctx, t.clone())?).into()),
+        },
+
+        Term::IsZero(t) => {
+            println!("eval ISZERO");
+            match dbg!(t.as_ref()) {
+                Term::Zero => Ok(Term::True.into()),
+                Term::Succ(_) => Ok(Term::False.into()),
+                _ => Ok(Term::IsZero(eval1(ctx, t.clone())?).into()),
+            }
+        }
+
         _ => Err(Error::NoRuleApplies),
     }
 }

@@ -1,10 +1,21 @@
 use crate::term::Term;
+use std::fmt;
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq, PartialOrd)]
 pub enum Type {
     Bool,
     Nat,
     Arrow(Box<Type>, Box<Type>),
+}
+
+impl fmt::Debug for Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Type::Bool => write!(f, "Bool"),
+            Type::Nat => write!(f, "Nat"),
+            Type::Arrow(a, b) => write!(f, "{:?}->{:?}", a, b),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -59,6 +70,21 @@ impl<'a> Context<'a> {
         match term {
             True => Ok(Type::Bool),
             False => Ok(Type::Bool),
+            Zero => Ok(Type::Nat),
+            IsZero(t) => {
+                if let Ok(Type::Nat) = self.type_of(t) {
+                    Ok(Type::Bool)
+                } else {
+                    Err(TypeError::ParameterMismatch)
+                }
+            }
+            Succ(t) | Pred(t) => {
+                if let Ok(Type::Nat) = self.type_of(t) {
+                    Ok(Type::Nat)
+                } else {
+                    Err(TypeError::ParameterMismatch)
+                }
+            }
             If(guard, csq, alt) => {
                 if let Ok(Type::Bool) = self.type_of(guard) {
                     let ty1 = self.type_of(csq)?;

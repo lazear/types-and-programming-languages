@@ -7,6 +7,7 @@ pub trait Visitor<T> {
     fn visit_app(&mut self, t1: Rc<Term>, t2: Rc<Term>) -> T;
     fn visit_if(&mut self, guard: Rc<Term>, csq: Rc<Term>, alt: Rc<Term>) -> T;
     fn visit_bool(&mut self, val: bool) -> T;
+    fn visit_nat(&mut self, nat: u32) -> T;
 }
 
 pub struct Shifting {
@@ -47,6 +48,10 @@ impl Visitor<Rc<Term>> for Shifting {
             true => Rc::new(Term::True),
             false => Rc::new(Term::False),
         }
+    }
+
+    fn visit_nat(&mut self, val: u32) -> Rc<Term> {
+        Term::Zero.into()
     }
 }
 
@@ -92,5 +97,9 @@ impl Visitor<Rc<Term>> for Substitution {
             true => Rc::new(Term::True),
             false => Rc::new(Term::False),
         }
+    }
+
+    fn visit_nat(&mut self, val: u32) -> Rc<Term> {
+        Term::Zero.into()
     }
 }

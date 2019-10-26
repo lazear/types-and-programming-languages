@@ -7,6 +7,10 @@ use std::rc::Rc;
 pub enum Term {
     True,
     False,
+    Zero,
+    Succ(Rc<Term>),
+    Pred(Rc<Term>),
+    IsZero(Rc<Term>),
     // DeBrujin index
     Var(usize),
     // Type of bound variable, and body of abstraction
@@ -21,6 +25,10 @@ impl Term {
         match self {
             Term::True => visitor.visit_bool(true),
             Term::False => visitor.visit_bool(false),
+            Term::Zero => visitor.visit_nat(0),
+            Term::Succ(t) => Term::Succ(t.accept(visitor)).into(),
+            Term::Pred(t) => Term::Pred(t.accept(visitor)).into(),
+            Term::IsZero(t) => Term::IsZero(t.accept(visitor)).into(),
             Term::Var(idx) => visitor.visit_var(*idx),
             Term::Abs(ty, term) => visitor.visit_abs(ty.clone(), term.clone()),
             Term::App(t1, t2) => visitor.visit_app(t1.clone(), t2.clone()),
@@ -34,7 +42,11 @@ impl fmt::Debug for Term {
         match self {
             Term::True => write!(f, "true"),
             Term::False => write!(f, "false"),
-            Term::Var(idx) => write!(f, "{}", idx),
+            Term::Zero => write!(f, "Z"),
+            Term::Succ(t) => write!(f, "S({:?})", t),
+            Term::Pred(t) => write!(f, "P({:?})", t),
+            Term::IsZero(t) => write!(f, "IsZero({:?})", t),
+            Term::Var(idx) => write!(f, "#{}", idx),
             Term::Abs(ty, body) => write!(f, "λ_:{:?}. {:?}", ty, body),
             Term::App(t1, t2) => write!(f, "({:?}) {:?}", t1, t2),
             Term::If(a, b, c) => write!(f, "if {:?} then {:?} else {:?}", a, b, c),

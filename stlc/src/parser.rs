@@ -199,12 +199,29 @@ impl<'s> Parser<'s> {
                 Some(Term::False.into())
             }
             Token::If => self.if_expr(),
+            Token::Nat(i) => {
+                self.consume()?;
+                Some(Term::Zero.into())
+            }
+            Token::Succ => {
+                self.expect(Token::Succ)?;
+                Some(Term::Succ(self.term()?).into())
+            }
+            Token::Pred => {
+                self.expect(Token::Pred)?;
+                Some(Term::Pred(self.term()?).into())
+            }
+            Token::IsZero => {
+                self.expect(Token::IsZero)?;
+                Some(Term::IsZero(self.term()?).into())
+            }
             Token::LParen => {
                 self.expect(Token::LParen)?;
                 let term = self.term()?;
                 self.expect(Token::RParen)?;
                 Some(term)
             }
+            Token::Lambda => self.lambda(),
             Token::Ident(s) => {
                 let sp = self.consume()?.span;
                 match self.ctx.lookup(format!("{}", s)) {
