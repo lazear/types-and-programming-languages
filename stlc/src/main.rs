@@ -58,6 +58,8 @@ fn main() {
          if y then succ 0 else succ succ 0",
     );
 
+    parse(&mut root, "let x = (\\x: Nat. x) in x");
+
     // parse(&mut root, "let not = \\x: Bool. if x then false else true in {a: 0, b: \\x: Bool. not x, c: unit}.b ");
     // parse(&mut root, "type Struct = {valid: Bool, number: Nat}");
     // parse(&mut root, "(\\x: Struct. x.number) {valid: true, number: succ 0}");
