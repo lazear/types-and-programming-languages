@@ -1,5 +1,5 @@
 use crate::term::{RecordField, Term};
-use crate::visitor::{Visitable, Visitor};
+use crate::visitor::{Direction, Shifting, Visitable, Visitor};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
@@ -40,10 +40,11 @@ pub enum TypeError {
     Guard,
     ArmMismatch,
     ParameterMismatch,
-    UnknownVariable,
+    UnknownVariable(usize),
     ExpectedArrow,
     InvalidProjection,
     NotRecordType,
+    Undefined(String),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -60,7 +61,9 @@ pub struct Context<'a> {
 
 impl<'a> Visitor<Result<Type, TypeError>> for Context<'a> {
     fn visit_var(&mut self, var: usize) -> Result<Type, TypeError> {
-        self.get(var).cloned().ok_or(TypeError::UnknownVariable)
+        self.get(var)
+            .cloned()
+            .ok_or(TypeError::UnknownVariable(var))
     }
 
     fn visit_abs(&mut self, ty: Type, body: Rc<Term>) -> Result<Type, TypeError> {
@@ -70,7 +73,7 @@ impl<'a> Visitor<Result<Type, TypeError>> for Context<'a> {
                 .borrow()
                 .get(&name)
                 .cloned()
-                .ok_or(TypeError::UnknownVariable)?,
+                .ok_or(TypeError::Undefined(name))?,
             x => x,
         };
         let mut ctx = self.add(ty.clone());
@@ -79,7 +82,18 @@ impl<'a> Visitor<Result<Type, TypeError>> for Context<'a> {
     }
 
     fn visit_app(&mut self, t1: Rc<Term>, t2: Rc<Term>) -> Result<Type, TypeError> {
-        Ok(Type::Nat)
+        let ty1 = t1.accept(self)?;
+        let ty2 = t2.accept(self)?;
+        match ty1 {
+            Type::Arrow(ty11, ty12) => {
+                if *ty11 == ty2 {
+                    Ok(*ty12)
+                } else {
+                    Err(TypeError::ParameterMismatch)
+                }
+            }
+            _ => Err(TypeError::ExpectedArrow),
+        }
     }
 
     fn visit_if(
@@ -88,11 +102,30 @@ impl<'a> Visitor<Result<Type, TypeError>> for Context<'a> {
         csq: Rc<Term>,
         alt: Rc<Term>,
     ) -> Result<Type, TypeError> {
-        Ok(Type::Nat)
+        if let Ok(Type::Bool) = guard.accept(self) {
+            let ty1 = csq.accept(self)?;
+            let ty2 = alt.accept(self)?;
+            if ty1 == ty2 {
+                Ok(ty2)
+            } else {
+                Err(TypeError::ArmMismatch)
+            }
+        } else {
+            Err(TypeError::Guard)
+        }
     }
 
-    fn visit_let(&mut self, bind: Rc<Term>, alt: Rc<Term>) -> Result<Type, TypeError> {
-        Ok(Type::Nat)
+    fn visit_let(&mut self, bind: Rc<Term>, body: Rc<Term>) -> Result<Type, TypeError> {
+        // Dirty hack or correct behavior?
+        //
+        // We definitely need to correct var indices or how the context is
+        // working so that let binders can access names defined in an
+        // enclosing let-bound scope
+        let ty = bind
+            .accept(&mut Shifting::new(Direction::Down))
+            .accept(self)?;
+        let mut ctx = self.add(ty);
+        body.accept(&mut ctx)
     }
 
     fn visit_succ(&mut self, t: Rc<Term>) -> Result<Type, TypeError> {
@@ -104,7 +137,7 @@ impl<'a> Visitor<Result<Type, TypeError>> for Context<'a> {
     }
 
     fn visit_iszero(&mut self, t: Rc<Term>) -> Result<Type, TypeError> {
-        Ok(Type::Nat)
+        Ok(Type::Bool)
     }
 
     fn visit_const(&mut self, c: Rc<Term>) -> Result<Type, TypeError> {
@@ -157,7 +190,7 @@ impl<'a> Context<'a> {
         if self.ty.is_none() {
             Context {
                 types: self.types.clone(),
-                parent: self.parent,
+                parent: None,
                 ty: Some(ty),
             }
         } else {
@@ -179,84 +212,84 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn type_of(&self, term: &Term) -> Result<Type, TypeError> {
-        use Term::*;
-        match term {
-            TypeDecl(_, _) => Ok(Type::Unit),
-            Unit => Ok(Type::Unit),
-            True => Ok(Type::Bool),
-            False => Ok(Type::Bool),
-            Zero => Ok(Type::Nat),
-            Record(rec) => {
-                let tys = rec
-                    .iter()
-                    .map(|f| self.type_of(&f.data).map(|ty| (f.label.clone(), ty)))
-                    .collect::<Result<Vec<(Rc<String>, Type)>, TypeError>>()?;
-                Ok(Type::Record(tys))
-            }
-            Projection(r, proj) => match r.as_ref() {
-                Term::Record(fields) => self.type_of(
-                    crate::term::record_access(fields, &proj)
-                        .ok_or(TypeError::InvalidProjection)?
-                        .as_ref(),
-                ),
-                _ => Err(TypeError::NotRecordType),
-            },
-            IsZero(t) => {
-                if let Ok(Type::Nat) = self.type_of(t) {
-                    Ok(Type::Bool)
-                } else {
-                    Err(TypeError::ParameterMismatch)
-                }
-            }
-            Succ(t) | Pred(t) => {
-                if let Ok(Type::Nat) = self.type_of(t) {
-                    Ok(Type::Nat)
-                } else {
-                    Err(TypeError::ParameterMismatch)
-                }
-            }
-            If(guard, csq, alt) => {
-                if let Ok(Type::Bool) = self.type_of(guard) {
-                    let ty1 = self.type_of(csq)?;
-                    let ty2 = self.type_of(alt)?;
-                    if ty1 == ty2 {
-                        Ok(ty2)
-                    } else {
-                        Err(TypeError::ArmMismatch)
-                    }
-                } else {
-                    Err(TypeError::Guard)
-                }
-            }
-            Let(bind, body) => {
-                let ty = self.type_of(bind)?;
-                let ctx = self.add(ty.clone());
-                ctx.type_of(body)
-            }
-            Var(s) => match self.get(*s) {
-                Some(ty) => Ok(ty.clone()),
-                _ => Err(TypeError::UnknownVariable),
-            },
-            Abs(ty, body) => {
-                let ctx = self.add(ty.clone());
-                let ty_body = ctx.type_of(body)?;
-                Ok(Type::Arrow(Box::new(ty.clone()), Box::new(ty_body)))
-            }
-            App(t1, t2) => {
-                let ty1 = self.type_of(t1)?;
-                let ty2 = self.type_of(t2)?;
-                match ty1 {
-                    Type::Arrow(ty11, ty12) => {
-                        if *ty11 == ty2 {
-                            Ok(*ty12)
-                        } else {
-                            Err(TypeError::ParameterMismatch)
-                        }
-                    }
-                    _ => Err(TypeError::ExpectedArrow),
-                }
-            }
-        }
-    }
+    // pub fn type_of(&self, term: &Term) -> Result<Type, TypeError> {
+    //     use Term::*;
+    //     match term {
+    //         TypeDecl(_, _) => Ok(Type::Unit),
+    //         Unit => Ok(Type::Unit),
+    //         True => Ok(Type::Bool),
+    //         False => Ok(Type::Bool),
+    //         Zero => Ok(Type::Nat),
+    //         Record(rec) => {
+    //             let tys = rec
+    //                 .iter()
+    //                 .map(|f| self.type_of(&f.data).map(|ty| (f.label.clone(), ty)))
+    //                 .collect::<Result<Vec<(Rc<String>, Type)>, TypeError>>()?;
+    //             Ok(Type::Record(tys))
+    //         }
+    //         Projection(r, proj) => match r.as_ref() {
+    //             Term::Record(fields) => self.type_of(
+    //                 crate::term::record_access(fields, &proj)
+    //                     .ok_or(TypeError::InvalidProjection)?
+    //                     .as_ref(),
+    //             ),
+    //             _ => Err(TypeError::NotRecordType),
+    //         },
+    //         IsZero(t) => {
+    //             if let Ok(Type::Nat) = self.type_of(t) {
+    //                 Ok(Type::Bool)
+    //             } else {
+    //                 Err(TypeError::ParameterMismatch)
+    //             }
+    //         }
+    //         Succ(t) | Pred(t) => {
+    //             if let Ok(Type::Nat) = self.type_of(t) {
+    //                 Ok(Type::Nat)
+    //             } else {
+    //                 Err(TypeError::ParameterMismatch)
+    //             }
+    //         }
+    //         If(guard, csq, alt) => {
+    //             if let Ok(Type::Bool) = self.type_of(guard) {
+    //                 let ty1 = self.type_of(csq)?;
+    //                 let ty2 = self.type_of(alt)?;
+    //                 if ty1 == ty2 {
+    //                     Ok(ty2)
+    //                 } else {
+    //                     Err(TypeError::ArmMismatch)
+    //                 }
+    //             } else {
+    //                 Err(TypeError::Guard)
+    //             }
+    //         }
+    //         Let(bind, body) => {
+    //             let ty = self.type_of(bind)?;
+    //             let ctx = self.add(ty.clone());
+    //             ctx.type_of(body)
+    //         }
+    //         Var(s) => match self.get(*s) {
+    //             Some(ty) => Ok(ty.clone()),
+    //             _ => Err(TypeError::UnknownVariable),
+    //         },
+    //         Abs(ty, body) => {
+    //             let ctx = self.add(ty.clone());
+    //             let ty_body = ctx.type_of(body)?;
+    //             Ok(Type::Arrow(Box::new(ty.clone()), Box::new(ty_body)))
+    //         }
+    //         App(t1, t2) => {
+    //             let ty1 = self.type_of(t1)?;
+    //             let ty2 = self.type_of(t2)?;
+    //             match ty1 {
+    //                 Type::Arrow(ty11, ty12) => {
+    //                     if *ty11 == ty2 {
+    //                         Ok(*ty12)
+    //                     } else {
+    //                         Err(TypeError::ParameterMismatch)
+    //                     }
+    //                 }
+    //                 _ => Err(TypeError::ExpectedArrow),
+    //             }
+    //         }
+    //     }
+    // }
 }

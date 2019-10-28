@@ -1,5 +1,5 @@
 use super::term::*;
-use super::typing::{Context};
+use super::typing::Context;
 use super::visitor::{Direction, Shifting, Substitution, Visitable};
 use std::rc::Rc;
 

@@ -8,20 +8,23 @@ use util::diagnostic::Diagnostic;
 use util::span::*;
 
 #[derive(Clone, Debug, Default)]
-pub struct NameContext {
+pub struct DeBruijnIndexer {
     inner: VecDeque<String>,
 }
 
-impl NameContext {
-    pub fn bind(&mut self, hint: String) -> (NameContext, usize) {
+impl DeBruijnIndexer {
+    pub fn push(&mut self, hint: String) -> usize {
         if self.inner.contains(&hint) {
-            self.bind(format!("{}'", hint))
+            self.push(format!("{}'", hint))
         } else {
-            let mut ctx = self.clone();
-            let idx = ctx.size();
-            ctx.inner.push_front(hint);
-            (ctx, idx)
+            let idx = self.inner.len();
+            self.inner.push_front(hint);
+            idx
         }
+    }
+
+    pub fn pop(&mut self) {
+        self.inner.pop_front();
     }
 
     pub fn lookup(&self, key: &str) -> Option<usize> {
@@ -32,14 +35,10 @@ impl NameContext {
         }
         None
     }
-
-    pub fn size(&self) -> usize {
-        self.inner.len()
-    }
 }
 
 pub struct Parser<'s> {
-    ctx: NameContext,
+    ctx: DeBruijnIndexer,
     diagnostic: Diagnostic<'s>,
     /// [`Lexer`] impls [`Iterator`] over [`TokenSpan`],
     /// so we can just directly wrap it in a [`Peekable`]
@@ -57,7 +56,7 @@ impl<'s> Parser<'s> {
     /// Create a new [`Parser`] for the input `&str`
     pub fn new(input: &'s str) -> Parser<'s> {
         Parser {
-            ctx: NameContext::default(),
+            ctx: DeBruijnIndexer::default(),
             diagnostic: Diagnostic::new(input),
             lexer: Lexer::new(input.chars()).peekable(),
             span: Span::default(),
@@ -103,56 +102,32 @@ impl<'s> Parser<'s> {
         self.lexer.peek().map(|s| s.span).unwrap_or(self.span)
     }
 
-    fn bind_name(&mut self) -> Option<(NameContext, Term)> {
-        let span = self.consume()?;
-        let var = match span.data {
-            Token::Ident(s) => s,
-            x => {
-                self.diagnostic
-                    .push(format!("Expected variable, found {:?}", x), span.span);
-                return None;
-            }
-        };
-        let (ctx, idx) = self.ctx.bind(var);
-        Some((ctx, Term::Var(idx)))
-    }
-
     fn lambda(&mut self) -> Option<Rc<Term>> {
-        let start = self.expect(Token::Lambda)?.span;
+        let start = self.expect(Token::Lambda)?;
 
         // Bind variable into a new context before parsing the body
-        // of the lambda abstraction
-        let prev_ctx = self.ctx.clone();
+        let var = self.ident()?.data;
+        self.ctx.push(var);
 
-        let (ctx, var) = self.bind_name()?;
-
-        self.ctx = ctx;
         let _ = self.expect(Token::Colon)?;
         let ty = self.ty()?;
         let _ = self.expect(Token::Proj)?;
         let body = self.term()?;
-        let end = self.span;
 
         // Return to previous context
-        self.ctx = prev_ctx;
+        self.ctx.pop();
         Some(Term::Abs(ty, body).into())
     }
 
     fn let_expr(&mut self) -> Option<Rc<Term>> {
         let start = self.expect(Token::Let)?;
-
-        let ctx = self.ctx.clone();
-        let (ctx_, var) = self.bind_name()?;
-        self.ctx = ctx_;
-
+        let var = self.ident()?.data;
+        self.ctx.push(var);
         let _ = self.expect(Token::Equals)?;
         let bind = self.expect_term()?;
         let _ = self.expect(Token::In)?;
-
-        // dbg!(&self.ctx);
         let body = self.expect_term()?;
-        // dbg!(&body);
-        self.ctx = ctx;
+        self.ctx.pop();
         Some(Term::Let(bind, body).into())
     }
 
