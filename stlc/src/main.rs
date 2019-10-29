@@ -1,9 +1,8 @@
 #![allow(unused_variables)]
-#[macro_use]
-mod term;
 mod eval;
 mod lexer;
 mod parser;
+mod term;
 mod typing;
 mod visitor;
 
@@ -11,10 +10,9 @@ use std::rc::Rc;
 use term::Term;
 use term::Term::*;
 use typing::{Context, Type, TypeError};
-use visitor::Visitable;
 
-fn ev(ctx: &mut Context, term: Rc<Term>) -> Result<Rc<Term>, eval::Error> {
-    let ty = match term.accept(ctx) {
+fn ev(ctx: &mut Context, mut term: Term) -> Result<Term, eval::Error> {
+    let ty = match ctx.type_of(&term) {
         Ok(ty) => ty,
         Err(err) => {
             println!("Mistyped term {} => {:?}", term, err);
@@ -28,8 +26,8 @@ fn ev(ctx: &mut Context, term: Rc<Term>) -> Result<Rc<Term>, eval::Error> {
     // a term t' [ t -> t' ] is also well typed
     //
     // Furthermore,  Γ t:T, t ->* t' => t':T
-    let ty_ = r.accept(ctx).unwrap();
-    assert_eq!(ty_, ty);
+    let ty_ = ctx.type_of(&r);
+    // assert_eq!(ty_, ty);
     println!("===> {} -- {:?}\n", r, ty_);
 
     Ok(r)
@@ -37,8 +35,8 @@ fn ev(ctx: &mut Context, term: Rc<Term>) -> Result<Rc<Term>, eval::Error> {
 
 fn parse(ctx: &mut Context, input: &str) {
     let mut p = parser::Parser::new(input);
-    while let Some(tok) = p.parse_term() {
-        ev(ctx, tok);
+    while let Some(mut tok) = p.parse_term() {
+        ev(ctx, *tok);
     }
 
     let diag = p.diagnostic();
@@ -60,10 +58,10 @@ fn main() {
 
     parse(&mut root, "let x = (\\x: Nat. x) in x");
 
-    // parse(&mut root, "let not = \\x: Bool. if x then false else true in {a: 0, b: \\x: Bool. not x, c: unit}.b ");
-    // parse(&mut root, "type Struct = {valid: Bool, number: Nat}");
-    // parse(&mut root, "(\\x: Struct. x.number) {valid: true, number: succ 0}");
-    // parse(
+    // parse(&mut root, "let not = \\x: Bool. if x then false else true in {a:
+    // 0, b: \\x: Bool. not x, c: unit}.b "); parse(&mut root, "type Struct
+    // = {valid: Bool, number: Nat}"); parse(&mut root, "(\\x: Struct.
+    // x.number) {valid: true, number: succ 0}"); parse(
     //     &mut root,
     //     "(\\x: Struct. x.number) {valid: false, number: succ 0}",
     // )

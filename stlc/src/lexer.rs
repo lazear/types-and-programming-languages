@@ -5,7 +5,7 @@ use std::iter::Peekable;
 use std::str::Chars;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub enum Token {
+pub enum TokenKind {
     Ident(String),
     Nat(u32),
     TyNat,
@@ -34,7 +34,28 @@ pub enum Token {
     LBrace,
     RBrace,
     Equals,
-    Invalid,
+    Invalid(char),
+    Dummy,
+    Eof,
+}
+
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub span: Span,
+}
+
+impl Token {
+    pub const fn dummy() -> Token {
+        Token {
+            kind: TokenKind::Dummy,
+            span: Span::dummy(),
+        }
+    }
+
+    pub const fn new(kind: TokenKind, span: Span) -> Token {
+        Token { kind, span }
+    }
 }
 
 #[derive(Clone)]
@@ -55,6 +76,7 @@ impl<'s> Lexer<'s> {
         }
     }
 
+    /// Peek at the next [`char`] in the input stream
     fn peek(&mut self) -> Option<char> {
         self.input.peek().cloned()
     }
@@ -77,7 +99,9 @@ impl<'s> Lexer<'s> {
         }
     }
 
-    fn consume_while<F: Fn(char) -> bool>(&mut self, pred: F) -> Spanned<String> {
+    /// Consume characters from the input stream while pred(peek()) is true,
+    /// collecting the characters into a string.
+    fn consume_while<F: Fn(char) -> bool>(&mut self, pred: F) -> (String, Span) {
         let mut s = String::new();
         let start = self.current;
         while let Some(n) = self.peek() {
@@ -90,7 +114,7 @@ impl<'s> Lexer<'s> {
                 break;
             }
         }
-        Spanned::new(Span::new(start, self.current), s)
+        (s, Span::new(start, self.current))
     }
 
     /// Eat whitespace
@@ -98,78 +122,100 @@ impl<'s> Lexer<'s> {
         let _ = self.consume_while(char::is_whitespace);
     }
 
-    fn number(&mut self) -> Option<Spanned<Token>> {
-        let spanned = self.consume_while(char::is_numeric);
-        Some(spanned.map(|data| Token::Nat(data.parse::<u32>().expect("only numeric chars"))))
+    /// Lex a natural number
+    fn number(&mut self) -> Token {
+        // Since we peeked at least one numeric char, we should always
+        // have a string containing at least 1 single digit, as such
+        // it is safe to call unwrap() on str::parse<u32>
+        let (data, span) = self.consume_while(char::is_numeric);
+        let n = data.parse::<u32>().unwrap();
+        Token::new(TokenKind::Nat(n), span)
     }
 
-    fn keyword(&mut self) -> Option<Spanned<Token>> {
-        let spanned = self.consume_while(|ch| ch.is_ascii_alphanumeric());
-        let tok = spanned.map(|data| match data.as_ref() {
-            "if" => Token::If,
-            "then" => Token::Then,
-            "else" => Token::Else,
-            "true" => Token::True,
-            "false" => Token::False,
-            "succ" => Token::Succ,
-            "pred" => Token::Pred,
-            "iszero" => Token::IsZero,
-            "zero" => Token::Nat(0),
-            "Bool" => Token::TyBool,
-            "Nat" => Token::TyNat,
-            "Unit" => Token::TyUnit,
-            "unit" => Token::Unit,
-            "let" => Token::Let,
-            "in" => Token::In,
-            "type" => Token::TypeDecl,
-            _ => Token::Ident(data),
-        });
-        Some(tok)
+    /// Lex a reserved keyword or an identifier
+    fn keyword(&mut self) -> Token {
+        let (data, span) = self.consume_while(|ch| ch.is_ascii_alphanumeric());
+        let kind = match data.as_ref() {
+            "if" => TokenKind::If,
+            "then" => TokenKind::Then,
+            "else" => TokenKind::Else,
+            "true" => TokenKind::True,
+            "false" => TokenKind::False,
+            "succ" => TokenKind::Succ,
+            "pred" => TokenKind::Pred,
+            "iszero" => TokenKind::IsZero,
+            "zero" => TokenKind::Nat(0),
+            "Bool" => TokenKind::TyBool,
+            "Nat" => TokenKind::TyNat,
+            "Unit" => TokenKind::TyUnit,
+            "unit" => TokenKind::Unit,
+            "let" => TokenKind::Let,
+            "in" => TokenKind::In,
+            "type" => TokenKind::TypeDecl,
+            _ => TokenKind::Ident(data),
+        };
+        Token::new(kind, span)
     }
 
-    fn eat(&mut self, ch: char, token: Token) -> Option<Spanned<Token>> {
+    /// Consume the next input character, expecting to match `ch`.
+    /// Return a [`TokenKind::Invalid`] if the next character does not match,
+    /// or the argument `kind` if it does
+    fn eat(&mut self, ch: char, kind: TokenKind) -> Token {
         let loc = self.current;
-        let n = self.consume()?;
-        let kind = if n == ch { token } else { Token::Invalid };
-        Some(Spanned::new(Span::new(loc, self.current), kind))
+        // Lexer::eat() should only be called internally after calling peek()
+        // so we know that it's safe to unwrap the result of Lexer::consume()
+        let n = self.consume().unwrap();
+        let kind = if n == ch { kind } else { TokenKind::Invalid(n) };
+        Token::new(kind, Span::new(loc, self.current))
     }
 
-    fn lex(&mut self) -> Option<Spanned<Token>> {
+    /// Return the next lexeme in the input as a [`Token`]
+    pub fn lex(&mut self) -> Token {
         self.consume_delimiter();
-        match self.peek()? {
+        let next = match self.peek() {
+            Some(ch) => ch,
+            None => return Token::new(TokenKind::Eof, Span::dummy()),
+        };
+        match next {
             x if x.is_ascii_alphabetic() => self.keyword(),
             x if x.is_numeric() => self.number(),
-            '(' => self.eat('(', Token::LParen),
-            ')' => self.eat(')', Token::RParen),
-            ';' => self.eat(';', Token::Semicolon),
-            ':' => self.eat(':', Token::Colon),
-            ',' => self.eat(',', Token::Comma),
-            '{' => self.eat('{', Token::LBrace),
-            '}' => self.eat('}', Token::RBrace),
-            '\\' => self.eat('\\', Token::Lambda),
-            'λ' => self.eat('λ', Token::Lambda),
-            '.' => self.eat('.', Token::Proj),
-            '=' => self.eat('=', Token::Equals),
+            '(' => self.eat('(', TokenKind::LParen),
+            ')' => self.eat(')', TokenKind::RParen),
+            ';' => self.eat(';', TokenKind::Semicolon),
+            ':' => self.eat(':', TokenKind::Colon),
+            ',' => self.eat(',', TokenKind::Comma),
+            '{' => self.eat('{', TokenKind::LBrace),
+            '}' => self.eat('}', TokenKind::RBrace),
+            '\\' => self.eat('\\', TokenKind::Lambda),
+            'λ' => self.eat('λ', TokenKind::Lambda),
+            '.' => self.eat('.', TokenKind::Proj),
+            '=' => self.eat('=', TokenKind::Equals),
             '-' => {
-                self.consume()?;
-                self.eat('>', Token::TyArrow)
+                self.consume();
+                self.eat('>', TokenKind::TyArrow)
             }
-            _ => self.eat(' ', Token::Invalid),
+            ch => self.eat(' ', TokenKind::Invalid(ch)),
         }
     }
 }
 
 impl<'s> Iterator for Lexer<'s> {
-    type Item = Spanned<Token>;
+    type Item = Token;
     fn next(&mut self) -> Option<Self::Item> {
-        self.lex()
+        match self.lex() {
+            Token {
+                kind: TokenKind::Eof,
+                ..
+            } => None,
+            tok => Some(tok),
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use Token::*;
+    use TokenKind::*;
     #[test]
     fn valid() {
         let input = "succ(succ(succ(0)))";
@@ -187,8 +233,8 @@ mod test {
         ];
         let output = Lexer::new(input.chars())
             .into_iter()
-            .map(|t| t.data)
-            .collect::<Vec<Token>>();
+            .map(|t| t.kind)
+            .collect::<Vec<TokenKind>>();
         assert_eq!(expected, output);
     }
 
@@ -196,12 +242,21 @@ mod test {
     fn invalid() {
         let input = "succ(succ(succ(xyz)))";
         let expected = vec![
-            Succ, LParen, Succ, LParen, Succ, LParen, Invalid, RParen, RParen, RParen,
+            Succ,
+            LParen,
+            Succ,
+            LParen,
+            Succ,
+            LParen,
+            Ident("xyz".into()),
+            RParen,
+            RParen,
+            RParen,
         ];
         let output = Lexer::new(input.chars())
             .into_iter()
-            .map(|t| t.data)
-            .collect::<Vec<Token>>();
+            .map(|t| t.kind)
+            .collect::<Vec<TokenKind>>();
         assert_eq!(expected, output);
     }
 }

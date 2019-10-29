@@ -1,6 +1,6 @@
 use super::term::*;
 use super::typing::Context;
-use super::visitor::{Direction, Shifting, Substitution, Visitable};
+use super::visitor::{Direction, MutVisitor, Shifting, Substitution};
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -9,10 +9,10 @@ pub enum Error {
 }
 
 #[inline]
-fn subst(val: Rc<Term>, body: Rc<Term>) -> Rc<Term> {
-    let mut sub = Substitution::new(val.accept(&mut Shifting::new(Direction::Up)));
-    body.accept(&mut sub)
-        .accept(&mut Shifting::new(Direction::Down))
+fn subst(mut val: Term, body: &mut Term) {
+    Shifting::new(Direction::Up).visit_term(&mut val);
+    Substitution::new(val).visit_term(body);
+    Shifting::new(Direction::Down).visit_term(body);
 }
 
 fn value(ctx: &Context, term: &Term) -> bool {
@@ -31,68 +31,68 @@ fn value(ctx: &Context, term: &Term) -> bool {
     }
 }
 
-fn eval1(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
-    match term.as_ref() {
-        Term::App(t1, ref t2) if value(ctx, &t2) => {
-            if let Term::Abs(_, body) = t1.as_ref() {
-                Ok(subst(t2.clone(), body.clone()))
+fn eval1(ctx: &Context, mut term: Term) -> Result<Box<Term>, Error> {
+    match term {
+        Term::App(t1, t2) if value(ctx, &t2) => {
+            if let Term::Abs(_, mut body) = *t1 {
+                subst(*t2, body.as_mut());
+                Ok(body)
             } else if value(ctx, &t1) {
-                let t_prime = eval1(ctx, t2.clone())?;
+                let t_prime = eval1(ctx, *t2)?;
                 Ok(Term::App(t1.clone(), t_prime).into())
             } else {
-                let t_prime = eval1(ctx, t1.clone())?;
+                let t_prime = eval1(ctx, *t1)?;
                 Ok(Term::App(t_prime, t2.clone()).into())
             }
         }
         Term::App(t1, t2) if value(ctx, &t1) => {
-            let t_prime = eval1(ctx, t2.clone())?;
+            let t_prime = eval1(ctx, *t2)?;
             Ok(Term::App(t1.clone(), t_prime).into())
         }
         Term::App(t1, t2) => {
-            let t_prime = eval1(ctx, t1.clone())?;
+            let t_prime = eval1(ctx, *t1)?;
             Ok(Term::App(t_prime, t2.clone()).into())
         }
-        Term::If(guard, csq, alt) => match **guard {
+        Term::If(guard, csq, alt) => match &*guard {
             Term::True => Ok(csq.clone()),
             Term::False => Ok(alt.clone()),
             _ => {
-                let t_prime = eval1(ctx, guard.clone())?;
+                let t_prime = eval1(ctx, *guard)?;
                 Ok(Term::If(t_prime, csq.clone(), alt.clone()).into())
             }
         },
-        Term::Let(bind, body) => {
-            if value(ctx, bind) {
-                Ok(subst(bind.clone(), body.clone()))
+        Term::Let(bind, mut body) => {
+            if value(ctx, &bind) {
+                subst(*bind, body.as_mut());
+                Ok(body)
             } else {
-                let t = eval1(ctx, bind.clone())?;
+                let t = eval1(ctx, *bind)?;
                 Ok(Term::Let(t, body.clone()).into())
             }
         }
         Term::Succ(t) => {
-            let t_prime = eval1(ctx, t.clone())?;
+            let t_prime = eval1(ctx, *t)?;
             Ok(Term::Succ(t_prime).into())
         }
 
         Term::Pred(t) => match t.as_ref() {
             Term::Zero => Ok(t.clone()),
             Term::Succ(n) => Ok(n.clone()),
-            _ => Ok(Term::Pred(eval1(ctx, t.clone())?).into()),
+            _ => Ok(Term::Pred(eval1(ctx, *t)?).into()),
         },
 
         Term::IsZero(t) => match t.as_ref() {
             Term::Zero => Ok(Term::True.into()),
             Term::Succ(_) => Ok(Term::False.into()),
-            _ => Ok(Term::IsZero(eval1(ctx, t.clone())?).into()),
+            _ => Ok(Term::IsZero(eval1(ctx, *t)?).into()),
         },
 
-        Term::Projection(rec, proj) if value(ctx, rec) => match rec.as_ref() {
-            Term::Record(rec) => crate::term::record_access(rec, proj).ok_or(Error::NoRuleApplies),
-            _ => Ok(Term::Projection(eval1(ctx, rec.clone())?, proj.clone()).into()),
+        Term::Projection(rec, proj) if value(ctx, &rec) => match rec.as_ref() {
+            Term::Record(rec) => crate::term::record_access(rec, &proj).ok_or(Error::NoRuleApplies),
+            _ => Ok(Term::Projection(eval1(ctx, *rec)?, proj.clone()).into()),
         },
 
-        Term::Projection(rec, proj) => {
-            Ok(Term::Projection(eval1(ctx, rec.clone())?, proj.clone()).into())
-        }
+        Term::Projection(rec, proj) => Ok(Term::Projection(eval1(ctx, *rec)?, proj.clone()).into()),
 
         // Term::TypeDecl(name, ty) => {
         //     ctx.bind(name.to_string(), ty.clone());
@@ -102,12 +102,12 @@ fn eval1(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
     }
 }
 
-pub fn eval(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
+pub fn eval(ctx: &Context, mut term: Term) -> Result<Term, Error> {
     let mut tp = term;
     loop {
         println!("  -> {}", &tp);
         match eval1(ctx, tp.clone()) {
-            Ok(r) => tp = r,
+            Ok(r) => tp = *r,
             Err(e) => {
                 return Ok(tp);
             }
@@ -161,11 +161,11 @@ pub fn eval(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
 //         }
 //     }
 
-//     fn visit_app(&mut self, t1: Rc<Term>, t2: Rc<Term>) -> Result<Rc<Term>, TypeError> {
-//         match &*t1 {
+//     fn visit_app(&mut self, t1: Rc<Term>, t2: Rc<Term>) -> Result<Rc<Term>,
+// TypeError> {         match &*t1 {
 //             Term::Abs(_, body) => {
-//                 let mut sub = Substitution::new(t2.accept(&mut Shifting::new(Direction::Up)));
-//                 Ok(body
+//                 let mut sub = Substitution::new(t2.accept(&mut
+// Shifting::new(Direction::Up)));                 Ok(body
 //                     .accept(&mut sub)
 //                     .accept(&mut Shifting::new(Direction::Down)))
 //             }
@@ -176,16 +176,16 @@ pub fn eval(ctx: &Context, term: Rc<Term>) -> Result<Rc<Term>, Error> {
 //         }
 //     }
 
-//     fn visit_let(&mut self, bind: Rc<Term>, body: Rc<Term>) -> Result<Rc<Term>, TypeError> {
-//         Err(TypeError::UnknownVariable)
+//     fn visit_let(&mut self, bind: Rc<Term>, body: Rc<Term>) ->
+// Result<Rc<Term>, TypeError> {         Err(TypeError::UnknownVariable)
 //     }
 
 //     fn visit_var(&mut self, var: usize) -> Result<Rc<Term>, TypeError> {
 //         Err(TypeError::UnknownVariable)
 //     }
 
-//     fn visit_abs(&mut self, ty: Type, body: Rc<Term>) -> Result<Rc<Term>, TypeError> {
-//         Err(TypeError::UnknownVariable)
+//     fn visit_abs(&mut self, ty: Type, body: Rc<Term>) -> Result<Rc<Term>,
+// TypeError> {         Err(TypeError::UnknownVariable)
 //     }
 
 //     fn visit_record(&mut self, rec: Rc<Record>) -> Rc<Term> {

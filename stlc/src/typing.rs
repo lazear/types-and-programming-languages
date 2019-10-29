@@ -1,5 +1,5 @@
 use crate::term::{RecordField, Term};
-use crate::visitor::{Direction, Shifting, Visitable, Visitor};
+use crate::visitor::{Direction, Shifting, Visitor};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
@@ -12,7 +12,7 @@ pub enum Type {
     Nat,
     Var(String),
     Arrow(Box<Type>, Box<Type>),
-    Record(Vec<(Rc<String>, Type)>),
+    Record(Vec<(String, Type)>),
 }
 
 impl fmt::Debug for Type {
@@ -93,203 +93,203 @@ impl<'a> Context<'a> {
             None
         }
     }
-}
 
-impl<'a> Visitor<Result<Type, TypeError>> for Context<'a> {
-    fn visit_var(&mut self, var: usize) -> Result<Type, TypeError> {
-        self.get(var)
-            .cloned()
-            .ok_or(TypeError::UnknownVariable(var))
-    }
-
-    fn visit_abs(&mut self, ty: Type, body: Rc<Term>) -> Result<Type, TypeError> {
-        let ty = match ty {
-            Type::Var(name) => self
-                .types
-                .borrow()
-                .get(&name)
-                .cloned()
-                .ok_or(TypeError::Undefined(name))?,
-            x => x,
-        };
-        let mut ctx = self.add(ty.clone());
-        let ty_body: Result<Type, TypeError> = body.accept(&mut ctx);
-        Ok(Type::Arrow(Box::new(ty), Box::new(ty_body?)))
-    }
-
-    fn visit_app(&mut self, t1: Rc<Term>, t2: Rc<Term>) -> Result<Type, TypeError> {
-        let ty1 = t1.accept(self)?;
-        let ty2 = t2.accept(self)?;
-        match ty1 {
-            Type::Arrow(ty11, ty12) => {
-                if *ty11 == ty2 {
-                    Ok(*ty12)
+    pub fn type_of(&self, term: &Term) -> Result<Type, TypeError> {
+        use Term::*;
+        match term {
+            TypeDecl(_, _) => Ok(Type::Unit),
+            Unit => Ok(Type::Unit),
+            True => Ok(Type::Bool),
+            False => Ok(Type::Bool),
+            Zero => Ok(Type::Nat),
+            Record(rec) => {
+                let tys = rec
+                    .iter()
+                    .map(|f| self.type_of(&f.data).map(|ty| (f.label.clone(), ty)))
+                    .collect::<Result<Vec<(String, Type)>, TypeError>>()?;
+                Ok(Type::Record(tys))
+            }
+            Projection(r, proj) => match r.as_ref() {
+                Term::Record(fields) => self.type_of(
+                    crate::term::record_access(fields, &proj)
+                        .ok_or(TypeError::InvalidProjection)?
+                        .as_ref(),
+                ),
+                _ => Err(TypeError::NotRecordType),
+            },
+            IsZero(t) => {
+                if let Ok(Type::Nat) = self.type_of(t) {
+                    Ok(Type::Bool)
                 } else {
                     Err(TypeError::ParameterMismatch)
                 }
             }
-            _ => Err(TypeError::ExpectedArrow),
-        }
-    }
-
-    fn visit_if(
-        &mut self,
-        guard: Rc<Term>,
-        csq: Rc<Term>,
-        alt: Rc<Term>,
-    ) -> Result<Type, TypeError> {
-        if let Ok(Type::Bool) = guard.accept(self) {
-            let ty1 = csq.accept(self)?;
-            let ty2 = alt.accept(self)?;
-            if ty1 == ty2 {
-                Ok(ty2)
-            } else {
-                Err(TypeError::ArmMismatch)
-            }
-        } else {
-            Err(TypeError::Guard)
-        }
-    }
-
-    fn visit_let(&mut self, bind: Rc<Term>, body: Rc<Term>) -> Result<Type, TypeError> {
-        // Dirty hack or correct behavior?
-        //
-        // We definitely need to correct var indices or how the context is
-        // working so that let binders can access names defined in an
-        // enclosing let-bound scope
-        let ty = bind
-            // .accept(&mut Shifting::new(Direction::Down))
-            .accept(self)?;
-        let mut ctx = self.add(ty);
-        body.accept(&mut ctx)
-    }
-
-    fn visit_succ(&mut self, t: Rc<Term>) -> Result<Type, TypeError> {
-        Ok(Type::Nat)
-    }
-
-    fn visit_pred(&mut self, t: Rc<Term>) -> Result<Type, TypeError> {
-        Ok(Type::Nat)
-    }
-
-    fn visit_iszero(&mut self, t: Rc<Term>) -> Result<Type, TypeError> {
-        Ok(Type::Bool)
-    }
-
-    fn visit_const(&mut self, c: Rc<Term>) -> Result<Type, TypeError> {
-        match c.as_ref() {
-            Term::Unit => Ok(Type::Unit),
-            Term::Zero => Ok(Type::Nat),
-            Term::True | Term::False => Ok(Type::Bool),
-            _ => unreachable!(),
-        }
-    }
-
-    fn visit_record(&mut self, rec: &[RecordField]) -> Result<Type, TypeError> {
-        let tys = rec
-            .iter()
-            .map(|f| f.data.accept(self).map(|ty| (f.label.clone(), ty)))
-            .collect::<Result<Vec<(Rc<String>, Type)>, TypeError>>()?;
-        Ok(Type::Record(tys))
-    }
-
-    fn visit_proj(&mut self, c: Rc<Term>, proj: Rc<String>) -> Result<Type, TypeError> {
-        match c.accept(self)? {
-            Type::Record(fields) => {
-                for f in &fields {
-                    if f.0 == proj {
-                        return Ok(f.1.clone());
-                    }
+            Succ(t) | Pred(t) => {
+                if let Ok(Type::Nat) = self.type_of(t) {
+                    Ok(Type::Nat)
+                } else {
+                    Err(TypeError::ParameterMismatch)
                 }
-                Err(TypeError::InvalidProjection)
             }
-            _ => Err(TypeError::NotRecordType),
+            If(guard, csq, alt) => {
+                if let Ok(Type::Bool) = self.type_of(guard) {
+                    let ty1 = self.type_of(csq)?;
+                    let ty2 = self.type_of(alt)?;
+                    if ty1 == ty2 {
+                        Ok(ty2)
+                    } else {
+                        Err(TypeError::ArmMismatch)
+                    }
+                } else {
+                    Err(TypeError::Guard)
+                }
+            }
+            Let(bind, body) => {
+                let ty = self.type_of(bind)?;
+                let ctx = self.add(ty.clone());
+                ctx.type_of(body)
+            }
+            Var(s) => match self.get(*s) {
+                Some(ty) => Ok(ty.clone()),
+                _ => Err(TypeError::UnknownVariable(*s)),
+            },
+            Abs(ty, body) => {
+                let ctx = self.add(ty.clone());
+                let ty_body = ctx.type_of(body)?;
+                Ok(Type::Arrow(Box::new(ty.clone()), Box::new(ty_body)))
+            }
+            App(t1, t2) => {
+                let ty1 = self.type_of(t1)?;
+                let ty2 = self.type_of(t2)?;
+                match ty1 {
+                    Type::Arrow(ty11, ty12) => {
+                        if *ty11 == ty2 {
+                            Ok(*ty12)
+                        } else {
+                            Err(TypeError::ParameterMismatch)
+                        }
+                    }
+                    _ => Err(TypeError::ExpectedArrow),
+                }
+            }
         }
-    }
-
-    fn visit_typedecl(&mut self, name: Rc<String>, ty: &Type) -> Result<Type, TypeError> {
-        self.bind(name.to_string(), ty.clone());
-        Ok(Type::Unit)
     }
 }
 
-// pub fn type_of(&self, term: &Term) -> Result<Type, TypeError> {
-//     use Term::*;
-//     match term {
-//         TypeDecl(_, _) => Ok(Type::Unit),
-//         Unit => Ok(Type::Unit),
-//         True => Ok(Type::Bool),
-//         False => Ok(Type::Bool),
-//         Zero => Ok(Type::Nat),
-//         Record(rec) => {
-//             let tys = rec
-//                 .iter()
-//                 .map(|f| self.type_of(&f.data).map(|ty| (f.label.clone(), ty)))
-//                 .collect::<Result<Vec<(Rc<String>, Type)>, TypeError>>()?;
-//             Ok(Type::Record(tys))
-//         }
-//         Projection(r, proj) => match r.as_ref() {
-//             Term::Record(fields) => self.type_of(
-//                 crate::term::record_access(fields, &proj)
-//                     .ok_or(TypeError::InvalidProjection)?
-//                     .as_ref(),
-//             ),
-//             _ => Err(TypeError::NotRecordType),
-//         },
-//         IsZero(t) => {
-//             if let Ok(Type::Nat) = self.type_of(t) {
-//                 Ok(Type::Bool)
-//             } else {
-//                 Err(TypeError::ParameterMismatch)
-//             }
-//         }
-//         Succ(t) | Pred(t) => {
-//             if let Ok(Type::Nat) = self.type_of(t) {
-//                 Ok(Type::Nat)
-//             } else {
-//                 Err(TypeError::ParameterMismatch)
-//             }
-//         }
-//         If(guard, csq, alt) => {
-//             if let Ok(Type::Bool) = self.type_of(guard) {
-//                 let ty1 = self.type_of(csq)?;
-//                 let ty2 = self.type_of(alt)?;
-//                 if ty1 == ty2 {
-//                     Ok(ty2)
+// impl<'a> Visitor for Context<'a> {
+//     fn visit_var(&mut self, var: usize) {
+//         self.get(var)
+//             .cloned()
+//             .ok_or(TypeError::UnknownVariable(var))
+//     }
+
+//     fn visit_abs(&mut self, ty: Type, body: &Term) {
+//         let ty = match ty {
+//             Type::Var(name) => self
+//                 .types
+//                 .borrow()
+//                 .get(&name)
+//                 .cloned()
+//                 .ok_or(TypeError::Undefined(name))?,
+//             x => x,
+//         };
+//         let mut ctx = self.add(ty.clone());
+//         let ty_body: Result<Type, TypeError> = body.accept(&mut ctx);
+//         Ok(Type::Arrow(Box::new(ty), Box::new(ty_body?)))
+//     }
+
+//     fn visit_app(&mut self, t1: &Term, t2: &Term) {
+//         let ty1 = t1.accept(self)?;
+//         let ty2 = t2.accept(self)?;
+//         match ty1 {
+//             Type::Arrow(ty11, ty12) => {
+//                 if *ty11 == ty2 {
+//                     Ok(*ty12)
 //                 } else {
-//                     Err(TypeError::ArmMismatch)
+//                     Err(TypeError::ParameterMismatch)
 //                 }
-//             } else {
-//                 Err(TypeError::Guard)
 //             }
+//             _ => Err(TypeError::ExpectedArrow),
 //         }
-//         Let(bind, body) => {
-//             let ty = self.type_of(bind)?;
-//             let ctx = self.add(ty.clone());
-//             ctx.type_of(body)
+//     }
+
+//     fn visit_if(
+//         &mut self,
+//         guard: &Term,
+//         csq: &Term,
+//         alt: &Term,
+//     ) {
+//         if let Ok(Type::Bool) = guard.accept(self) {
+//             let ty1 = csq.accept(self)?;
+//             let ty2 = alt.accept(self)?;
+//             if ty1 == ty2 {
+//                 Ok(ty2)
+//             } else {
+//                 Err(TypeError::ArmMismatch)
+//             }
+//         } else {
+//             Err(TypeError::Guard)
 //         }
-//         Var(s) => match self.get(*s) {
-//             Some(ty) => Ok(ty.clone()),
-//             _ => Err(TypeError::UnknownVariable),
-//         },
-//         Abs(ty, body) => {
-//             let ctx = self.add(ty.clone());
-//             let ty_body = ctx.type_of(body)?;
-//             Ok(Type::Arrow(Box::new(ty.clone()), Box::new(ty_body)))
+//     }
+
+//     fn visit_let(&mut self, bind: &Term, body: &Term) {
+//         // Dirty hack or correct behavior?
+//         //
+//         // We definitely need to correct var indices or how the context is
+//         // working so that let binders can access names defined in an
+//         // enclosing let-bound scope
+//         let ty = bind
+//             // .accept(&mut Shifting::new(Direction::Down))
+//             .accept(self)?;
+//         let mut ctx = self.add(ty);
+//         body.accept(&mut ctx)
+//     }
+
+//     fn visit_succ(&mut self, t: &Term) {
+//         Ok(Type::Nat)
+//     }
+
+//     fn visit_pred(&mut self, t: &Term) {
+//         Ok(Type::Nat)
+//     }
+
+//     fn visit_iszero(&mut self, t: &Term) {
+//         Ok(Type::Bool)
+//     }
+
+//     fn visit_const(&mut self, c: &Term) {
+//         match c.as_ref() {
+//             Term::Unit => Ok(Type::Unit),
+//             Term::Zero => Ok(Type::Nat),
+//             Term::True | Term::False => Ok(Type::Bool),
+//             _ => unreachable!(),
 //         }
-//         App(t1, t2) => {
-//             let ty1 = self.type_of(t1)?;
-//             let ty2 = self.type_of(t2)?;
-//             match ty1 {
-//                 Type::Arrow(ty11, ty12) => {
-//                     if *ty11 == ty2 {
-//                         Ok(*ty12)
-//                     } else {
-//                         Err(TypeError::ParameterMismatch)
+//     }
+
+//     fn visit_record(&mut self, rec: &[RecordField]) {
+//         let tys = rec
+//             .iter()
+//             .map(|f| f.data.accept(self).map(|ty| (f.label.clone(), ty)))
+//             .collect::<Result<Vec<(Rc<String>, Type)>, TypeError>>()?;
+//         Ok(Type::Record(tys))
+//     }
+
+//     fn visit_proj(&mut self, c: &Term, proj: Rc<String>) {
+//         match c.accept(self)? {
+//             Type::Record(fields) => {
+//                 for f in &fields {
+//                     if f.0 == proj {
+//                         return Ok(f.1.clone());
 //                     }
 //                 }
-//                 _ => Err(TypeError::ExpectedArrow),
+//                 Err(TypeError::InvalidProjection)
 //             }
+//             _ => Err(TypeError::NotRecordType),
 //         }
+//     }
+
+//     fn visit_typedecl(&mut self, name: Rc<String>, ty: &Type) {
+//         self.bind(name.to_string(), ty.clone());
+//         Ok(Type::Unit)
 //     }
 // }

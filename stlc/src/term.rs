@@ -1,12 +1,12 @@
-use super::visitor::{Visitable, Visitor};
+use super::visitor::Visitor;
 use crate::typing::Type;
 use std::fmt;
 use std::rc::Rc;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct RecordField {
-    pub label: Rc<String>,
-    pub data: Rc<Term>,
+    pub label: String,
+    pub data: Box<Term>,
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -15,51 +15,29 @@ pub enum Term {
     True,
     False,
     Zero,
-    TypeDecl(Rc<String>, Type),
-    Succ(Rc<Term>),
-    Pred(Rc<Term>),
-    IsZero(Rc<Term>),
+    TypeDecl(String, Type),
+    Succ(Box<Term>),
+    Pred(Box<Term>),
+    IsZero(Box<Term>),
     // DeBrujin index
     Var(usize),
     // Type of bound variable, and body of abstraction
-    Abs(Type, Rc<Term>),
+    Abs(Type, Box<Term>),
     // Application (t1 t2)
-    App(Rc<Term>, Rc<Term>),
-    If(Rc<Term>, Rc<Term>, Rc<Term>),
-    Let(Rc<Term>, Rc<Term>),
+    App(Box<Term>, Box<Term>),
+    If(Box<Term>, Box<Term>, Box<Term>),
+    Let(Box<Term>, Box<Term>),
     Record(Vec<RecordField>),
-    Projection(Rc<Term>, Rc<String>),
+    Projection(Box<Term>, Box<String>),
 }
 
-pub fn record_access(fields: &[RecordField], projection: &str) -> Option<Rc<Term>> {
+pub fn record_access(fields: &[RecordField], projection: &str) -> Option<Box<Term>> {
     for f in fields {
-        if f.label.as_ref() == projection {
+        if &f.label == projection {
             return Some(f.data.clone());
         }
     }
     None
-}
-
-impl<V, T> Visitable<V, T> for Rc<Term>
-where
-    V: Visitor<T>,
-{
-    fn accept(&self, visitor: &mut V) -> T {
-        match self.as_ref() {
-            Term::Unit | Term::True | Term::False | Term::Zero => visitor.visit_const(self.clone()),
-            Term::Succ(t) => visitor.visit_succ(t.clone()),
-            Term::Pred(t) => visitor.visit_pred(t.clone()),
-            Term::IsZero(t) => visitor.visit_iszero(t.clone()),
-            Term::Var(idx) => visitor.visit_var(*idx),
-            Term::Abs(ty, term) => visitor.visit_abs(ty.clone(), term.clone()),
-            Term::App(t1, t2) => visitor.visit_app(t1.clone(), t2.clone()),
-            Term::If(a, b, c) => visitor.visit_if(a.clone(), b.clone(), c.clone()),
-            Term::Let(bind, body) => visitor.visit_let(bind.clone(), body.clone()),
-            Term::Projection(rec, proj) => visitor.visit_proj(rec.clone(), proj.clone()),
-            Term::Record(fields) => visitor.visit_record(fields),
-            Term::TypeDecl(name, ty) => visitor.visit_typedecl(name.clone(), ty),
-        }
-    }
 }
 
 impl fmt::Display for Term {
@@ -89,38 +67,4 @@ impl fmt::Display for Term {
             Term::Projection(rec, idx) => write!(f, "{}.{}", rec, idx),
         }
     }
-}
-
-macro_rules! app {
-    ($ex:expr, $xy:expr) => {
-        crate::term::Term::App(std::rc::Rc::new($ex), std::rc::Rc::new($xy))
-    };
-}
-
-macro_rules! abs {
-    ($ty:expr, $body:expr) => {
-        crate::term::Term::Abs($ty, std::rc::Rc::new($body))
-    };
-}
-
-macro_rules! var {
-    ($var:expr) => {
-        crate::term::Term::Var($var)
-    };
-}
-
-macro_rules! if_ {
-    ($a:expr, $b:expr, $c:expr) => {
-        crate::term::Term::If(
-            std::rc::Rc::new($a),
-            std::rc::Rc::new($b),
-            std::rc::Rc::new($c),
-        )
-    };
-}
-
-macro_rules! arrow {
-    ($a:expr, $b:expr) => {
-        Type::Arrow(Box::new($a), Box::new($b))
-    };
 }

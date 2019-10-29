@@ -1,4 +1,4 @@
-use crate::lexer::{Lexer, Token};
+use crate::lexer::{Lexer, Token, TokenKind};
 use crate::term::{RecordField, Term};
 use crate::typing::Type;
 use std::collections::VecDeque;
@@ -43,7 +43,9 @@ pub struct Parser<'s> {
     /// [`Lexer`] impls [`Iterator`] over [`TokenSpan`],
     /// so we can just directly wrap it in a [`Peekable`]
     lexer: Peekable<Lexer<'s>>,
+
     span: Span,
+    token: Token,
 }
 
 pub enum ParseError {
@@ -59,31 +61,34 @@ impl<'s> Parser<'s> {
             ctx: DeBruijnIndexer::default(),
             diagnostic: Diagnostic::new(input),
             lexer: Lexer::new(input.chars()).peekable(),
-            span: Span::default(),
+            span: Span::dummy(),
+            token: Token::dummy(),
         }
     }
 
-    fn consume(&mut self) -> Option<Spanned<Token>> {
+    fn bump(&mut self) {}
+
+    fn consume(&mut self) -> Option<Token> {
         let ts = self.lexer.next()?;
         self.span = ts.span;
         Some(ts)
     }
 
-    fn expect(&mut self, token: Token) -> Option<Spanned<Token>> {
-        let spanned = self.consume()?;
-        match &spanned.data {
-            t if t == &token => Some(spanned),
-            t => {
+    fn expect(&mut self, kind: TokenKind) -> Option<Token> {
+        let tk = self.consume()?;
+        match &tk.kind {
+            t if t == &kind => Some(tk),
+            _ => {
                 self.diagnostic.push(
-                    format!("Expected token {:?}, found {:?}", token, t),
-                    spanned.span,
+                    format!("Expected token {:?}, found {:?}", kind, tk.kind),
+                    tk.span,
                 );
                 None
             }
         }
     }
 
-    fn expect_term(&mut self) -> Option<Rc<Term>> {
+    fn expect_term(&mut self) -> Option<Box<Term>> {
         match self.term() {
             Some(term) => Some(term),
             None => {
@@ -94,24 +99,24 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn peek(&mut self) -> Option<Token> {
-        self.lexer.peek().map(|s| s.data.clone())
+    fn peek(&mut self) -> Option<TokenKind> {
+        self.lexer.peek().map(|tk| tk.kind.clone())
     }
 
     fn peek_span(&mut self) -> Span {
         self.lexer.peek().map(|s| s.span).unwrap_or(self.span)
     }
 
-    fn lambda(&mut self) -> Option<Rc<Term>> {
-        let start = self.expect(Token::Lambda)?;
+    fn lambda(&mut self) -> Option<Box<Term>> {
+        let start = self.expect(TokenKind::Lambda)?;
 
         // Bind variable into a new context before parsing the body
-        let var = self.ident()?.data;
+        let var = self.ident()?;
         self.ctx.push(var);
 
-        let _ = self.expect(Token::Colon)?;
+        let _ = self.expect(TokenKind::Colon)?;
         let ty = self.ty()?;
-        let _ = self.expect(Token::Proj)?;
+        let _ = self.expect(TokenKind::Proj)?;
         let body = self.term()?;
 
         // Return to previous context
@@ -119,50 +124,50 @@ impl<'s> Parser<'s> {
         Some(Term::Abs(ty, body).into())
     }
 
-    fn let_expr(&mut self) -> Option<Rc<Term>> {
-        let start = self.expect(Token::Let)?;
-        let var = self.ident()?.data;
+    fn let_expr(&mut self) -> Option<Box<Term>> {
+        let start = self.expect(TokenKind::Let)?;
+        let var = self.ident()?;
         self.ctx.push(var);
-        let _ = self.expect(Token::Equals)?;
+        let _ = self.expect(TokenKind::Equals)?;
         let bind = self.expect_term()?;
-        let _ = self.expect(Token::In)?;
+        let _ = self.expect(TokenKind::In)?;
         let body = self.expect_term()?;
         self.ctx.pop();
         Some(Term::Let(bind, body).into())
     }
 
-    fn ty_record_field(&mut self) -> Option<(Rc<String>, Type)> {
+    fn ty_record_field(&mut self) -> Option<(String, Type)> {
         let label = self.ident()?;
-        self.expect(Token::Colon)?;
+        self.expect(TokenKind::Colon)?;
         let data = self.ty()?;
-        Some((label.data.into(), data))
+        Some((label.into(), data))
     }
 
     fn ty_atom(&mut self) -> Option<Type> {
         match &self.peek()? {
-            Token::TyBool => {
+            TokenKind::TyBool => {
                 self.consume()?;
                 Some(Type::Bool)
             }
-            Token::TyNat => {
+            TokenKind::TyNat => {
                 self.consume()?;
                 Some(Type::Nat)
             }
-            Token::TyUnit => {
+            TokenKind::TyUnit => {
                 self.consume()?;
                 Some(Type::Unit)
             }
-            Token::LBrace => {
+            TokenKind::LBrace => {
                 self.consume()?;
                 let mut fields = vec![self.ty_record_field()?];
-                while let Some(Token::Comma) = self.peek() {
-                    self.expect(Token::Comma)?;
+                while let Some(TokenKind::Comma) = self.peek() {
+                    self.expect(TokenKind::Comma)?;
                     fields.push(self.ty_record_field()?);
                 }
-                self.expect(Token::RBrace)?;
+                self.expect(TokenKind::RBrace)?;
                 Some(Type::Record(fields))
             }
-            Token::Ident(s) if s.starts_with(|ch: char| ch.is_ascii_uppercase()) => {
+            TokenKind::Ident(s) if s.starts_with(|ch: char| ch.is_ascii_uppercase()) => {
                 self.ident();
                 Some(Type::Var(s.clone()))
             }
@@ -181,12 +186,12 @@ impl<'s> Parser<'s> {
             }
         };
 
-        if let Some(Token::TyArrow) = self.peek() {
+        if let Some(TokenKind::TyArrow) = self.peek() {
             self.consume()?;
         }
         while let Some(rhs) = self.ty_atom() {
             lhs = Type::Arrow(Box::new(lhs), Box::new(rhs));
-            if let Some(Token::TyArrow) = self.peek() {
+            if let Some(TokenKind::TyArrow) = self.peek() {
                 self.consume()?;
             } else {
                 break;
@@ -198,28 +203,28 @@ impl<'s> Parser<'s> {
     /// Parse an application of form:
     /// application = atom application' | atom
     /// application' = atom application' | empty
-    fn application(&mut self) -> Option<Rc<Term>> {
+    fn application(&mut self) -> Option<Box<Term>> {
         let mut lhs = self.atom()?;
         let span = self.span;
         while let Some(rhs) = self.atom() {
             lhs = Term::App(lhs, rhs).into();
         }
 
-        if let Some(Token::Proj) = self.peek() {
-            self.expect(Token::Proj)?;
+        if let Some(TokenKind::Proj) = self.peek() {
+            self.expect(TokenKind::Proj)?;
             let accessor = self.ident()?;
-            lhs = Term::Projection(lhs, accessor.data.into()).into();
+            lhs = Term::Projection(lhs, accessor.into()).into();
         }
         Some(lhs)
     }
 
-    fn ident(&mut self) -> Option<Spanned<String>> {
-        let spanned = self.consume()?;
-        match spanned.data {
-            Token::Ident(s) => Some(Spanned::new(spanned.span, s)),
-            x => {
+    fn ident(&mut self) -> Option<String> {
+        let Token { kind, span } = self.consume()?;
+        match kind {
+            TokenKind::Ident(s) => Some(s),
+            _ => {
                 self.diagnostic
-                    .push(format!("Expected identifier, found {:?}", x), spanned.span);
+                    .push(format!("Expected identifier, found {:?}", kind), span);
                 None
             }
         }
@@ -227,82 +232,82 @@ impl<'s> Parser<'s> {
 
     fn record_field(&mut self) -> Option<RecordField> {
         let label = self.ident()?;
-        self.expect(Token::Colon)?;
+        self.expect(TokenKind::Colon)?;
         let data = self.expect_term()?;
         Some(RecordField {
-            label: label.data.into(),
+            label: label.into(),
             data,
         })
     }
 
-    fn record(&mut self) -> Option<Rc<Term>> {
+    fn record(&mut self) -> Option<Box<Term>> {
         let mut fields = vec![self.record_field()?];
         let span = self.span;
-        while let Some(Token::Comma) = self.peek() {
-            self.expect(Token::Comma)?;
+        while let Some(TokenKind::Comma) = self.peek() {
+            self.expect(TokenKind::Comma)?;
             fields.push(self.record_field()?);
         }
         Some(Term::Record(fields).into())
     }
 
-    fn if_expr(&mut self) -> Option<Rc<Term>> {
-        let _ = self.expect(Token::If)?;
+    fn if_expr(&mut self) -> Option<Box<Term>> {
+        let _ = self.expect(TokenKind::If)?;
         let guard = self.expect_term()?;
-        let _ = self.expect(Token::Then)?;
+        let _ = self.expect(TokenKind::Then)?;
         let csq = self.expect_term()?;
-        let _ = self.expect(Token::Else)?;
+        let _ = self.expect(TokenKind::Else)?;
         let alt = self.expect_term()?;
         Some(Term::If(guard, csq, alt).into())
     }
 
     /// Parse an atomic term
     /// LPAREN term RPAREN | var
-    fn atom(&mut self) -> Option<Rc<Term>> {
+    fn atom(&mut self) -> Option<Box<Term>> {
         match self.peek()? {
-            Token::True => {
-                self.expect(Token::True)?;
+            TokenKind::True => {
+                self.expect(TokenKind::True)?;
                 Some(Term::True.into())
             }
-            Token::False => {
-                self.expect(Token::False)?;
+            TokenKind::False => {
+                self.expect(TokenKind::False)?;
                 Some(Term::False.into())
             }
-            Token::If => self.if_expr(),
-            Token::Let => self.let_expr(),
-            Token::Nat(i) => {
+            TokenKind::If => self.if_expr(),
+            TokenKind::Let => self.let_expr(),
+            TokenKind::Nat(i) => {
                 self.consume()?;
                 Some(Term::Zero.into())
             }
-            Token::Succ => {
-                self.expect(Token::Succ)?;
+            TokenKind::Succ => {
+                self.expect(TokenKind::Succ)?;
                 Some(Term::Succ(self.term()?).into())
             }
-            Token::Pred => {
-                self.expect(Token::Pred)?;
+            TokenKind::Pred => {
+                self.expect(TokenKind::Pred)?;
                 Some(Term::Pred(self.term()?).into())
             }
-            Token::IsZero => {
-                self.expect(Token::IsZero)?;
+            TokenKind::IsZero => {
+                self.expect(TokenKind::IsZero)?;
                 Some(Term::IsZero(self.term()?).into())
             }
-            Token::LParen => {
-                self.expect(Token::LParen)?;
+            TokenKind::LParen => {
+                self.expect(TokenKind::LParen)?;
                 let term = self.term()?;
-                self.expect(Token::RParen)?;
+                self.expect(TokenKind::RParen)?;
                 Some(term)
             }
-            Token::LBrace => {
-                self.expect(Token::LBrace)?;
+            TokenKind::LBrace => {
+                self.expect(TokenKind::LBrace)?;
                 let term = self.record()?;
-                self.expect(Token::RBrace)?;
+                self.expect(TokenKind::RBrace)?;
                 Some(term)
             }
-            Token::Unit => {
-                self.expect(Token::Unit)?;
+            TokenKind::Unit => {
+                self.expect(TokenKind::Unit)?;
                 Some(Term::Unit.into())
             }
-            Token::Lambda => self.lambda(),
-            Token::Ident(s) => {
+            TokenKind::Lambda => self.lambda(),
+            TokenKind::Ident(s) => {
                 let sp = self.consume()?.span;
                 match self.ctx.lookup(&s) {
                     Some(idx) => Some(Term::Var(idx).into()),
@@ -316,24 +321,24 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn type_decl(&mut self) -> Option<Rc<Term>> {
-        self.expect(Token::TypeDecl)?;
+    fn type_decl(&mut self) -> Option<Box<Term>> {
+        self.expect(TokenKind::TypeDecl)?;
         let name = self.ident()?;
-        self.expect(Token::Equals)?;
+        self.expect(TokenKind::Equals)?;
         let ty = self.ty()?;
 
-        Some(Term::TypeDecl(name.data.into(), ty).into())
+        Some(Term::TypeDecl(name.into(), ty).into())
     }
 
-    fn term(&mut self) -> Option<Rc<Term>> {
+    fn term(&mut self) -> Option<Box<Term>> {
         match self.peek()? {
-            // Token::Lambda => self.lambda(),
-            Token::TypeDecl => self.type_decl(),
+            // TokenKind::Lambda => self.lambda(),
+            TokenKind::TypeDecl => self.type_decl(),
             _ => self.application(),
         }
     }
 
-    pub fn parse_term(&mut self) -> Option<Rc<Term>> {
+    pub fn parse_term(&mut self) -> Option<Box<Term>> {
         self.term()
     }
 

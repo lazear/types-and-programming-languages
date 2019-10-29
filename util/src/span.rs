@@ -39,6 +39,18 @@ impl Span {
     pub fn new(start: Location, end: Location) -> Span {
         Span { start, end }
     }
+
+    pub const fn dummy() -> Span {
+        let max = Location {
+            line: std::u32::MAX,
+            col: std::u32::MAX,
+            abs: std::u32::MAX,
+        };
+        Span {
+            start: max,
+            end: max,
+        }
+    }
 }
 
 impl<T> Spanned<T> {
