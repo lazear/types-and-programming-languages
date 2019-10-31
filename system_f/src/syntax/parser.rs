@@ -309,9 +309,16 @@ impl<'s> Parser<'s> {
         loop {
             if let Ok(ty) = self.ty() {
                 // Full type inference for System F is undecidable
-                // but it seems like we should be able to perfom something
-                // analogous to ML's let-polymorphism by typing only the
-                // term that the abstraction is being applied to
+                // Additionally, even partial type reconstruction,
+                // where only type application types are erased is also
+                // undecidable, see TaPL 23.6.2, Boehm 1985, 1989
+                // 
+                // Partial erasure rules:
+                // erasep(x) = x
+                // erasep(λx:T. t) = λx:T. erasep(t)
+                // erasep(t1 t2) = erasep(t1) erasep(t2)
+                // erasep(λX. t) = λX. erasep(t)
+                // erasep(t T) = erasep(t) []      <--- erasure of TyApp
                 app = Term::new(Kind::TyApp(Box::new(app), Box::new(ty)), self.span);
             } else if let Ok(term) = self.atom() {
                 app = Term::new(Kind::App(Box::new(app), Box::new(term)), self.span);
