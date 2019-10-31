@@ -16,6 +16,8 @@ pub enum Kind {
     Lit(Literal),
     /// A bound variable, represented by it's de Bruijn index
     Var(usize),
+
+    Fix(Box<Term>),
     /// A lambda abstraction
     Abs(Box<Type>, Box<Term>),
     /// Application of a term to another term
@@ -28,6 +30,7 @@ pub enum Kind {
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub enum Literal {
+    Unit,
     Bool(bool),
     Nat(u32),
 }
@@ -54,6 +57,7 @@ impl fmt::Debug for Term {
             Kind::Lit(lit) => write!(f, "{:?}", lit),
             Kind::Var(v) => write!(f, "#{}", v),
             Kind::Abs(ty, term) => write!(f, "(λ_:{:?}. {:?})", ty, term),
+            Kind::Fix(term) => write!(f, "Fix {:?}", term),
             Kind::App(t1, t2) => write!(f, "{:?} {:?}", t1, t2),
             Kind::TyAbs(ty, term) => write!(f, "λTy{:?} {:?}", ty, term),
             Kind::TyApp(term, ty) => write!(f, "{:?} [{:?}]", term, ty),

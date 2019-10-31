@@ -14,7 +14,7 @@ pub trait MutVisitor: Sized {
 
     fn visit(&mut self, ty: &mut Type) {
         match ty {
-            Type::Bool | Type::Nat => {}
+            Type::Unit | Type::Bool | Type::Nat => {}
             Type::Var(v) => self.visit_var(v),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
@@ -67,7 +67,7 @@ impl MutVisitor for Subst {
 
     fn visit(&mut self, ty: &mut Type) {
         match ty {
-            Type::Bool | Type::Nat => {}
+            Type::Unit | Type::Bool | Type::Nat => {}
             Type::Var(v) if *v >= self.cutoff => {
                 *ty = self.ty.clone();
             }

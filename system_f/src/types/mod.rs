@@ -7,6 +7,7 @@ use visit::{MutVisitor, Shift, Subst};
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Type {
+    Unit,
     Nat,
     Bool,
     Var(usize),
@@ -65,6 +66,7 @@ impl Context {
 
     pub fn type_of(&mut self, term: &Term) -> Result<Type, TypeError> {
         match term.kind() {
+            Kind::Lit(Literal::Unit) => Ok(Type::Unit),
             Kind::Lit(Literal::Bool(_)) => Ok(Type::Bool),
             Kind::Lit(Literal::Nat(_)) => Ok(Type::Nat),
             Kind::Var(idx) => self.find(*idx).cloned().ok_or_else(|| TypeError {
@@ -89,6 +91,19 @@ impl Context {
                             Ok(*ty12)
                         } else {
                             Context::error(term, ErrorKind::ParameterMismatch(ty11, Box::new(ty2)))
+                        }
+                    }
+                    _ => Context::error(term, ErrorKind::NotArrow),
+                }
+            }
+            Kind::Fix(inner) => {
+                let ty = self.type_of(inner)?;
+                match ty {
+                    Type::Arrow(ty1, ty2) => {
+                        if ty1 == ty2 {
+                            Ok(*ty1)
+                        } else {
+                            Context::error(term, ErrorKind::ParameterMismatch(ty1, ty2))
                         }
                     }
                     _ => Context::error(term, ErrorKind::NotArrow),

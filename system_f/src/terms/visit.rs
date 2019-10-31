@@ -28,6 +28,8 @@ pub trait MutVisitor: Sized {
             Kind::Var(v) => self.visit_var(sp, v),
             Kind::Abs(ty, term) => self.visit_abs(sp, ty, term),
             Kind::App(t1, t2) => self.visit_app(sp, t1, t2),
+            // Do we need a separate branch?
+            Kind::Fix(term) => self.visit(term),
             Kind::TyAbs(ty, term) => self.visit_tyabs(sp, ty, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
         }
@@ -85,6 +87,7 @@ impl MutVisitor for Subst {
             Kind::Var(_) => {}
             Kind::Abs(ty, term) => self.visit_abs(sp, ty, term),
             Kind::App(t1, t2) => self.visit_app(sp, t1, t2),
+            Kind::Fix(term) => self.visit(term),
             Kind::TyAbs(ty, term) => self.visit_tyabs(sp, ty, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
         }
