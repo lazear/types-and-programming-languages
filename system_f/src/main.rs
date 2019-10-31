@@ -1,6 +1,7 @@
 #![allow(unused_variables, unused_macros)]
 #[macro_use]
 mod terms;
+mod syntax;
 mod types;
 
 use types::{Type, Type::*};
