@@ -161,10 +161,6 @@ impl<'a> Context<'a> {
                     }
                     _ => Err(TypeError::NotRecordType),
                 }
-                // Term::Record(fields) => self.type_of(
-
-                // ),
-                // _ => Err(TypeError::NotRecordType),
             }
             IsZero(t) => {
                 if let Ok(Type::Nat) = self.type_of(t) {

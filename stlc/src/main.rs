@@ -56,9 +56,9 @@ fn main() {
     //      if y then succ 0 else succ succ 0",
     // );
 
-    // parse(&mut root, "let x = (\\x: Nat. x) in x");
+    parse(&mut root, "let x = (\\y: Nat. y) in x");
 
-    // parse(&mut root, "(\\x: Nat->(Nat->Bool). x 0)");
+    parse(&mut root, "(\\x: Nat. (\\y: Nat. iszero x)) (succ 0) 0");
 
     parse(
         &mut root,
