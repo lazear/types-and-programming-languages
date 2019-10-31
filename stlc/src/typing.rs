@@ -12,7 +12,6 @@ pub enum Type {
     Unit,
     Bool,
     Nat,
-    Var(String),
     Arrow(Box<Type>, Box<Type>),
     Record(Record),
     Variant(Variant),
@@ -56,7 +55,6 @@ impl fmt::Debug for Type {
                     .collect::<Vec<String>>()
                     .join(",")
             ),
-            Type::Var(s) => write!(f, "{}", s),
             Type::Variant(_) => unimplemented!(),
         }
     }
@@ -124,7 +122,6 @@ impl<'a> Context<'a> {
     pub fn type_of(&self, term: &Term) -> Result<Type, TypeError> {
         use Term::*;
         match term {
-            TypeDecl(_, _) => Ok(Type::Unit),
             Unit => Ok(Type::Unit),
             True => Ok(Type::Bool),
             False => Ok(Type::Bool),
@@ -149,19 +146,17 @@ impl<'a> Context<'a> {
                     fields,
                 }))
             }
-            Projection(r, proj) => {
-                match self.type_of(r)? {
-                    Type::Record(self::Record { fields, .. }) => {
-                        for f in &fields {
-                            if &f.ident == proj.as_ref() {
-                                return Ok(*f.ty.clone());
-                            }
+            Projection(r, proj) => match self.type_of(r)? {
+                Type::Record(self::Record { fields, .. }) => {
+                    for f in &fields {
+                        if &f.ident == proj.as_ref() {
+                            return Ok(*f.ty.clone());
                         }
-                        Err(TypeError::InvalidProjection)
                     }
-                    _ => Err(TypeError::NotRecordType),
+                    Err(TypeError::InvalidProjection)
                 }
-            }
+                _ => Err(TypeError::NotRecordType),
+            },
             IsZero(t) => {
                 if let Ok(Type::Nat) = self.type_of(t) {
                     Ok(Type::Bool)

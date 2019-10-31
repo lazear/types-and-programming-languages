@@ -75,7 +75,6 @@ fn walk_mut_term<V: MutVisitor>(visitor: &mut V, var: &mut Term) {
         Term::Let(bind, body) => visitor.visit_let(bind, body),
         Term::Record(rec) => visitor.visit_record(rec),
         Term::Projection(rec, idx) => visitor.visit_proj(rec, idx),
-        Term::TypeDecl(name, ty) => visitor.visit_typedecl(name, ty),
     }
 }
 

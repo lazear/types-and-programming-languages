@@ -22,7 +22,6 @@ pub enum Term {
     True,
     False,
     Zero,
-    TypeDecl(String, Type),
     Succ(Box<Term>),
     Pred(Box<Term>),
     IsZero(Box<Term>),
@@ -50,7 +49,6 @@ pub fn record_access(fields: &[Field], projection: &str) -> Option<Box<Term>> {
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Term::TypeDecl(name, ty) => write!(f, "type {} = {:?}", &name, ty),
             Term::Unit => write!(f, "unit"),
             Term::True => write!(f, "true"),
             Term::False => write!(f, "false"),

@@ -185,10 +185,6 @@ impl<'s> Parser<'s> {
                 self.expect(TokenKind::RParen)?;
                 Some(r)
             }
-            TokenKind::Ident(s) if s.starts_with(|ch: char| ch.is_ascii_uppercase()) => {
-                self.ident();
-                Some(Type::Var(s.clone()))
-            }
             _ => None,
         }
     }
@@ -342,19 +338,9 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn type_decl(&mut self) -> Option<Box<Term>> {
-        self.expect(TokenKind::TypeDecl)?;
-        let name = self.ident()?;
-        self.expect(TokenKind::Equals)?;
-        let ty = self.ty()?;
-
-        Some(Term::TypeDecl(name.into(), ty).into())
-    }
-
     fn term(&mut self) -> Option<Box<Term>> {
         match self.peek()? {
             // TokenKind::Lambda => self.lambda(),
-            TokenKind::TypeDecl => self.type_decl(),
             _ => self.application(),
         }
     }
