@@ -1,9 +1,11 @@
-use crate::term::{RecordField, Term};
+use crate::term::{Field, Term};
 use crate::visitor::{Direction, Shifting, Visitor};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
+
+use util::span::Span;
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub enum Type {
@@ -12,7 +14,29 @@ pub enum Type {
     Nat,
     Var(String),
     Arrow(Box<Type>, Box<Type>),
-    Record(Vec<(String, Type)>),
+    Record(Record),
+    Variant(Variant),
+}
+
+#[derive(Clone, PartialEq, PartialOrd)]
+pub struct Variant {
+    // pub span: Span,
+    pub ident: String,
+    pub data: RecordField,
+}
+
+#[derive(Clone, PartialEq, PartialOrd)]
+pub struct Record {
+    // pub span: Span,
+    pub ident: String,
+    pub fields: Vec<RecordField>,
+}
+
+#[derive(Clone, PartialEq, PartialOrd)]
+pub struct RecordField {
+    // pub span: Span,
+    pub ident: String,
+    pub ty: Box<Type>,
 }
 
 impl fmt::Debug for Type {
@@ -21,16 +45,19 @@ impl fmt::Debug for Type {
             Type::Unit => write!(f, "Unit"),
             Type::Bool => write!(f, "Bool"),
             Type::Nat => write!(f, "Nat"),
-            Type::Arrow(a, b) => write!(f, "{:?}->{:?}", a, b),
+            Type::Arrow(a, b) => write!(f, "({:?}->{:?})", a, b),
             Type::Record(r) => write!(
                 f,
-                "{{{}}}",
-                r.iter()
-                    .map(|x| format!("{:?}", x.1))
+                "{} {{{}}}",
+                r.ident,
+                r.fields
+                    .iter()
+                    .map(|x| format!("{}:{:?}", x.ident, x.ty))
                     .collect::<Vec<String>>()
                     .join(",")
             ),
             Type::Var(s) => write!(f, "{}", s),
+            Type::Variant(_) => unimplemented!(),
         }
     }
 }
@@ -102,21 +129,43 @@ impl<'a> Context<'a> {
             True => Ok(Type::Bool),
             False => Ok(Type::Bool),
             Zero => Ok(Type::Nat),
-            Record(rec) => {
-                let tys = rec
+            Record(fields) => {
+                let fields: Vec<RecordField> = fields
                     .iter()
-                    .map(|f| self.type_of(&f.data).map(|ty| (f.label.clone(), ty)))
-                    .collect::<Result<Vec<(String, Type)>, TypeError>>()?;
-                Ok(Type::Record(tys))
+                    .map(|f| {
+                        self.type_of(&f.term).map(|ty| {
+                            RecordField {
+                                // span: f.span,
+                                ident: f.ident.clone(),
+                                ty: Box::new(ty),
+                            }
+                        })
+                    })
+                    .collect::<Result<Vec<RecordField>, TypeError>>()?;
+
+                Ok(Type::Record(crate::typing::Record {
+                    // span: Span::dummy(),
+                    ident: String::new(),
+                    fields,
+                }))
             }
-            Projection(r, proj) => match r.as_ref() {
-                Term::Record(fields) => self.type_of(
-                    crate::term::record_access(fields, &proj)
-                        .ok_or(TypeError::InvalidProjection)?
-                        .as_ref(),
-                ),
-                _ => Err(TypeError::NotRecordType),
-            },
+            Projection(r, proj) => {
+                match self.type_of(r)? {
+                    Type::Record(self::Record { fields, .. }) => {
+                        for f in &fields {
+                            if &f.ident == proj.as_ref() {
+                                return Ok(*f.ty.clone());
+                            }
+                        }
+                        Err(TypeError::InvalidProjection)
+                    }
+                    _ => Err(TypeError::NotRecordType),
+                }
+                // Term::Record(fields) => self.type_of(
+
+                // ),
+                // _ => Err(TypeError::NotRecordType),
+            }
             IsZero(t) => {
                 if let Ok(Type::Nat) = self.type_of(t) {
                     Ok(Type::Bool)

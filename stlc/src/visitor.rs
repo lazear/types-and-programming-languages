@@ -1,5 +1,5 @@
 use super::*;
-use crate::term::{RecordField, Term};
+use crate::term::{Field, Term};
 use std::default::Default;
 use std::rc::Rc;
 
@@ -13,7 +13,7 @@ pub trait Visitor: Sized {
     fn visit_pred(&mut self, t: &Term);
     fn visit_iszero(&mut self, t: &Term);
     fn visit_const(&mut self, c: &Term);
-    fn visit_record(&mut self, c: &[RecordField]);
+    fn visit_record(&mut self, c: &[Field]);
     fn visit_proj(&mut self, c: &Term, proj: &String);
     fn visit_typedecl(&mut self, name: &String, ty: &Type);
 }
@@ -22,40 +22,38 @@ pub trait MutVisitor: Sized {
     fn visit_var(&mut self, var: &mut Term) {}
 
     fn visit_abs(&mut self, ty: &mut Type, body: &mut Term) {
-        walk_mut_term(self, body);
+        self.visit_term(body);
     }
     fn visit_app(&mut self, t1: &mut Term, t2: &mut Term) {
-        walk_mut_term(self, t1);
-        walk_mut_term(self, t2);
+        self.visit_term(t1);
+        self.visit_term(t2);
     }
     fn visit_if(&mut self, guard: &mut Term, csq: &mut Term, alt: &mut Term) {
-        walk_mut_term(self, guard);
-        walk_mut_term(self, csq);
-        walk_mut_term(self, alt);
+        self.visit_term(guard);
+        self.visit_term(csq);
+        self.visit_term(alt);
     }
     fn visit_let(&mut self, bind: &mut Term, body: &mut Term) {
-        walk_mut_term(self, bind);
-        walk_mut_term(self, body);
+        self.visit_term(bind);
+        self.visit_term(body);
     }
     fn visit_succ(&mut self, t: &mut Term) {
-        walk_mut_term(self, t);
+        self.visit_term(t);
     }
     fn visit_pred(&mut self, t: &mut Term) {
-        walk_mut_term(self, t);
+        self.visit_term(t);
     }
     fn visit_iszero(&mut self, t: &mut Term) {
-        walk_mut_term(self, t);
+        self.visit_term(t);
     }
-    fn visit_const(&mut self, t: &mut Term) {
-        walk_mut_term(self, t);
-    }
-    fn visit_record(&mut self, c: &mut [RecordField]) {
+    fn visit_const(&mut self, t: &mut Term) {}
+    fn visit_record(&mut self, c: &mut [Field]) {
         for t in c {
-            walk_mut_term(self, t.data.as_mut());
+            self.visit_term(t.term.as_mut());
         }
     }
     fn visit_proj(&mut self, t: &mut Term, proj: &mut String) {
-        walk_mut_term(self, t);
+        self.visit_term(t);
     }
     fn visit_typedecl(&mut self, name: &mut String, ty: &mut Type) {}
 
@@ -130,14 +128,14 @@ impl MutVisitor for Shifting {
 
     fn visit_abs(&mut self, ty_: &mut Type, body: &mut Term) {
         self.cutoff += 1;
-        walk_mut_term(self, body);
+        self.visit_term(body);
         self.cutoff -= 1;
     }
 
     fn visit_let(&mut self, bind: &mut Term, body: &mut Term) {
         self.cutoff += 1;
-        walk_mut_term(self, bind);
-        walk_mut_term(self, body);
+        self.visit_term(bind);
+        self.visit_term(body);
         self.cutoff -= 1;
     }
 }

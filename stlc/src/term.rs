@@ -2,12 +2,19 @@ use super::visitor::Visitor;
 use crate::typing::Type;
 use std::fmt;
 use std::rc::Rc;
+use util::span::Span;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub struct RecordField {
-    pub label: String,
-    pub data: Box<Term>,
+pub struct Field {
+    pub span: Span,
+    pub ident: String,
+    pub term: Box<Term>,
 }
+
+// pub enum Item {
+//     Variant(VariantDecl),
+//     Record(RecordDecl)
+// }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Term {
@@ -27,14 +34,14 @@ pub enum Term {
     App(Box<Term>, Box<Term>),
     If(Box<Term>, Box<Term>, Box<Term>),
     Let(Box<Term>, Box<Term>),
-    Record(Vec<RecordField>),
+    Record(Vec<Field>),
     Projection(Box<Term>, Box<String>),
 }
 
-pub fn record_access(fields: &[RecordField], projection: &str) -> Option<Box<Term>> {
+pub fn record_access(fields: &[Field], projection: &str) -> Option<Box<Term>> {
     for f in fields {
-        if &f.label == projection {
-            return Some(f.data.clone());
+        if &f.ident == projection {
+            return Some(f.term.clone());
         }
     }
     None
@@ -60,7 +67,7 @@ impl fmt::Display for Term {
                 f,
                 "{{{}}}",
                 rec.iter()
-                    .map(|x| format!("{}:{}", x.label, x.data))
+                    .map(|x| format!("{}:{}", x.ident, x.term))
                     .collect::<Vec<String>>()
                     .join(",")
             ),

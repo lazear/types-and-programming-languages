@@ -1,5 +1,5 @@
 use super::term::*;
-use super::typing::Context;
+use super::typing::{Context, Record, RecordField};
 use super::visitor::{Direction, MutVisitor, Shifting, Substitution};
 use std::rc::Rc;
 
@@ -19,9 +19,9 @@ fn value(ctx: &Context, term: &Term) -> bool {
     match term {
         Term::Unit | Term::True | Term::False | Term::Abs(_, _) | Term::Zero => true,
         Term::Succ(t) | Term::Pred(t) | Term::IsZero(t) => value(ctx, t),
-        Term::Record(rec) => {
-            for field in rec {
-                if !value(ctx, &field.data) {
+        Term::Record(fields) => {
+            for field in fields {
+                if !value(ctx, &field.term) {
                     return false;
                 }
             }
@@ -36,6 +36,7 @@ fn eval1(ctx: &Context, mut term: Term) -> Result<Box<Term>, Error> {
         Term::App(t1, t2) if value(ctx, &t2) => {
             if let Term::Abs(_, mut body) = *t1 {
                 subst(*t2, body.as_mut());
+
                 Ok(body)
             } else if value(ctx, &t1) {
                 let t_prime = eval1(ctx, *t2)?;

@@ -1,6 +1,6 @@
 use crate::lexer::{Lexer, Token, TokenKind};
-use crate::term::{RecordField, Term};
-use crate::typing::Type;
+use crate::term::{Field, Term};
+use crate::typing::{Record, RecordField, Type, Variant};
 use std::collections::VecDeque;
 use std::iter::Peekable;
 use std::rc::Rc;
@@ -136,11 +136,17 @@ impl<'s> Parser<'s> {
         Some(Term::Let(bind, body).into())
     }
 
-    fn ty_record_field(&mut self) -> Option<(String, Type)> {
-        let label = self.ident()?;
+    fn ty_record_field(&mut self) -> Option<RecordField> {
+        let mut span = self.span;
+        let ident = self.ident()?;
         self.expect(TokenKind::Colon)?;
-        let data = self.ty()?;
-        Some((label.into(), data))
+        let ty = self.ty()?;
+        span = span + self.span;
+        Some(RecordField {
+            // span,
+            ident,
+            ty: Box::new(ty),
+        })
     }
 
     fn ty_atom(&mut self) -> Option<Type> {
@@ -158,6 +164,7 @@ impl<'s> Parser<'s> {
                 Some(Type::Unit)
             }
             TokenKind::LBrace => {
+                let mut span = self.span;
                 self.consume()?;
                 let mut fields = vec![self.ty_record_field()?];
                 while let Some(TokenKind::Comma) = self.peek() {
@@ -165,7 +172,18 @@ impl<'s> Parser<'s> {
                     fields.push(self.ty_record_field()?);
                 }
                 self.expect(TokenKind::RBrace)?;
-                Some(Type::Record(fields))
+                span = span + self.span;
+                Some(Type::Record(Record {
+                    // span,
+                    ident: String::new(),
+                    fields,
+                }))
+            }
+            TokenKind::LParen => {
+                self.consume()?;
+                let r = self.ty()?;
+                self.expect(TokenKind::RParen)?;
+                Some(r)
             }
             TokenKind::Ident(s) if s.starts_with(|ch: char| ch.is_ascii_uppercase()) => {
                 self.ident();
@@ -230,13 +248,16 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn record_field(&mut self) -> Option<RecordField> {
+    fn record_field(&mut self) -> Option<Field> {
+        let mut span = self.span;
         let label = self.ident()?;
         self.expect(TokenKind::Colon)?;
-        let data = self.expect_term()?;
-        Some(RecordField {
-            label: label.into(),
-            data,
+        let term = self.expect_term()?;
+
+        Some(Field {
+            span: span + self.span,
+            ident: label.into(),
+            term,
         })
     }
 

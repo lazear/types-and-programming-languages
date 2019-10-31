@@ -34,6 +34,7 @@ pub enum TokenKind {
     LBrace,
     RBrace,
     Equals,
+    Bar,
     Invalid(char),
     Dummy,
     Eof,
@@ -190,6 +191,7 @@ impl<'s> Lexer<'s> {
             'λ' => self.eat('λ', TokenKind::Lambda),
             '.' => self.eat('.', TokenKind::Proj),
             '=' => self.eat('=', TokenKind::Equals),
+            '|' => self.eat('|', TokenKind::Bar),
             '-' => {
                 self.consume();
                 self.eat('>', TokenKind::TyArrow)

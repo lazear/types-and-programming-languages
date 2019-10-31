@@ -48,15 +48,22 @@ fn parse(ctx: &mut Context, input: &str) {
 
 fn main() {
     let mut root: Context = Context::default();
+    // parse(
+    //     &mut root,
+    //     "let not = (\\x: Bool. if x then false else true) in
+    //      let x = not false in
+    //      let y = not x in
+    //      if y then succ 0 else succ succ 0",
+    // );
+
+    // parse(&mut root, "let x = (\\x: Nat. x) in x");
+
+    // parse(&mut root, "(\\x: Nat->(Nat->Bool). x 0)");
+
     parse(
         &mut root,
-        "let not = (\\x: Bool. if x then false else true) in
-         let x = not false in 
-         let y = not x in 
-         if y then succ 0 else succ succ 0",
+        "(\\x: {a: Bool, b: Bool, c: Nat}. x.b) {a: true, b: false, c: 0}",
     );
-
-    parse(&mut root, "let x = (\\x: Nat. x) in x");
 
     // parse(&mut root, "let not = \\x: Bool. if x then false else true in {a:
     // 0, b: \\x: Bool. not x, c: unit}.b "); parse(&mut root, "type Struct
