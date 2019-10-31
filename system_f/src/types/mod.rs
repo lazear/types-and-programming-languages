@@ -44,8 +44,8 @@ impl Context {
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct TypeError {
-    span: Span,
-    kind: ErrorKind,
+    pub span: Span,
+    pub kind: ErrorKind,
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]

@@ -59,26 +59,36 @@ pub struct Error {
 pub enum ErrorKind {
     ExpectedAtom,
     ExpectedIdent,
+    ExpectedType,
     ExpectedToken(TokenKind),
+    UnboundTypeVar,
+    UnboundVar,
     Unknown,
+    Eof,
 }
 
 pub enum Either<L, R> {
-    Left(L),
-    Right(R),
+    Constr(L),
+    Ident(R),
 }
 
 impl<'s> Parser<'s> {
     /// Create a new [`Parser`] for the input `&str`
     pub fn new(input: &'s str) -> Parser<'s> {
-        Parser {
+        let mut p = Parser {
             tmvar: DeBruijnIndexer::default(),
             tyvar: DeBruijnIndexer::default(),
             diagnostic: Diagnostic::new(input),
             lexer: Lexer::new(input.chars()),
             span: Span::dummy(),
             token: Token::dummy(),
-        }
+        };
+        p.bump();
+        p
+    }
+
+    pub fn diagnostic(self) -> Diagnostic<'s> {
+        self.diagnostic
     }
 }
 
@@ -93,7 +103,7 @@ impl<'s> Parser<'s> {
 
     fn bump(&mut self) -> TokenKind {
         let prev = std::mem::replace(&mut self.token, self.lexer.lex());
-        self.span = self.token.span;
+        self.span = prev.span;
         prev.kind
     }
 
@@ -114,17 +124,120 @@ impl<'s> Parser<'s> {
         &self.token.kind
     }
 
-    fn lambda(&mut self) -> Result<Term, Error> {
-        match self.ident()? {
-            Either::Left(ty) => {}
-            Either::Right(term) => {}
+    fn ty_atom(&mut self) -> Result<Type, Error> {
+        match self.kind() {
+            TokenKind::TyBool => {
+                self.bump();
+                Ok(Type::Bool)
+            }
+            TokenKind::TyNat => {
+                self.bump();
+                Ok(Type::Nat)
+            }
+            TokenKind::TyUnit => {
+                self.bump();
+                Ok(Type::Unit)
+            }
+            // TokenKind::LBrace => {
+            //     let mut span = self.span;
+            //     self.bump();
+            //     let mut fields = vec![self.ty_record_field()?];
+            //     while let Ok(TokenKind::Comma) = self.peek() {
+            //         self.expect(TokenKind::Comma)?;
+            //         fields.push(self.ty_record_field()?);
+            //     }
+            //     self.expect(TokenKind::RBrace)?;
+            //     span = span + self.span;
+            //     Ok(Type::Record(Record {
+            //         // span,
+            //         ident: String::new(),
+            //         fields,
+            //     }))
+            // }
+            TokenKind::LParen => {
+                self.bump();
+                let r = self.ty()?;
+                self.expect(TokenKind::RParen)?;
+                Ok(r)
+            }
+            TokenKind::Ident(s) => match self.ident()? {
+                Either::Constr(ty) => match self.tyvar.lookup(&ty) {
+                    Some(idx) => Ok(Type::Var(idx)),
+                    None => {
+                        self.diagnostic
+                            .push(format!("unbound type variable {:?}", ty), self.span);
+                        self.error(ErrorKind::UnboundTypeVar)
+                    }
+                },
+                Either::Ident(i) => {
+                    self.diagnostic.push(
+                        format!("expected type constructor, found identifier {:?}", i),
+                        self.span,
+                    );
+                    self.error(ErrorKind::ExpectedType)
+                }
+            },
+            _ => {
+                // self.diagnostic.push(format!("expected atomic type, found {:?}",
+                // self.kind()), self.span);
+                self.error(ErrorKind::ExpectedType)
+            }
         }
-        self.error(ErrorKind::ExpectedToken(TokenKind::Lambda))
+    }
+
+    fn ty(&mut self) -> Result<Type, Error> {
+        let span = self.span;
+        let mut lhs = self.ty_atom()?;
+
+        if let TokenKind::TyArrow = self.kind() {
+            self.bump();
+        }
+        while let Ok(rhs) = self.ty_atom() {
+            lhs = Type::Arrow(Box::new(lhs), Box::new(rhs));
+            if let TokenKind::TyArrow = self.kind() {
+                self.bump();
+            } else {
+                break;
+            }
+        }
+        Ok(lhs)
+    }
+
+    fn tyabs(&mut self, tyvar: String) -> Result<Term, Error> {
+        let sp = self.span;
+        let ty = Box::new(Type::Var(self.tyvar.push(tyvar)));
+        // self.expect(TokenKind::Proj)?;
+        let body = self.parse()?;
+        self.tyvar.pop();
+        Ok(Term::new(Kind::TyAbs(ty, Box::new(body)), sp + self.span))
+    }
+
+    fn tmabs(&mut self, tmvar: String) -> Result<Term, Error> {
+        let sp = self.span;
+        self.tmvar.push(tmvar);
+        // let tm = Box::new(Term::new(Kind::Var(self.tmvar.push(tmvar)), sp));
+        self.expect(TokenKind::Colon)?;
+        let ty = self.ty()?;
+        self.expect(TokenKind::Proj)?;
+        let body = self.parse()?;
+        self.tmvar.pop();
+        Ok(Term::new(
+            Kind::Abs(Box::new(ty), Box::new(body)),
+            sp + self.span,
+        ))
+    }
+
+    fn lambda(&mut self) -> Result<Term, Error> {
+        self.expect(TokenKind::Lambda)?;
+        match self.ident()? {
+            Either::Constr(ty) => self.tyabs(ty),
+            Either::Ident(term) => self.tmabs(term),
+        }
     }
 
     fn paren(&mut self) -> Result<Term, Error> {
         self.expect(TokenKind::LParen)?;
-        let n = self.try_next()?;
+        let n = self.parse()?;
         self.expect(TokenKind::RParen)?;
         Ok(n)
     }
@@ -133,9 +246,9 @@ impl<'s> Parser<'s> {
         match self.bump() {
             TokenKind::Ident(ident) => {
                 if ident.starts_with(|ch: char| ch.is_ascii_uppercase()) {
-                    Ok(Either::Left(ident))
+                    Ok(Either::Constr(ident))
                 } else {
-                    Ok(Either::Right(ident))
+                    Ok(Either::Ident(ident))
                 }
             }
             tk => {
@@ -153,12 +266,63 @@ impl<'s> Parser<'s> {
     // fn tm_var(&mut self) -> Result<Term, Error> {
 
     // }
+    //
+    fn literal(&mut self) -> Result<Term, Error> {
+        let lit = match self.bump() {
+            TokenKind::Nat(x) => Literal::Nat(x),
+            TokenKind::True => Literal::Bool(true),
+            TokenKind::False => Literal::Bool(false),
+            _ => return self.error(ErrorKind::Unknown),
+        };
+        Ok(Term::new(Kind::Lit(lit), self.span))
+    }
 
-    pub fn try_next(&mut self) -> Result<Term, Error> {
+    fn atom(&mut self) -> Result<Term, Error> {
         match self.kind() {
             TokenKind::Lambda => self.lambda(),
             TokenKind::LParen => self.paren(),
+            TokenKind::Ident(s) => match self.ident()? {
+                Either::Constr(ty) => {
+                    self.diagnostic
+                        .push(format!("unbound type {}", ty), self.span);
+                    self.error(ErrorKind::UnboundTypeVar)
+                }
+                Either::Ident(tm) => match self.tmvar.lookup(&tm) {
+                    Some(idx) => Ok(Term::new(Kind::Var(idx), self.span)),
+                    None => {
+                        self.diagnostic
+                            .push(format!("unbound variable {}", tm), self.span);
+                        self.error(ErrorKind::UnboundTypeVar)
+                    }
+                },
+            },
+            TokenKind::Nat(_) | TokenKind::True | TokenKind::False => self.literal(),
             _ => self.error(ErrorKind::Unknown),
         }
+    }
+
+    /// Parse an application of form:
+    /// application = atom application' | atom
+    /// application' = atom application' | empty
+    fn application(&mut self) -> Result<Term, Error> {
+        let mut app = self.atom()?;
+        loop {
+            if let Ok(ty) = self.ty() {
+                // Full type inference for System F is undecidable
+                // but it seems like we should be able to perfom something
+                // analogous to ML's let-polymorphism by typing only the
+                // term that the abstraction is being applied to
+                app = Term::new(Kind::TyApp(Box::new(app), Box::new(ty)), self.span);
+            } else if let Ok(term) = self.atom() {
+                app = Term::new(Kind::App(Box::new(app), Box::new(term)), self.span);
+            } else {
+                break;
+            }
+        }
+        Ok(app)
+    }
+
+    pub fn parse(&mut self) -> Result<Term, Error> {
+        self.application()
     }
 }

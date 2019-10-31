@@ -120,7 +120,7 @@ impl<'s> Lexer<'s> {
         self.consume_delimiter();
         let next = match self.peek() {
             Some(ch) => ch,
-            None => return Token::new(TokenKind::Eof, Span::dummy()),
+            None => return Token::new(TokenKind::Eof, Span::new(self.current, self.current)),
         };
         match next {
             x if x.is_ascii_alphabetic() => self.keyword(),

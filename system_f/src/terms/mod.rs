@@ -59,8 +59,8 @@ impl fmt::Debug for Term {
             Kind::Abs(ty, term) => write!(f, "(λ_:{:?}. {:?})", ty, term),
             Kind::Fix(term) => write!(f, "Fix {:?}", term),
             Kind::App(t1, t2) => write!(f, "{:?} {:?}", t1, t2),
-            Kind::TyAbs(ty, term) => write!(f, "λTy{:?} {:?}", ty, term),
-            Kind::TyApp(term, ty) => write!(f, "{:?} [{:?}]", term, ty),
+            Kind::TyAbs(ty, term) => write!(f, "(λTy{:?} {:?})", ty, term),
+            Kind::TyApp(term, ty) => write!(f, "({:?} [{:?}])", term, ty),
         }
     }
 }
