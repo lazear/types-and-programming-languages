@@ -45,19 +45,19 @@ impl Context {
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct TypeError {
     pub span: Span,
-    pub kind: ErrorKind,
+    pub kind: TypeErrorKind,
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
-pub enum ErrorKind {
-    ParameterMismatch(Box<Type>, Box<Type>),
+pub enum TypeErrorKind {
+    ParameterMismatch(Box<Type>, Box<Type>, Span),
     NotArrow,
     NotUniversal,
     UnboundVariable,
 }
 
 impl Context {
-    pub const fn error(term: &Term, kind: ErrorKind) -> Result<Type, TypeError> {
+    pub const fn error(term: &Term, kind: TypeErrorKind) -> Result<Type, TypeError> {
         Err(TypeError {
             span: term.span,
             kind,
@@ -71,7 +71,7 @@ impl Context {
             Kind::Lit(Literal::Nat(_)) => Ok(Type::Nat),
             Kind::Var(idx) => self.find(*idx).cloned().ok_or_else(|| TypeError {
                 span: term.span,
-                kind: ErrorKind::UnboundVariable,
+                kind: TypeErrorKind::UnboundVariable,
             }),
             Kind::Abs(ty, t2) => {
                 self.push(*ty.clone());
@@ -85,15 +85,19 @@ impl Context {
             Kind::App(t1, t2) => {
                 let ty1 = self.type_of(t1)?;
                 let ty2 = self.type_of(t2)?;
+                dbg!(t1.span);
                 match ty1 {
                     Type::Arrow(ty11, ty12) => {
                         if *ty11 == ty2 {
                             Ok(*ty12)
                         } else {
-                            Context::error(term, ErrorKind::ParameterMismatch(ty11, Box::new(ty2)))
+                            Context::error(
+                                t1,
+                                TypeErrorKind::ParameterMismatch(ty11, Box::new(ty2), t2.span),
+                            )
                         }
                     }
-                    _ => Context::error(term, ErrorKind::NotArrow),
+                    _ => Context::error(term, TypeErrorKind::NotArrow),
                 }
             }
             Kind::Fix(inner) => {
@@ -103,10 +107,13 @@ impl Context {
                         if ty1 == ty2 {
                             Ok(*ty1)
                         } else {
-                            Context::error(term, ErrorKind::ParameterMismatch(ty1, ty2))
+                            Context::error(
+                                term,
+                                TypeErrorKind::ParameterMismatch(ty1, ty2, inner.span),
+                            )
                         }
                     }
-                    _ => Context::error(term, ErrorKind::NotArrow),
+                    _ => Context::error(term, TypeErrorKind::NotArrow),
                 }
             }
             Kind::TyAbs(ty, term) => {
@@ -124,7 +131,7 @@ impl Context {
                         Subst::new(*ty).visit(&mut ty12);
                         Ok(*ty12)
                     }
-                    _ => Context::error(term, ErrorKind::NotUniversal),
+                    _ => Context::error(term, TypeErrorKind::NotUniversal),
                 }
             }
         }

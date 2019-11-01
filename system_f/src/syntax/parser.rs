@@ -80,7 +80,7 @@ impl<'s> Parser<'s> {
             tyvar: DeBruijnIndexer::default(),
             diagnostic: Diagnostic::new(input),
             lexer: Lexer::new(input.chars()),
-            span: Span::dummy(),
+            span: Span::default(),
             token: Token::dummy(),
         };
         p.bump();
@@ -307,25 +307,27 @@ impl<'s> Parser<'s> {
     fn application(&mut self) -> Result<Term, Error> {
         let mut app = self.atom()?;
         loop {
+            let sp = app.span;
             if let Ok(ty) = self.ty() {
                 // Full type inference for System F is undecidable
                 // Additionally, even partial type reconstruction,
                 // where only type application types are erased is also
                 // undecidable, see TaPL 23.6.2, Boehm 1985, 1989
-                // 
+                //
                 // Partial erasure rules:
                 // erasep(x) = x
                 // erasep(λx:T. t) = λx:T. erasep(t)
                 // erasep(t1 t2) = erasep(t1) erasep(t2)
                 // erasep(λX. t) = λX. erasep(t)
                 // erasep(t T) = erasep(t) []      <--- erasure of TyApp
-                app = Term::new(Kind::TyApp(Box::new(app), Box::new(ty)), self.span);
+                app = Term::new(Kind::TyApp(Box::new(app), Box::new(ty)), sp + self.span);
             } else if let Ok(term) = self.atom() {
-                app = Term::new(Kind::App(Box::new(app), Box::new(term)), self.span);
+                app = Term::new(Kind::App(Box::new(app), Box::new(term)), sp + self.span);
             } else {
                 break;
             }
         }
+        println!("{:?} {:?}", app.span, app.kind);
         Ok(app)
     }
 
