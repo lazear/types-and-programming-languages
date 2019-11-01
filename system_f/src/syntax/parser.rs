@@ -209,7 +209,7 @@ impl<'s> Parser<'s> {
         // self.expect(TokenKind::Proj)?;
         let body = self.parse()?;
         self.tyvar.pop();
-        Ok(Term::new(Kind::TyAbs(ty, Box::new(body)), sp + self.span))
+        Ok(Term::new(Kind::TyAbs(Box::new(Type::Unit), Box::new(body)), sp + self.span))
     }
 
     fn tmabs(&mut self, tmvar: String) -> Result<Term, Error> {

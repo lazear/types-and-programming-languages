@@ -78,7 +78,7 @@ impl Context {
                 let mut ty2 = self.type_of(t2)?;
                 self.pop();
 
-                Shift::new(-1).visit(&mut ty2);
+                // Shift::new(-1).visit(&mut ty2);
 
                 Ok(Type::Arrow(ty.clone(), Box::new(ty2)))
             }
@@ -117,18 +117,20 @@ impl Context {
                 }
             }
             Kind::TyAbs(ty, term) => {
-                self.push(*ty.clone());
+                // self.push(*ty.clone());
                 let ty2 = self.type_of(term)?;
-                self.pop();
+                // self.pop();
                 Ok(Type::Universal(Box::new(ty2)))
             }
             Kind::TyApp(term, ty) => {
+                dbg!("tyapp");
                 let mut ty = ty.clone();
                 let ty1 = self.type_of(term)?;
                 match ty1 {
                     Type::Universal(mut ty12) => {
                         Shift::new(1).visit(&mut ty);
                         Subst::new(*ty).visit(&mut ty12);
+                        // Shift::new(-1).visit(&mut ty12);
                         Ok(*ty12)
                     }
                     _ => Context::error(term, TypeErrorKind::NotUniversal),
