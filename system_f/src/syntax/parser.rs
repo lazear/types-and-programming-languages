@@ -169,19 +169,9 @@ impl<'s> Parser<'s> {
                         self.error(ErrorKind::UnboundTypeVar)
                     }
                 },
-                Either::Ident(i) => {
-                    self.diagnostic.push(
-                        format!("expected type constructor, found identifier {:?}", i),
-                        self.span,
-                    );
-                    self.error(ErrorKind::ExpectedType)
-                }
+                Either::Ident(i) => self.error(ErrorKind::ExpectedType),
             },
-            _ => {
-                // self.diagnostic.push(format!("expected atomic type, found {:?}",
-                // self.kind()), self.span);
-                self.error(ErrorKind::ExpectedType)
-            }
+            _ => self.error(ErrorKind::ExpectedType),
         }
     }
 
@@ -231,6 +221,37 @@ impl<'s> Parser<'s> {
         ))
     }
 
+    fn fix(&mut self) -> Result<Term, Error> {
+        let sp = self.span;
+        self.expect(TokenKind::Fix)?;
+        let t = self.parse()?;
+        Ok(Term::new(Kind::Fix(Box::new(t)), sp + self.span))
+    }
+
+    fn letexpr(&mut self) -> Result<Term, Error> {
+        let sp = self.span;
+        self.expect(TokenKind::Let)?;
+        let id = match self.ident()? {
+            Either::Constr(ty) => {
+                self.diagnostic.push(
+                    format!("expected lowercase identifier in let expr, found {}", ty),
+                    self.span,
+                );
+                return self.error(ErrorKind::ExpectedIdent);
+            }
+            Either::Ident(id) => id,
+        };
+        self.expect(TokenKind::Equals)?;
+        self.tmvar.push(id);
+        let t1 = self.parse()?;
+        self.expect(TokenKind::In)?;
+        let t2 = self.parse()?;
+        Ok(Term::new(
+            Kind::Let(Box::new(t1), Box::new(t2)),
+            sp + self.span,
+        ))
+    }
+
     fn lambda(&mut self) -> Result<Term, Error> {
         self.expect(TokenKind::Lambda)?;
         match self.ident()? {
@@ -263,14 +284,6 @@ impl<'s> Parser<'s> {
         }
     }
 
-    // fn ty_var(&mut self) -> Result<Type, Error> {
-
-    // }
-
-    // fn tm_var(&mut self) -> Result<Term, Error> {
-
-    // }
-    //
     fn literal(&mut self) -> Result<Term, Error> {
         let lit = match self.bump() {
             TokenKind::Nat(x) => Literal::Nat(x),
@@ -283,8 +296,10 @@ impl<'s> Parser<'s> {
 
     fn atom(&mut self) -> Result<Term, Error> {
         match self.kind() {
-            TokenKind::Lambda => self.lambda(),
             TokenKind::LParen => self.paren(),
+            TokenKind::Lambda => self.lambda(),
+            TokenKind::Let => self.letexpr(),
+            TokenKind::Fix => self.fix(),
             TokenKind::Ident(s) => match self.ident()? {
                 Either::Constr(ty) => {
                     self.diagnostic
@@ -301,7 +316,7 @@ impl<'s> Parser<'s> {
                 },
             },
             TokenKind::Nat(_) | TokenKind::True | TokenKind::False => self.literal(),
-            _ => self.error(ErrorKind::Unknown),
+            _ => self.error(ErrorKind::ExpectedAtom),
         }
     }
 
@@ -311,6 +326,7 @@ impl<'s> Parser<'s> {
     fn application(&mut self) -> Result<Term, Error> {
         let mut app = self.atom()?;
         loop {
+            // dbg!(self.kind());
             let sp = app.span;
             if let Ok(ty) = self.ty() {
                 // Full type inference for System F is undecidable
@@ -329,6 +345,11 @@ impl<'s> Parser<'s> {
                 app = Term::new(Kind::App(Box::new(app), Box::new(term)), sp + self.span);
             } else {
                 break;
+            }
+
+            // Explicitly end an application
+            if self.kind() == &TokenKind::RParen {
+                self.bump();
             }
         }
         Ok(app)

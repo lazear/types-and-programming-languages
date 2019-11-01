@@ -23,13 +23,10 @@ fn main() {
 
     let id = tyabs!(Type::Var(0), abs!(Type::Var(0), var!(0)));
     let id_bool = tyapp!(id.clone(), Nat);
-
-    // dbg!(ctx.type_of(&id_bool));
-    // dbg!(ctx.type_of(&app!(id_bool, lit!(true))));
-
-    let input = "(λX λY λx: X->Y. x) Nat Unit";
+    // let input = "(λX λY λx: X->Y. x) Nat Unit";
     // let input = "((λX λY (λx: (Y->Y->X). x)) Nat) Bool";
-    // let input = "(λX (λt:X. λf:X. t)) Nat 1 2";
+    let input = "(λX λf:X->X. λa:X. f (f a)) Nat->Nat (\\x: Nat->Nat. x)";
+    let input = "let x = fix (\\x: Nat. x x) in x 0";
     let mut p = Parser::new(input);
 
     loop {

@@ -77,7 +77,7 @@ impl Context {
                 self.push(*ty.clone());
                 let mut ty2 = self.type_of(t2)?;
 
-                println!("{:?} -: {:?}", ty2, t2);
+                // println!("{:?} -: {:?}", ty2, t2);
                 // Shift::new(-1).visit(&mut ty2);
                 // println!("{:?} -: {:?}", ty2, t2);
                 self.pop();
@@ -116,14 +116,16 @@ impl Context {
                     _ => Context::error(term, TypeErrorKind::NotArrow),
                 }
             }
+            Kind::Let(t1, t2) => {
+                let ty = self.type_of(t1)?;
+                self.push(ty);
+                self.type_of(t2)
+            }
             Kind::TyAbs(ty, term) => {
-                // self.push(*ty.clone());
                 let ty2 = self.type_of(term)?;
-                // self.pop();
                 Ok(Type::Universal(Box::new(ty2)))
             }
             Kind::TyApp(term, ty) => {
-                dbg!("tyapp");
                 let mut ty = ty.clone();
                 let ty1 = self.type_of(term)?;
                 match ty1 {

@@ -33,6 +33,7 @@ pub enum TokenKind {
     RBrace,
     Equals,
     Bar,
+    Fix,
     Invalid(char),
     Dummy,
     Eof,

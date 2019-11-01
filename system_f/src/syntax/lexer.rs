@@ -98,6 +98,7 @@ impl<'s> Lexer<'s> {
             "let" => TokenKind::Let,
             "in" => TokenKind::In,
             "type" => TokenKind::TypeDecl,
+            "fix" => TokenKind::Fix,
             _ => TokenKind::Ident(data),
         };
         Token::new(kind, span)

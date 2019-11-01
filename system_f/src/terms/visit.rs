@@ -13,6 +13,11 @@ pub trait MutVisitor: Sized {
         self.visit(t2);
     }
 
+    fn visit_let(&mut self, sp: &mut Span, t1: &mut Term, t2: &mut Term) {
+        self.visit(t1);
+        self.visit(t2);
+    }
+
     fn visit_tyabs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
         self.visit(term);
     }
@@ -30,6 +35,7 @@ pub trait MutVisitor: Sized {
             Kind::App(t1, t2) => self.visit_app(sp, t1, t2),
             // Do we need a separate branch?
             Kind::Fix(term) => self.visit(term),
+            Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
             Kind::TyAbs(ty, term) => self.visit_tyabs(sp, ty, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
         }
@@ -79,6 +85,13 @@ impl MutVisitor for Subst {
         self.cutoff -= 1;
     }
 
+    fn visit_let(&mut self, sp: &mut Span, t1: &mut Term, t2: &mut Term) {
+        self.cutoff += 1;
+        self.visit(t1);
+        self.visit(t2);
+        self.cutoff -= 1;
+    }
+
     fn visit(&mut self, term: &mut Term) {
         let sp = &mut term.span;
         match &mut term.kind {
@@ -88,6 +101,7 @@ impl MutVisitor for Subst {
             Kind::Abs(ty, term) => self.visit_abs(sp, ty, term),
             Kind::App(t1, t2) => self.visit_app(sp, t1, t2),
             Kind::Fix(term) => self.visit(term),
+            Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
             Kind::TyAbs(ty, term) => self.visit_tyabs(sp, ty, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
         }

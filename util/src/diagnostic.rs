@@ -51,7 +51,7 @@ impl Diagnostic<'_> {
         for i in 0..self.messages.len() {
             let msg: &Spanned<String> = &self.messages[i];
 
-            let mut squiggly = (1..msg.span.end.col - msg.span.start.col)
+            let mut squiggly = (1..msg.span.end.col.saturating_sub(msg.span.start.col))
                 .map(|_| '~')
                 .collect::<String>();
             squiggly.push('^');
