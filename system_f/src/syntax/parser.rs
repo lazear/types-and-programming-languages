@@ -191,15 +191,16 @@ impl<'s> Parser<'s> {
 
         if let TokenKind::TyArrow = self.kind() {
             self.bump();
-        }
-        while let Ok(rhs) = self.ty_atom() {
-            lhs = Type::Arrow(Box::new(lhs), Box::new(rhs));
-            if let TokenKind::TyArrow = self.kind() {
-                self.bump();
-            } else {
-                break;
+            while let Ok(rhs) = self.ty_atom() {
+                lhs = Type::Arrow(Box::new(lhs), Box::new(rhs));
+                if let TokenKind::TyArrow = self.kind() {
+                    self.bump();
+                } else {
+                    break;
+                }
             }
         }
+
         Ok(lhs)
     }
 
@@ -209,7 +210,10 @@ impl<'s> Parser<'s> {
         // self.expect(TokenKind::Proj)?;
         let body = self.parse()?;
         self.tyvar.pop();
-        Ok(Term::new(Kind::TyAbs(Box::new(Type::Unit), Box::new(body)), sp + self.span))
+        Ok(Term::new(
+            Kind::TyAbs(Box::new(Type::Unit), Box::new(body)),
+            sp + self.span,
+        ))
     }
 
     fn tmabs(&mut self, tmvar: String) -> Result<Term, Error> {
@@ -327,7 +331,6 @@ impl<'s> Parser<'s> {
                 break;
             }
         }
-        println!("{:?} {:?}", app.span, app.kind);
         Ok(app)
     }
 

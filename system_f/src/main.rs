@@ -27,8 +27,9 @@ fn main() {
     // dbg!(ctx.type_of(&id_bool));
     // dbg!(ctx.type_of(&app!(id_bool, lit!(true))));
 
-    let input = "(λX (λx: X. 0)) Bool 0";
-    let input = "((λX λY (λx: (X->Y). x)) Nat) Bool";
+    let input = "(λX λY λx: X->Y. x) Nat Unit";
+    // let input = "((λX λY (λx: (Y->Y->X). x)) Nat) Bool";
+    // let input = "(λX (λt:X. λf:X. t)) Nat 1 2";
     let mut p = Parser::new(input);
 
     loop {

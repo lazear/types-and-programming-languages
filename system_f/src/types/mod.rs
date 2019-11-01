@@ -1,11 +1,11 @@
 use crate::terms::{Kind, Literal, Term};
 use std::collections::VecDeque;
+use std::fmt;
 use util::span::Span;
-
 mod visit;
 use visit::{MutVisitor, Shift, Subst};
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq, PartialOrd)]
 pub enum Type {
     Unit,
     Nat,
@@ -76,16 +76,16 @@ impl Context {
             Kind::Abs(ty, t2) => {
                 self.push(*ty.clone());
                 let mut ty2 = self.type_of(t2)?;
-                self.pop();
 
+                println!("{:?} -: {:?}", ty2, t2);
                 // Shift::new(-1).visit(&mut ty2);
-
+                // println!("{:?} -: {:?}", ty2, t2);
+                self.pop();
                 Ok(Type::Arrow(ty.clone(), Box::new(ty2)))
             }
             Kind::App(t1, t2) => {
                 let ty1 = self.type_of(t1)?;
                 let ty2 = self.type_of(t2)?;
-                dbg!(t1.span);
                 match ty1 {
                     Type::Arrow(ty11, ty12) => {
                         if *ty11 == ty2 {
@@ -130,12 +130,25 @@ impl Context {
                     Type::Universal(mut ty12) => {
                         Shift::new(1).visit(&mut ty);
                         Subst::new(*ty).visit(&mut ty12);
-                        // Shift::new(-1).visit(&mut ty12);
+                        Shift::new(-1).visit(&mut ty12);
                         Ok(*ty12)
                     }
                     _ => Context::error(term, TypeErrorKind::NotUniversal),
                 }
             }
+        }
+    }
+}
+
+impl fmt::Debug for Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Type::Unit => write!(f, "Unit"),
+            Type::Bool => write!(f, "Bool"),
+            Type::Nat => write!(f, "Nat"),
+            Type::Var(v) => write!(f, "TyVar({})", v),
+            Type::Arrow(t1, t2) => write!(f, "({:?}->{:?})", t1, t2),
+            Type::Universal(ty) => write!(f, "forall X.{:?}", ty),
         }
     }
 }
