@@ -1,7 +1,7 @@
 use crate::types::Type;
 use std::fmt;
 use util::span::Span;
-mod visit;
+pub mod visit;
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub struct Term {

@@ -1,5 +1,5 @@
 use crate::terms::{Kind, Literal, Term};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use util::span::Span;
 mod visit;
@@ -10,36 +10,10 @@ pub enum Type {
     Unit,
     Nat,
     Bool,
+    Alias(String),
     Var(usize),
     Arrow(Box<Type>, Box<Type>),
     Universal(Box<Type>),
-}
-
-pub enum Binding {}
-
-#[derive(Clone, Debug, Default, PartialEq, PartialOrd)]
-pub struct Context {
-    stack: VecDeque<Type>,
-}
-
-impl Context {
-    pub fn push(&mut self, ty: Type) {
-        self.stack.push_front(ty);
-    }
-
-    pub fn pop(&mut self) {
-        self.stack
-            .pop_front()
-            .expect("Context::pop() with empty type stack");
-    }
-
-    pub fn len(&self) -> usize {
-        self.stack.len()
-    }
-
-    pub fn find(&self, idx: usize) -> Option<&Type> {
-        self.stack.get(idx)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -53,7 +27,47 @@ pub enum TypeErrorKind {
     ParameterMismatch(Box<Type>, Box<Type>, Span),
     NotArrow,
     NotUniversal,
-    UnboundVariable,
+    UnboundVariable(usize),
+}
+
+pub enum Binding {}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Context {
+    stack: VecDeque<Type>,
+    map: HashMap<String, Type>,
+}
+
+impl Context {
+    fn push(&mut self, ty: Type) {
+        self.stack.push_front(ty);
+    }
+
+    fn pop(&mut self) {
+        self.stack
+            .pop_front()
+            .expect("Context::pop() with empty type stack");
+    }
+
+    fn len(&self) -> usize {
+        self.stack.len()
+    }
+
+    fn find(&self, idx: usize) -> Option<&Type> {
+        self.stack.get(idx)
+    }
+
+    pub fn alias(&mut self, alias: String, ty: Type) {
+        self.map.insert(alias, ty);
+    }
+
+    fn aliaser(&self) -> Aliaser<'_> {
+        Aliaser { map: &self.map }
+    }
+
+    pub fn de_alias(&mut self, term: &mut Term) {
+        crate::terms::visit::MutVisitor::visit(self, term)
+    }
 }
 
 impl Context {
@@ -71,12 +85,11 @@ impl Context {
             Kind::Lit(Literal::Nat(_)) => Ok(Type::Nat),
             Kind::Var(idx) => self.find(*idx).cloned().ok_or_else(|| TypeError {
                 span: term.span,
-                kind: TypeErrorKind::UnboundVariable,
+                kind: TypeErrorKind::UnboundVariable(*idx),
             }),
             Kind::Abs(ty, t2) => {
                 self.push(*ty.clone());
-                let mut ty2 = self.type_of(t2)?;
-
+                let ty2 = self.type_of(t2)?;
                 // println!("{:?} -: {:?}", ty2, t2);
                 // Shift::new(-1).visit(&mut ty2);
                 // println!("{:?} -: {:?}", ty2, t2);
@@ -142,6 +155,43 @@ impl Context {
     }
 }
 
+struct Aliaser<'ctx> {
+    map: &'ctx HashMap<String, Type>,
+}
+
+impl<'ctx> MutVisitor for Aliaser<'ctx> {
+    fn visit(&mut self, ty: &mut Type) {
+        match ty {
+            Type::Unit | Type::Bool | Type::Nat => {}
+            Type::Var(v) => {}
+            Type::Alias(v) => {
+                if let Some(aliased) = self.map.get(v) {
+                    *ty = aliased.clone();
+                }
+            }
+            Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
+            Type::Universal(ty) => self.visit_universal(ty),
+        }
+    }
+}
+
+impl crate::terms::visit::MutVisitor for Context {
+    fn visit_abs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+        self.aliaser().visit(ty);
+        self.visit(term);
+    }
+
+    fn visit_tyabs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+        self.aliaser().visit(ty);
+        self.visit(term);
+    }
+
+    fn visit_tyapp(&mut self, sp: &mut Span, term: &mut Term, ty: &mut Type) {
+        self.aliaser().visit(ty);
+        self.visit(term);
+    }
+}
+
 impl fmt::Debug for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -149,6 +199,7 @@ impl fmt::Debug for Type {
             Type::Bool => write!(f, "Bool"),
             Type::Nat => write!(f, "Nat"),
             Type::Var(v) => write!(f, "TyVar({})", v),
+            Type::Alias(s) => write!(f, "{}", s),
             Type::Arrow(t1, t2) => write!(f, "({:?}->{:?})", t1, t2),
             Type::Universal(ty) => write!(f, "forall X.{:?}", ty),
         }

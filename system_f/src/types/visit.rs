@@ -2,6 +2,7 @@ use super::Type;
 
 pub trait MutVisitor: Sized {
     fn visit_var(&mut self, var: &mut usize) {}
+    fn visit_alias(&mut self, alias: &mut String) {}
 
     fn visit_arrow(&mut self, ty1: &mut Type, ty2: &mut Type) {
         self.visit(ty1);
@@ -16,6 +17,7 @@ pub trait MutVisitor: Sized {
         match ty {
             Type::Unit | Type::Bool | Type::Nat => {}
             Type::Var(v) => self.visit_var(v),
+            Type::Alias(s) => self.visit_alias(s),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
         }
@@ -72,6 +74,7 @@ impl MutVisitor for Subst {
                 *ty = self.ty.clone();
             }
             Type::Var(v) => self.visit_var(v),
+            Type::Alias(v) => self.visit_alias(v),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
         }

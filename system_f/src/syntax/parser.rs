@@ -163,11 +163,7 @@ impl<'s> Parser<'s> {
             TokenKind::Ident(s) => match self.ident()? {
                 Either::Constr(ty) => match self.tyvar.lookup(&ty) {
                     Some(idx) => Ok(Type::Var(idx)),
-                    None => {
-                        self.diagnostic
-                            .push(format!("unbound type variable {:?}", ty), self.span);
-                        self.error(ErrorKind::UnboundTypeVar)
-                    }
+                    None => Ok(Type::Alias(ty)),
                 },
                 Either::Ident(i) => self.error(ErrorKind::ExpectedType),
             },
