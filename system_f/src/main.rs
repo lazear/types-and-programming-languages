@@ -28,9 +28,8 @@ fn main() {
     // let input = "(λX λf:X->X. λa:X. f (f a)) Nat->Nat (\\x: Nat->Nat. x)";
     // letrec y = \\x: Nat. y succ x
     // let y = fix (\\y: Nat->Bool. \\x: Nat. y succ x) in y 0
-    // let input = "let y = fix (\\y: Nat->Bool. (\\x: Nat. y 0)) in y 0";
+    let input = "let y = fix (\\y: Nat->Bool. (\\x: Nat. iszero (succ x))) in y ";
     // let input = "let x = (\\y: Nat. succ 1) in x 0";
-    let input = "(\\x: Nat. x x )";
     let mut p = Parser::new(input);
 
     ctx.alias("Type".into(), arrow!(Type::Nat, Type::Bool));

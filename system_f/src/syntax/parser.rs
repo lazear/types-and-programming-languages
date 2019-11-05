@@ -73,6 +73,15 @@ pub enum Either<L, R> {
     Ident(R),
 }
 
+impl<T> Either<T, T> {
+    pub fn inner(self) -> T {
+        match self {
+            Either::Constr(t) => t,
+            Either::Ident(t) => t,
+        }
+    }
+}
+
 impl<'s> Parser<'s> {
     /// Create a new [`Parser`] for the input `&str`
     pub fn new(input: &'s str) -> Parser<'s> {
@@ -161,13 +170,20 @@ impl<'s> Parser<'s> {
                 self.expect(TokenKind::RParen)?;
                 Ok(r)
             }
-            TokenKind::Ident(s) => match self.ident()? {
-                Either::Constr(ty) => match self.tyvar.lookup(&ty) {
+            TokenKind::Ident(s) if s.starts_with(|ch: char| ch.is_ascii_uppercase()) => {
+                let ty = self.ident()?.inner();
+                match self.tyvar.lookup(&ty) {
                     Some(idx) => Ok(Type::Var(idx)),
                     None => Ok(Type::Alias(ty)),
-                },
-                Either::Ident(i) => self.error(ErrorKind::ExpectedType),
-            },
+                }
+            }
+            // TokenKind::Ident(s) => match self.ident()? {
+            //     Either::Constr(ty) => match self.tyvar.lookup(&ty) {
+            //         Some(idx) => Ok(Type::Var(idx)),
+            //         None => Ok(Type::Alias(ty)),
+            //     },
+            //     Either::Ident(i) => self.error(ErrorKind::ExpectedType),
+            // },
             _ => self.error(ErrorKind::ExpectedType),
         }
     }
@@ -337,10 +353,10 @@ impl<'s> Parser<'s> {
     /// application = atom application' | atom
     /// application' = atom application' | empty
     fn application(&mut self) -> Result<Term, Error> {
-        let mut app = dbg!(self.atom())?;
+        let mut app = (self.atom())?;
         loop {
             let sp = app.span;
-            if let Ok(ty) = dbg!(self.ty()) {
+            if let Ok(ty) = (self.ty()) {
                 // Full type inference for System F is undecidable
                 // Additionally, even partial type reconstruction,
                 // where only type application types are erased is also
@@ -353,7 +369,7 @@ impl<'s> Parser<'s> {
                 // erasep(λX. t) = λX. erasep(t)
                 // erasep(t T) = erasep(t) []      <--- erasure of TyApp
                 app = Term::new(Kind::TyApp(Box::new(app), Box::new(ty)), sp + self.span);
-            } else if let Ok(term) = dbg!(self.atom()) {
+            } else if let Ok(term) = (self.atom()) {
                 app = Term::new(Kind::App(Box::new(app), Box::new(term)), sp + self.span);
             } else {
                 break;
@@ -361,7 +377,7 @@ impl<'s> Parser<'s> {
 
             // Explicitly end an application
             if self.kind() == &TokenKind::RParen {
-                // self.bump();
+                self.bump();
             }
         }
         Ok(app)

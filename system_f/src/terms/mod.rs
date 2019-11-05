@@ -71,7 +71,7 @@ impl fmt::Debug for Term {
             Kind::Fix(term) => write!(f, "Fix {:?}", term),
             Kind::Primitive(p) => write!(f, "{:?}", p),
             Kind::Let(t1, t2) => write!(f, "let _ = {:?} in {:?}", t1, t2),
-            Kind::App(t1, t2) => write!(f, "{:?} {:?}", t1, t2),
+            Kind::App(t1, t2) => write!(f, "({:?} {:?})", t1, t2),
             Kind::TyAbs(ty, term) => write!(f, "(λTy{:?} {:?})", ty, term),
             Kind::TyApp(term, ty) => write!(f, "({:?} [{:?}])", term, ty),
         }
