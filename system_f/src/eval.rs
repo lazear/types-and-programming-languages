@@ -20,24 +20,43 @@ impl<'ctx> Eval<'ctx> {
         }
     }
 
+    fn eval_primitive(&self, p: Primitive, mut term: Term) -> Option<Term> {
+        fn map<F: Fn(u32) -> u32>(f: F, mut term: Term) -> Option<Term> {
+            match &term.kind {
+                Kind::Lit(Literal::Nat(n)) => {
+                    term.kind = Kind::Lit(Literal::Nat(f(*n)));
+                    Some(term)
+                }
+                _ => None,
+            }
+        }
+
+        match p {
+            Primitive::Succ => map(|l| l + 1, term),
+            Primitive::Pred => map(|l| l.saturating_sub(1), term),
+            Primitive::IsZero => match &term.kind {
+                Kind::Lit(Literal::Nat(0)) => {
+                    Some(Term::new(Kind::Lit(Literal::Bool(true)), term.span))
+                }
+                _ => Some(Term::new(Kind::Lit(Literal::Bool(false)), term.span)),
+            },
+        }
+    }
+
     pub fn small_step(&self, term: Term) -> Option<Term> {
         match term.kind {
             Kind::App(t1, t2) => {
                 if self.normal_form(&t2) {
-                    if let Term {
-                        kind: Kind::Abs(_, mut abs),
-                        ..
-                    } = *t1
-                    {
-                        // We have a B-redex now
-                        term_subst(*t2, abs.as_mut());
-                        Some(*abs)
-                    } else {
-                        // assuming `term` is well typed, then t1 must be
-                        // beta-reducible to an abstraction. We perform an
-                        // additional B-reduction, returning a new App
-                        let t = self.small_step(*t1)?;
-                        Some(Term::new(Kind::App(Box::new(t), t2), term.span))
+                    match t1.kind {
+                        Kind::Abs(_, mut abs) => {
+                            term_subst(*t2, abs.as_mut());
+                            Some(*abs)
+                        }
+                        Kind::Primitive(p) => self.eval_primitive(p, *t2),
+                        _ => {
+                            let t = self.small_step(*t1)?;
+                            Some(Term::new(Kind::App(Box::new(t), t2), term.span))
+                        }
                     }
                 } else if self.normal_form(&t1) {
                     // t1 is in normal form, but t2 is not, so we will
@@ -64,6 +83,7 @@ impl<'ctx> Eval<'ctx> {
                 Kind::TyAbs(_, tm2) => Some(Term::new(Kind::Abs(ty, tm2), tm1.span)),
                 _ => None,
             },
+
             _ => None,
         }
     }

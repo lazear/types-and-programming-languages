@@ -40,7 +40,7 @@ fn main() {
                     let y = id Nat 0 in 
                     let z = id Bool true in 
                     z";
-    let input = "(\\x: Boolv. x)";
+    let input = "succ 1";
     let mut p = Parser::new(input);
 
     ctx.alias("Type".into(), arrow!(Type::Nat, Type::Bool));
