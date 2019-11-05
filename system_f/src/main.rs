@@ -25,8 +25,12 @@ fn main() {
     let id_bool = tyapp!(id.clone(), Nat);
     // let input = "(λX λY λx: X->Y. x) Nat Unit";
     // let input = "((λX λY (λx: (Y->Y->X). x)) Nat) Bool";
-    let input = "(λX λf:X->X. λa:X. f (f a)) Nat->Nat (\\x: Nat->Nat. x)";
-    let input = "iszero 0";
+    // let input = "(λX λf:X->X. λa:X. f (f a)) Nat->Nat (\\x: Nat->Nat. x)";
+    // letrec y = \\x: Nat. y succ x
+    // let y = fix (\\y: Nat->Bool. \\x: Nat. y succ x) in y 0
+    // let input = "let y = fix (\\y: Nat->Bool. (\\x: Nat. y 0)) in y 0";
+    // let input = "let x = (\\y: Nat. succ 1) in x 0";
+    let input = "(\\x: Nat. x x )";
     let mut p = Parser::new(input);
 
     ctx.alias("Type".into(), arrow!(Type::Nat, Type::Bool));
@@ -36,6 +40,7 @@ fn main() {
             Ok(mut term) => {
                 // replace any type aliases with the actual type
                 ctx.de_alias(&mut term);
+                dbg!(&term);
                 match ctx.type_of(&term) {
                     Ok(ty) => println!("{:?}\n-: {:?}", term, ty),
                     Err(tyerr) => match tyerr.kind {

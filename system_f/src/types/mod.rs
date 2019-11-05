@@ -79,6 +79,7 @@ impl Context {
     }
 
     pub fn type_of(&mut self, term: &Term) -> Result<Type, TypeError> {
+        dbg!(&self.stack);
         match term.kind() {
             Kind::Lit(Literal::Unit) => Ok(Type::Unit),
             Kind::Lit(Literal::Bool(_)) => Ok(Type::Bool),
@@ -136,7 +137,9 @@ impl Context {
             Kind::Let(t1, t2) => {
                 let ty = self.type_of(t1)?;
                 self.push(ty);
-                self.type_of(t2)
+                let y = self.type_of(t2);
+                self.pop();
+                y
             }
             Kind::TyAbs(ty, term) => {
                 let ty2 = self.type_of(term)?;

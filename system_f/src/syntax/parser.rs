@@ -16,13 +16,14 @@ pub struct DeBruijnIndexer {
 
 impl DeBruijnIndexer {
     pub fn push(&mut self, hint: String) -> usize {
-        if self.inner.contains(&hint) {
-            self.push(format!("{}'", hint))
-        } else {
-            let idx = self.inner.len();
-            self.inner.push_front(hint);
-            idx
-        }
+        // if self.inner.contains(&hint) {
+        //     // self.push(format!("{}'", hint))
+        //     self.lookup(&hint).unwrap()
+        // } else {
+        let idx = self.inner.len();
+        self.inner.push_front(hint);
+        idx
+        // }
     }
 
     pub fn pop(&mut self) {
@@ -238,10 +239,12 @@ impl<'s> Parser<'s> {
             Either::Ident(id) => id,
         };
         self.expect(TokenKind::Equals)?;
+
         self.tmvar.push(id);
         let t1 = self.parse()?;
         self.expect(TokenKind::In)?;
         let t2 = self.parse()?;
+        self.tmvar.pop();
         Ok(Term::new(
             Kind::Let(Box::new(t1), Box::new(t2)),
             sp + self.span,
@@ -297,6 +300,8 @@ impl<'s> Parser<'s> {
             TokenKind::Pred => Primitive::Pred,
             _ => return self.error(ErrorKind::Unknown),
         };
+        dbg!(self.kind());
+        dbg!(&self.tmvar);
         Ok(Term::new(Kind::Primitive(p), self.span))
     }
 
@@ -323,6 +328,7 @@ impl<'s> Parser<'s> {
                 },
             },
             TokenKind::Nat(_) | TokenKind::True | TokenKind::False => self.literal(),
+            TokenKind::Eof => self.error(ErrorKind::Eof),
             _ => self.error(ErrorKind::ExpectedAtom),
         }
     }
@@ -331,11 +337,10 @@ impl<'s> Parser<'s> {
     /// application = atom application' | atom
     /// application' = atom application' | empty
     fn application(&mut self) -> Result<Term, Error> {
-        let mut app = self.atom()?;
+        let mut app = dbg!(self.atom())?;
         loop {
-            // dbg!(self.kind());
             let sp = app.span;
-            if let Ok(ty) = self.ty() {
+            if let Ok(ty) = dbg!(self.ty()) {
                 // Full type inference for System F is undecidable
                 // Additionally, even partial type reconstruction,
                 // where only type application types are erased is also
@@ -348,7 +353,7 @@ impl<'s> Parser<'s> {
                 // erasep(λX. t) = λX. erasep(t)
                 // erasep(t T) = erasep(t) []      <--- erasure of TyApp
                 app = Term::new(Kind::TyApp(Box::new(app), Box::new(ty)), sp + self.span);
-            } else if let Ok(term) = self.atom() {
+            } else if let Ok(term) = dbg!(self.atom()) {
                 app = Term::new(Kind::App(Box::new(app), Box::new(term)), sp + self.span);
             } else {
                 break;
@@ -356,7 +361,7 @@ impl<'s> Parser<'s> {
 
             // Explicitly end an application
             if self.kind() == &TokenKind::RParen {
-                self.bump();
+                // self.bump();
             }
         }
         Ok(app)
