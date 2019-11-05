@@ -9,6 +9,13 @@ pub struct Term {
     pub kind: Kind,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+pub enum Primitive {
+    Succ,
+    Pred,
+    IsZero,
+}
+
 /// Abstract syntax of the parametric polymorphic lambda calculus
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Kind {
@@ -18,6 +25,8 @@ pub enum Kind {
     Var(usize),
     /// Fixpoint operator/Y combinator
     Fix(Box<Term>),
+
+    Primitive(Primitive),
 
     Let(Box<Term>, Box<Term>),
     /// A lambda abstraction
@@ -60,6 +69,7 @@ impl fmt::Debug for Term {
             Kind::Var(v) => write!(f, "#{}", v),
             Kind::Abs(ty, term) => write!(f, "(λ_:{:?}. {:?})", ty, term),
             Kind::Fix(term) => write!(f, "Fix {:?}", term),
+            Kind::Primitive(p) => write!(f, "{:?}", p),
             Kind::Let(t1, t2) => write!(f, "let _ = {:?} in {:?}", t1, t2),
             Kind::App(t1, t2) => write!(f, "{:?} {:?}", t1, t2),
             Kind::TyAbs(ty, term) => write!(f, "(λTy{:?} {:?})", ty, term),

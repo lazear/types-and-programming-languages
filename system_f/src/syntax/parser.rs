@@ -6,7 +6,7 @@ use std::iter::Peekable;
 use util::diagnostic::Diagnostic;
 use util::span::*;
 
-use crate::terms::{Kind, Literal, Term};
+use crate::terms::{Kind, Literal, Primitive, Term};
 use crate::types::Type;
 
 #[derive(Clone, Debug, Default)]
@@ -290,12 +290,23 @@ impl<'s> Parser<'s> {
         Ok(Term::new(Kind::Lit(lit), self.span))
     }
 
+    fn primitive(&mut self) -> Result<Term, Error> {
+        let p = match self.bump() {
+            TokenKind::IsZero => Primitive::IsZero,
+            TokenKind::Succ => Primitive::Succ,
+            TokenKind::Pred => Primitive::Pred,
+            _ => return self.error(ErrorKind::Unknown),
+        };
+        Ok(Term::new(Kind::Primitive(p), self.span))
+    }
+
     fn atom(&mut self) -> Result<Term, Error> {
         match self.kind() {
             TokenKind::LParen => self.paren(),
             TokenKind::Lambda => self.lambda(),
             TokenKind::Let => self.letexpr(),
             TokenKind::Fix => self.fix(),
+            TokenKind::IsZero | TokenKind::Succ | TokenKind::Pred => self.primitive(),
             TokenKind::Ident(s) => match self.ident()? {
                 Either::Constr(ty) => {
                     self.diagnostic

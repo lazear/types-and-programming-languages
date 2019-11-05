@@ -26,6 +26,8 @@ pub trait MutVisitor: Sized {
         self.visit(term);
     }
 
+    fn visit_primitive(&mut self, prim: &mut Primitive) {}
+
     fn visit(&mut self, term: &mut Term) {
         let sp = &mut term.span;
         match &mut term.kind {
@@ -35,6 +37,7 @@ pub trait MutVisitor: Sized {
             Kind::App(t1, t2) => self.visit_app(sp, t1, t2),
             // Do we need a separate branch?
             Kind::Fix(term) => self.visit(term),
+            Kind::Primitive(p) => self.visit_primitive(p),
             Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
             Kind::TyAbs(ty, term) => self.visit_tyabs(sp, ty, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
@@ -101,6 +104,7 @@ impl MutVisitor for Subst {
             Kind::Abs(ty, term) => self.visit_abs(sp, ty, term),
             Kind::App(t1, t2) => self.visit_app(sp, t1, t2),
             Kind::Fix(term) => self.visit(term),
+            Kind::Primitive(p) => self.visit_primitive(p),
             Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
             Kind::TyAbs(ty, term) => self.visit_tyabs(sp, ty, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),

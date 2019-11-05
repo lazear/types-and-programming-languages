@@ -1,4 +1,4 @@
-use crate::terms::{Kind, Literal, Term};
+use crate::terms::{Kind, Literal, Primitive, Term};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use util::span::Span;
@@ -129,6 +129,10 @@ impl Context {
                     _ => Context::error(term, TypeErrorKind::NotArrow),
                 }
             }
+            Kind::Primitive(prim) => match prim {
+                Primitive::IsZero => Ok(Type::Arrow(Box::new(Type::Nat), Box::new(Type::Bool))),
+                _ => Ok(Type::Arrow(Box::new(Type::Nat), Box::new(Type::Nat))),
+            },
             Kind::Let(t1, t2) => {
                 let ty = self.type_of(t1)?;
                 self.push(ty);

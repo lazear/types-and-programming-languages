@@ -26,7 +26,7 @@ fn main() {
     // let input = "(λX λY λx: X->Y. x) Nat Unit";
     // let input = "((λX λY (λx: (Y->Y->X). x)) Nat) Bool";
     let input = "(λX λf:X->X. λa:X. f (f a)) Nat->Nat (\\x: Nat->Nat. x)";
-    let input = "let x = (\\y: Type. y) in (\\x: Nat. false) 0";
+    let input = "iszero 0";
     let mut p = Parser::new(input);
 
     ctx.alias("Type".into(), arrow!(Type::Nat, Type::Bool));
