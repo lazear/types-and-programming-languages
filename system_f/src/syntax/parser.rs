@@ -148,22 +148,6 @@ impl<'s> Parser<'s> {
                 self.bump();
                 Ok(Type::Unit)
             }
-            // TokenKind::LBrace => {
-            //     let mut span = self.span;
-            //     self.bump();
-            //     let mut fields = vec![self.ty_record_field()?];
-            //     while let Ok(TokenKind::Comma) = self.peek() {
-            //         self.expect(TokenKind::Comma)?;
-            //         fields.push(self.ty_record_field()?);
-            //     }
-            //     self.expect(TokenKind::RBrace)?;
-            //     span = span + self.span;
-            //     Ok(Type::Record(Record {
-            //         // span,
-            //         ident: String::new(),
-            //         fields,
-            //     }))
-            // }
             TokenKind::LParen => {
                 self.bump();
                 let r = self.ty()?;
@@ -177,13 +161,6 @@ impl<'s> Parser<'s> {
                     None => Ok(Type::Alias(ty)),
                 }
             }
-            // TokenKind::Ident(s) => match self.ident()? {
-            //     Either::Constr(ty) => match self.tyvar.lookup(&ty) {
-            //         Some(idx) => Ok(Type::Var(idx)),
-            //         None => Ok(Type::Alias(ty)),
-            //     },
-            //     Either::Ident(i) => self.error(ErrorKind::ExpectedType),
-            // },
             _ => self.error(ErrorKind::ExpectedType),
         }
     }
@@ -256,8 +233,8 @@ impl<'s> Parser<'s> {
         };
         self.expect(TokenKind::Equals)?;
 
-        self.tmvar.push(id);
         let t1 = self.parse()?;
+        self.tmvar.push(id);
         self.expect(TokenKind::In)?;
         let t2 = self.parse()?;
         self.tmvar.pop();
@@ -353,10 +330,10 @@ impl<'s> Parser<'s> {
     /// application = atom application' | atom
     /// application' = atom application' | empty
     fn application(&mut self) -> Result<Term, Error> {
-        let mut app = (self.atom())?;
+        let mut app = self.atom()?;
         loop {
             let sp = app.span;
-            if let Ok(ty) = (self.ty()) {
+            if let Ok(ty) = self.ty() {
                 // Full type inference for System F is undecidable
                 // Additionally, even partial type reconstruction,
                 // where only type application types are erased is also
@@ -369,15 +346,10 @@ impl<'s> Parser<'s> {
                 // erasep(λX. t) = λX. erasep(t)
                 // erasep(t T) = erasep(t) []      <--- erasure of TyApp
                 app = Term::new(Kind::TyApp(Box::new(app), Box::new(ty)), sp + self.span);
-            } else if let Ok(term) = (self.atom()) {
+            } else if let Ok(term) = self.atom() {
                 app = Term::new(Kind::App(Box::new(app), Box::new(term)), sp + self.span);
             } else {
                 break;
-            }
-
-            // Explicitly end an application
-            if self.kind() == &TokenKind::RParen {
-                self.bump();
             }
         }
         Ok(app)

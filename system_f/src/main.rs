@@ -21,15 +21,11 @@ pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
 fn main() {
     let mut ctx = types::Context::default();
 
-    let id = tyabs!(Type::Var(0), abs!(Type::Var(0), var!(0)));
-    let id_bool = tyapp!(id.clone(), Nat);
-    // let input = "(λX λY λx: X->Y. x) Nat Unit";
-    // let input = "((λX λY (λx: (Y->Y->X). x)) Nat) Bool";
-    // let input = "(λX λf:X->X. λa:X. f (f a)) Nat->Nat (\\x: Nat->Nat. x)";
-    // letrec y = \\x: Nat. y succ x
-    // let y = fix (\\y: Nat->Bool. \\x: Nat. y succ x) in y 0
-    let input = "let y = fix (\\y: Nat->Bool. (\\x: Nat. iszero (succ x))) in y ";
-    // let input = "let x = (\\y: Nat. succ 1) in x 0";
+    let input = "   let id = (\\X \\x: X. x) in 
+                    let y = id Nat 0 in 
+                    let z = id Bool true in 
+                    z";
+
     let mut p = Parser::new(input);
 
     ctx.alias("Type".into(), arrow!(Type::Nat, Type::Bool));
