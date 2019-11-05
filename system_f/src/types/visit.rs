@@ -1,4 +1,4 @@
-use super::Type;
+use super::{Type, Variant};
 
 pub trait MutVisitor: Sized {
     fn visit_var(&mut self, var: &mut usize) {}
@@ -13,10 +13,17 @@ pub trait MutVisitor: Sized {
         self.visit(inner);
     }
 
+    fn visit_variant(&mut self, variant: &mut Vec<Variant>) {
+        for v in variant {
+            self.visit(&mut v.ty);
+        }
+    }
+
     fn visit(&mut self, ty: &mut Type) {
         match ty {
             Type::Unit | Type::Bool | Type::Nat => {}
             Type::Var(v) => self.visit_var(v),
+            Type::Variant(v) => self.visit_variant(v),
             Type::Alias(s) => self.visit_alias(s),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
@@ -74,6 +81,7 @@ impl MutVisitor for Subst {
                 *ty = self.ty.clone();
             }
             Type::Var(v) => self.visit_var(v),
+            Type::Variant(v) => self.visit_variant(v),
             Type::Alias(v) => self.visit_alias(v),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),

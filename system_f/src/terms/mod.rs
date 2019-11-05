@@ -28,6 +28,8 @@ pub enum Kind {
 
     Primitive(Primitive),
 
+    Constructor(String, Box<Term>, Box<Type>),
+
     Let(Box<Term>, Box<Term>),
     /// A lambda abstraction
     Abs(Box<Type>, Box<Term>),
@@ -51,6 +53,13 @@ impl Term {
         Term { span, kind }
     }
 
+    pub const fn unit() -> Term {
+        Term {
+            span: Span::dummy(),
+            kind: Kind::Lit(Literal::Unit),
+        }
+    }
+
     #[inline]
     pub fn span(&self) -> Span {
         self.span
@@ -70,6 +79,7 @@ impl fmt::Debug for Term {
             Kind::Abs(ty, term) => write!(f, "(λ_:{:?}. {:?})", ty, term),
             Kind::Fix(term) => write!(f, "Fix {:?}", term),
             Kind::Primitive(p) => write!(f, "{:?}", p),
+            Kind::Constructor(label, tm, ty) => write!(f, "{} ({:?}) as {:?}", label, tm, ty),
             Kind::Let(t1, t2) => write!(f, "let _ = {:?} in {:?}", t1, t2),
             Kind::App(t1, t2) => write!(f, "({:?} {:?})", t1, t2),
             Kind::TyAbs(ty, term) => write!(f, "(λTy{:?} {:?})", ty, term),

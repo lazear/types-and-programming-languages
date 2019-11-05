@@ -2,7 +2,7 @@ use crate::terms::{Kind, Literal, Primitive, Term};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use util::span::Span;
-mod visit;
+pub mod visit;
 use visit::{MutVisitor, Shift, Subst};
 
 #[derive(Clone, PartialEq, PartialOrd)]
@@ -12,8 +12,15 @@ pub enum Type {
     Bool,
     Alias(String),
     Var(usize),
+    Variant(Vec<Variant>),
     Arrow(Box<Type>, Box<Type>),
     Universal(Box<Type>),
+}
+
+#[derive(Clone, PartialEq, PartialOrd)]
+pub struct Variant {
+    pub label: String,
+    pub ty: Type,
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -27,6 +34,7 @@ pub enum TypeErrorKind {
     ParameterMismatch(Box<Type>, Box<Type>, Span),
     NotArrow,
     NotUniversal,
+    NotVariant,
     UnboundVariable(usize),
 }
 
@@ -79,7 +87,6 @@ impl Context {
     }
 
     pub fn type_of(&mut self, term: &Term) -> Result<Type, TypeError> {
-        dbg!(&self.stack);
         match term.kind() {
             Kind::Lit(Literal::Unit) => Ok(Type::Unit),
             Kind::Lit(Literal::Bool(_)) => Ok(Type::Bool),
@@ -134,6 +141,29 @@ impl Context {
                 Primitive::IsZero => Ok(Type::Arrow(Box::new(Type::Nat), Box::new(Type::Bool))),
                 _ => Ok(Type::Arrow(Box::new(Type::Nat), Box::new(Type::Nat))),
             },
+            Kind::Constructor(label, tm, ty) => match ty.as_ref() {
+                Type::Variant(fields) => {
+                    for f in fields {
+                        if label == &f.label {
+                            let ty_ = self.type_of(tm)?;
+                            if ty_ == f.ty {
+                                return Ok(*ty.clone());
+                            } else {
+                                return Context::error(
+                                    term,
+                                    TypeErrorKind::ParameterMismatch(
+                                        Box::new(ty_),
+                                        Box::new(f.ty.clone()),
+                                        tm.span,
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                    Context::error(term, TypeErrorKind::NotVariant)
+                }
+                _ => Context::error(term, TypeErrorKind::NotVariant),
+            },
             Kind::Let(t1, t2) => {
                 let ty = self.type_of(t1)?;
                 self.push(ty);
@@ -176,6 +206,7 @@ impl<'ctx> MutVisitor for Aliaser<'ctx> {
                     *ty = aliased.clone();
                 }
             }
+            Type::Variant(v) => self.visit_variant(v),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
         }
@@ -197,6 +228,11 @@ impl crate::terms::visit::MutVisitor for Context {
         self.aliaser().visit(ty);
         self.visit(term);
     }
+
+    fn visit_constructor(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
+        self.aliaser().visit(ty);
+        self.visit(term);
+    }
 }
 
 impl fmt::Debug for Type {
@@ -206,6 +242,14 @@ impl fmt::Debug for Type {
             Type::Bool => write!(f, "Bool"),
             Type::Nat => write!(f, "Nat"),
             Type::Var(v) => write!(f, "TyVar({})", v),
+            Type::Variant(v) => write!(
+                f,
+                "{:?}",
+                v.iter()
+                    .map(|x| format!("{}: {:?}", x.label, x.ty))
+                    .collect::<Vec<String>>()
+                    .join(" | ")
+            ),
             Type::Alias(s) => write!(f, "{}", s),
             Type::Arrow(t1, t2) => write!(f, "({:?}->{:?})", t1, t2),
             Type::Universal(ty) => write!(f, "forall X.{:?}", ty),
