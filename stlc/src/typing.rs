@@ -1,11 +1,5 @@
-use crate::term::{Field, Term};
-use crate::visitor::{Direction, Shifting, Visitor};
-use std::cell::RefCell;
-use std::collections::HashMap;
+use crate::term::Term;
 use std::fmt;
-use std::rc::Rc;
-
-use util::span::Span;
 
 #[derive(Clone, PartialEq, PartialOrd)]
 pub enum Type {

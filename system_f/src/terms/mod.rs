@@ -191,11 +191,17 @@ macro_rules! tyapp {
 }
 
 macro_rules! tyabs {
-    ($ty:expr, $t:expr) => {
+    ( $t:expr) => {
         crate::terms::Term::new(
-            crate::terms::Kind::TyAbs(Box::new($ty), Box::new($t)),
+            crate::terms::Kind::TyAbs(Box::new($t)),
             util::span::Span::dummy(),
         )
+    };
+}
+
+macro_rules! prim {
+    ($t:expr) => {
+        crate::terms::Term::new(crate::terms::Kind::Primitive($t), util::span::Span::dummy())
     };
 }
 

@@ -1,7 +1,6 @@
 use super::term::*;
-use super::typing::{Context, Record, RecordField};
+use super::typing::Context;
 use super::visitor::{Direction, MutVisitor, Shifting, Substitution};
-use std::rc::Rc;
 
 #[derive(Debug)]
 pub enum Error {
@@ -104,7 +103,7 @@ fn eval1(ctx: &Context, term: Term) -> Result<Box<Term>, Error> {
     }
 }
 
-pub fn eval(ctx: &Context, mut term: Term) -> Result<Term, Error> {
+pub fn eval(ctx: &Context, term: Term) -> Result<Term, Error> {
     let mut tp = term;
     loop {
         println!("  -> {}", &tp);

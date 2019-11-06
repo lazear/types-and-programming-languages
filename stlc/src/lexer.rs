@@ -1,4 +1,4 @@
-use util::span::{Location, Span, Spanned};
+use util::span::{Location, Span};
 
 use std::char;
 use std::iter::Peekable;
@@ -36,7 +36,6 @@ pub enum TokenKind {
     Equals,
     Bar,
     Invalid(char),
-    Dummy,
     Eof,
 }
 
@@ -47,13 +46,6 @@ pub struct Token {
 }
 
 impl Token {
-    pub const fn dummy() -> Token {
-        Token {
-            kind: TokenKind::Dummy,
-            span: Span::dummy(),
-        }
-    }
-
     pub const fn new(kind: TokenKind, span: Span) -> Token {
         Token { kind, span }
     }

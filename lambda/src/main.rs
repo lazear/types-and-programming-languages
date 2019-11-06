@@ -5,7 +5,6 @@ use parser::Parser;
 
 use context::Context;
 use parser::{RcTerm, Term};
-use util::span::Span;
 
 fn shift1(d: isize, c: isize, tm: RcTerm) -> RcTerm {
     match &tm as &Term {
@@ -29,7 +28,7 @@ fn shift(d: isize, tm: RcTerm) -> RcTerm {
 
 fn subst_walk(j: isize, s: RcTerm, c: isize, t: RcTerm) -> RcTerm {
     match &t as &Term {
-        Term::TmVar(sp, x) => {
+        Term::TmVar(_, x) => {
             if *x as isize == j + c {
                 shift(c, s)
             } else {
@@ -54,7 +53,7 @@ fn term_subst_top(s: RcTerm, tm: RcTerm) -> RcTerm {
     shift(-1, subst(0, shift(1, s), tm))
 }
 
-fn isval(ctx: &Context, tm: RcTerm) -> bool {
+fn isval(_ctx: &Context, tm: RcTerm) -> bool {
     match &tm as &Term {
         Term::TmAbs(_, _) => true,
         _ => false,
@@ -63,7 +62,7 @@ fn isval(ctx: &Context, tm: RcTerm) -> bool {
 
 fn eval1(ctx: &Context, tm: RcTerm) -> RcTerm {
     match &tm as &Term {
-        Term::TmApp(sp, t, v) if isval(ctx, v.clone()) => {
+        Term::TmApp(_, t, v) if isval(ctx, v.clone()) => {
             if let Term::TmAbs(_, t2) = &t as &Term {
                 term_subst_top(v.clone(), t2.clone())
             } else {

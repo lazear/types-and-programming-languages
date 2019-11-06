@@ -45,18 +45,6 @@ pub enum Term {
     TmApp(Span, RcTerm, RcTerm),
 }
 
-impl Term {
-    fn span(&self) -> Span {
-        match self {
-            Term::TmVar(sp, _) => *sp,
-            Term::TmAbs(sp, _) => *sp,
-            Term::TmApp(sp, _, _) => *sp,
-        }
-    }
-
-    pub fn pretty(&self, ctx: &Context) {}
-}
-
 pub struct Parser<'s> {
     ctx: Context,
     diagnostic: Diagnostic<'s>,
@@ -75,11 +63,6 @@ impl<'s> Parser<'s> {
             lexer: Lexer::new(input.chars()).peekable(),
             span: Span::default(),
         }
-    }
-
-    /// Return the last parsing error as a formatted message, if it exists
-    pub fn last_error(&mut self) -> Option<String> {
-        self.diagnostic.pop()
     }
 
     fn consume(&mut self) -> Option<Spanned<Token>> {
@@ -114,7 +97,7 @@ impl<'s> Parser<'s> {
         // Bind variable into a new context before parsing the body
         // of the lambda abstraction
         let prev_ctx = self.ctx.clone();
-        let (ctx, var) = match var.data {
+        let (ctx, _) = match var.data {
             Token::Var(ch) => {
                 let (ctx, idx) = self.ctx.bind(format!("{}", ch));
                 (ctx, Term::TmVar(var.span, idx))

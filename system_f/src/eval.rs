@@ -210,3 +210,50 @@ impl terms::visit::MutVisitor for TyTermSubst {
         self.visit(term);
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn eval_literal() {
+        let ctx = crate::types::Context::default();
+        let eval = Eval::with_context(&ctx);
+        assert_eq!(eval.small_step(lit!(false)), None);
+    }
+
+    #[test]
+    fn eval_application() {
+        let ctx = crate::types::Context::default();
+        let eval = Eval::with_context(&ctx);
+        let tm = app!(
+            abs!(Type::Nat, app!(prim!(Primitive::Succ), var!(0))),
+            nat!(1)
+        );
+
+        let t1 = eval.small_step(tm);
+        assert_eq!(t1, Some(app!(prim!(Primitive::Succ), nat!(1))));
+        let t2 = eval.small_step(t1.unwrap());
+        assert_eq!(t2, Some(nat!(2)));
+        let t3 = eval.small_step(t2.unwrap());
+        assert_eq!(t3, None);
+    }
+
+    #[test]
+    fn eval_type_application() {
+        let ctx = crate::types::Context::default();
+        let eval = Eval::with_context(&ctx);
+        let tm = tyapp!(
+            tyabs!(abs!(Type::Var(0), app!(prim!(Primitive::Succ), var!(0)))),
+            Type::Nat
+        );
+
+        let t1 = eval.small_step(tm);
+        assert_eq!(
+            t1,
+            Some(abs!(Type::Nat, app!(prim!(Primitive::Succ), var!(0))))
+        );
+        let t2 = eval.small_step(t1.unwrap());
+        assert_eq!(t2, None);
+    }
+}

@@ -8,11 +8,3 @@ edition = "2018"
 
 [dependencies]
 util = { path = "../util" }
-
-[dev-dependencies]
-criterion = "0.2"
-
-[[bench]]
-name = "simply_typed"
-harness = false
-

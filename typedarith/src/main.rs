@@ -1,4 +1,3 @@
-use util;
 mod ast;
 mod lexer;
 mod parser;

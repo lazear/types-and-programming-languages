@@ -6,7 +6,7 @@ mod syntax;
 mod types;
 
 use syntax::parser::Parser;
-use terms::Term;
+use terms::{Kind, Term};
 use types::{Type, TypeError, TypeErrorKind, Variant};
 use util;
 
@@ -55,6 +55,7 @@ fn eval(ctx: &mut types::Context, mut term: Term) -> Result<Term, TypeError> {
     ctx.de_alias(&mut term);
     let ty = ctx.type_of(&term)?;
     println!("  -: {:?}", ty);
+
     let ev = eval::Eval::with_context(ctx);
     let mut t = term;
     let fin = loop {
@@ -68,6 +69,40 @@ fn eval(ctx: &mut types::Context, mut term: Term) -> Result<Term, TypeError> {
     println!("===> {}", fin);
     Ok(fin)
 }
+
+// fn walk(src: &str, term: &Term) {
+//     code_format(src, &[(format!("{}", term), term.span)]);
+//     match &term.kind {
+//         Kind::Abs(ty, tm) => {
+//             walk(src, tm);
+//         }
+//         Kind::Fix(tm) => {
+//             walk(src, tm);
+//         }
+//         Kind::Primitive(p) => {}
+//         Kind::Constructor(label, tm, ty) => {
+//             walk(src, tm);
+//         }
+//         Kind::Case(term, arms) => {
+//             walk(src, term);
+//             for a in arms {
+//                 walk(src, &a.term);
+//             }
+//         }
+//         Kind::Let(t1, t2) => {
+//             walk(src, t1);
+//             walk(src, t2);
+//         }
+//         Kind::App(t1, t2) => {
+//             walk(src, t1);
+//             walk(src, t2);
+//         }
+//         Kind::TyAbs(t) => walk(src, t),
+//         Kind::TyApp(t, _) => walk(src, t),
+//         _ => {}
+//     }
+// }
+
 fn main() {
     let mut ctx = types::Context::default();
 
@@ -75,17 +110,20 @@ fn main() {
     //                 let y = id Nat 0 in
     //                 let z = id Bool true in
     //                 z";
-    // let input = "let id = (\\X (\\x: X. x)) Nat in let y = (\\z: Nat. id z) in y 1";
+    // let input = "let id = (\\X (\\x: X. x)) Nat in let y = (\\z: Nat. id z) in y
+    // 1";
     //
     // let input = "let x = 1 in case C 10 of Var of
     //     | A => 0
     //     | B x => succ x
     //     | C x => pred x";
 
-    // let input = "let func = (\\x: Var. case x of | A => 0 | B x => succ x | C y => pred y) in func C 2 of Var";
-    // let input = "let polyid = (\\X \\x: X. x) in (\\x: Nat. polyid [Bool] false) (polyid [Nat] 0)";
-    let input = "let ifz = \\q: Bool. \\y: Nat. \\z: Nat. case q of | true => y | _ => z in ifz false 10 20";
-    let input = "let f = \\x: Var. case x of | A => B 10 of Var | B x => C succ x of Var | C b => B succ b of Var in f (f (f A of Var))";
+    // let input = "let func = (\\x: Var. case x of | A => 0 | B x => succ x | C y
+    // => pred y) in func C 2 of Var"; let input = "let polyid = (\\X \\x: X. x)
+    // in (\\x: Nat. polyid [Bool] false) (polyid [Nat] 0)";
+    let input = "let ifz = \\q: Bool. \\y: Nat. \\z: Nat. case q of | true => y | _ => false in ifz false 10 20";
+    // let input = "let f = \\x: Var. case x of | A => B 10 of Var | B x => C succ x
+    // of Var | C b => B succ b of Var in f (f (f A of Var))";
     let mut p = Parser::new(input);
 
     ctx.alias("Var".into(), test_variant());
@@ -93,23 +131,26 @@ fn main() {
 
     loop {
         match p.parse() {
-            Ok(term) => match eval(&mut ctx, term) {
-                Err(tyerr) => match tyerr.kind {
-                    TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
-                        input,
-                        &[
-                            (format!("abstraction requires type {:?}", t1), tyerr.span),
-                            (format!("but it is applied to type {:?}", t2), sp),
-                        ],
-                    ),
-                    _ => {
-                        let mut diag = util::diagnostic::Diagnostic::new(input);
-                        diag.push(format!("{:?}", tyerr.kind), tyerr.span);
-                        println!("Type {}", diag.emit())
-                    }
-                },
-                _ => {}
-            },
+            Ok(term) => {
+                // walk(input, &term);
+                match eval(&mut ctx, term) {
+                    Err(tyerr) => match tyerr.kind {
+                        TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
+                            input,
+                            &[
+                                (format!("abstraction requires type {:?}", t1), tyerr.span),
+                                (format!("but it is applied to type {:?}", t2), sp),
+                            ],
+                        ),
+                        _ => {
+                            let mut diag = util::diagnostic::Diagnostic::new(input);
+                            diag.push(format!("{:?}", tyerr.kind), tyerr.span);
+                            println!("Type {}", diag.emit())
+                        }
+                    },
+                    _ => {}
+                }
+            }
             Err(_) => {
                 break;
             }

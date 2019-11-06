@@ -170,7 +170,7 @@ mod test {
     use super::*;
     use TokenKind::*;
     #[test]
-    fn valid() {
+    fn nested() {
         let input = "succ(succ(succ(0)))";
         let expected = vec![
             Succ,
@@ -192,18 +192,30 @@ mod test {
     }
 
     #[test]
-    fn invalid() {
-        let input = "succ(succ(succ(xyz)))";
+    fn case() {
+        let input = "case x of | A _ => true | B x => (\\y: Nat. x)";
         let expected = vec![
-            Succ,
+            Case,
+            Ident("x".into()),
+            Of,
+            Bar,
+            Ident("A".into()),
+            Wildcard,
+            Equals,
+            Gt,
+            True,
+            Bar,
+            Ident("B".into()),
+            Ident("x".into()),
+            Equals,
+            Gt,
             LParen,
-            Succ,
-            LParen,
-            Succ,
-            LParen,
-            Ident("xyz".into()),
-            RParen,
-            RParen,
+            Lambda,
+            Ident("y".into()),
+            Colon,
+            TyNat,
+            Proj,
+            Ident("x".into()),
             RParen,
         ];
         let output = Lexer::new(input.chars())

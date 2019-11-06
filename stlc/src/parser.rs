@@ -42,15 +42,7 @@ pub struct Parser<'s> {
     /// [`Lexer`] impls [`Iterator`] over [`TokenSpan`],
     /// so we can just directly wrap it in a [`Peekable`]
     lexer: Peekable<Lexer<'s>>,
-
     span: Span,
-    token: Token,
-}
-
-pub enum ParseError {
-    ExpectedAtom,
-    ExpectedIdent,
-    ExpectedToken(Token),
 }
 
 impl<'s> Parser<'s> {
@@ -61,11 +53,8 @@ impl<'s> Parser<'s> {
             diagnostic: Diagnostic::new(input),
             lexer: Lexer::new(input.chars()).peekable(),
             span: Span::dummy(),
-            token: Token::dummy(),
         }
     }
-
-    fn bump(&mut self) {}
 
     fn consume(&mut self) -> Option<Token> {
         let ts = self.lexer.next()?;
@@ -136,13 +125,10 @@ impl<'s> Parser<'s> {
     }
 
     fn ty_record_field(&mut self) -> Option<RecordField> {
-        let mut span = self.span;
         let ident = self.ident()?;
         self.expect(TokenKind::Colon)?;
         let ty = self.ty()?;
-        span = span + self.span;
         Some(RecordField {
-            // span,
             ident,
             ty: Box::new(ty),
         })
@@ -163,7 +149,6 @@ impl<'s> Parser<'s> {
                 Some(Type::Unit)
             }
             TokenKind::LBrace => {
-                let mut span = self.span;
                 self.consume()?;
                 let mut fields = vec![self.ty_record_field()?];
                 while let Some(TokenKind::Comma) = self.peek() {
@@ -171,7 +156,6 @@ impl<'s> Parser<'s> {
                     fields.push(self.ty_record_field()?);
                 }
                 self.expect(TokenKind::RBrace)?;
-                span = span + self.span;
                 Some(Type::Record(Record {
                     // span,
                     ident: String::new(),
@@ -244,7 +228,7 @@ impl<'s> Parser<'s> {
     }
 
     fn record_field(&mut self) -> Option<Field> {
-        let mut span = self.span;
+        let span = self.span;
         let label = self.ident()?;
         self.expect(TokenKind::Colon)?;
         let term = self.expect_term()?;

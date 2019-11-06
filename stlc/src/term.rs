@@ -1,7 +1,5 @@
-use super::visitor::Visitor;
 use crate::typing::Type;
 use std::fmt;
-use std::rc::Rc;
 use util::span::Span;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]

@@ -1,9 +1,5 @@
 use std::collections::VecDeque;
 
-pub enum Binding {
-    Name,
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct Context {
     inner: VecDeque<String>,

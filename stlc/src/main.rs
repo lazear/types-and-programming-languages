@@ -6,12 +6,10 @@ mod term;
 mod typing;
 mod visitor;
 
-use std::rc::Rc;
 use term::Term;
-use term::Term::*;
-use typing::{Context, Type, TypeError};
+use typing::{Context, Type};
 
-fn ev(ctx: &mut Context, mut term: Term) -> Result<Term, eval::Error> {
+fn ev(ctx: &mut Context, term: Term) -> Result<Term, eval::Error> {
     let ty = match ctx.type_of(&term) {
         Ok(ty) => ty,
         Err(err) => {
@@ -35,8 +33,8 @@ fn ev(ctx: &mut Context, mut term: Term) -> Result<Term, eval::Error> {
 
 fn parse(ctx: &mut Context, input: &str) {
     let mut p = parser::Parser::new(input);
-    while let Some(mut tok) = p.parse_term() {
-        ev(ctx, *tok);
+    while let Some(tok) = p.parse_term() {
+        let _ = ev(ctx, *tok);
     }
 
     let diag = p.diagnostic();

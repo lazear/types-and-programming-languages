@@ -1,7 +1,6 @@
 use super::*;
 use crate::term::{Field, Term};
 use std::default::Default;
-use std::rc::Rc;
 
 pub trait Visitor: Sized {
     fn visit_var(&mut self, var: usize);
@@ -110,7 +109,7 @@ impl Shifting {
 
 impl MutVisitor for Shifting {
     fn visit_var(&mut self, var: &mut Term) {
-        let mut n = match var {
+        let n = match var {
             Term::Var(n) => n,
             _ => unreachable!(),
         };
