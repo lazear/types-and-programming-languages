@@ -293,8 +293,6 @@ impl<'s> Parser<'s> {
             TokenKind::Pred => Primitive::Pred,
             _ => return self.error(ErrorKind::Unknown),
         };
-        dbg!(self.kind());
-        dbg!(&self.tmvar);
         Ok(Term::new(Kind::Primitive(p), self.span))
     }
 

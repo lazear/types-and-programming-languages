@@ -1,11 +1,11 @@
-use crate::terms::{Kind, Literal, Primitive, Term};
-use std::collections::{HashMap, VecDeque};
+use crate::terms::{Arm, Kind, Literal, Pattern, Primitive, Term};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use util::span::Span;
 pub mod visit;
 use visit::{MutVisitor, Shift, Subst};
 
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Hash)]
 pub enum Type {
     Unit,
     Nat,
@@ -17,7 +17,7 @@ pub enum Type {
     Universal(Box<Type>),
 }
 
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Hash)]
 pub struct Variant {
     pub label: String,
     pub ty: Type,
@@ -35,6 +35,7 @@ pub enum TypeErrorKind {
     NotArrow,
     NotUniversal,
     NotVariant,
+    UnreachablePattern,
     UnboundVariable(usize),
 }
 
@@ -76,6 +77,19 @@ impl Context {
     pub fn de_alias(&mut self, term: &mut Term) {
         crate::terms::visit::MutVisitor::visit(self, term)
     }
+}
+
+/// Helper function for extracting type from a variant
+fn variant_field(var: &[Variant], label: &str, span: Span) -> Result<Type, TypeError> {
+    for f in var {
+        if label == &f.label {
+            return Ok(f.ty.clone());
+        }
+    }
+    return Err(TypeError {
+        span,
+        kind: TypeErrorKind::NotVariant,
+    });
 }
 
 impl Context {
@@ -164,6 +178,74 @@ impl Context {
                 }
                 _ => Context::error(term, TypeErrorKind::NotVariant),
             },
+            Kind::Case(tm, arms) => {
+                let ty = self.type_of(tm)?;
+                match &ty {
+                    Type::Variant(fields) => {
+                        let mut arm_types = Vec::with_capacity(arms.len());
+                        let mut default = false;
+                        let field_set = fields.iter().map(|f| &f.label).collect::<HashSet<_>>();
+                        let mut discriminants = HashSet::new();
+                        for arm in arms {
+                            let ty_arm = match &arm.pat {
+                                Pattern::Any => {
+                                    if default || field_set.is_subset(&discriminants) {
+                                        return Context::error(
+                                            term,
+                                            TypeErrorKind::UnreachablePattern,
+                                        );
+                                    }
+                                    default = true;
+                                    self.type_of(&arm.term)?
+                                }
+                                Pattern::Variable => {
+                                    // Pattern binds some variable, which should
+                                    // have a type of the variant
+                                    if default || field_set.is_subset(&discriminants) {
+                                        return Context::error(
+                                            term,
+                                            TypeErrorKind::UnreachablePattern,
+                                        );
+                                    }
+                                    default = true;
+                                    self.push(ty.clone());
+                                    let ty_arm = self.type_of(&arm.term)?;
+                                    self.pop();
+                                    ty_arm
+                                }
+                                Pattern::Constructor(c) => {
+                                    let ty_con = variant_field(&fields, c, arm.span)?;
+
+                                    // Set::insert() returns false if the
+                                    // element is already present
+                                    if !discriminants.insert(c) {
+                                        println!("Discriminant {} already used!", c);
+                                        return Context::error(
+                                            term,
+                                            TypeErrorKind::UnreachablePattern,
+                                        );
+                                    }
+                                    self.push(ty_con);
+                                    let ty_arm = self.type_of(&arm.term)?;
+                                    self.pop();
+                                    ty_arm
+                                }
+                            };
+                            arm_types.push(ty_arm);
+                        }
+
+                        let set = arm_types.into_iter().collect::<HashSet<_>>();
+                        if set.len() != 1 {
+                            println!("Match arms have incompatible types! {:?}", set);
+                        }
+                        for s in set {
+                            return Ok(s);
+                        }
+                        Context::error(term, TypeErrorKind::NotVariant)
+                    }
+                    _ => Context::error(term, TypeErrorKind::NotVariant),
+                }
+            }
             Kind::Let(t1, t2) => {
                 let ty = self.type_of(t1)?;
                 self.push(ty);

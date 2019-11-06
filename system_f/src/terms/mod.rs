@@ -28,7 +28,11 @@ pub enum Kind {
 
     Primitive(Primitive),
 
+    /// A type constructor tag, term, and variant type
     Constructor(String, Box<Term>, Box<Type>),
+
+    /// A case expr, with case arms
+    Case(Box<Term>, Vec<Arm>),
 
     Let(Box<Term>, Box<Term>),
     /// A lambda abstraction
@@ -39,6 +43,20 @@ pub enum Kind {
     TyAbs(Box<Type>, Box<Term>),
     /// Type application
     TyApp(Box<Term>, Box<Type>),
+}
+
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub enum Pattern {
+    Any,
+    Variable,
+    Constructor(String),
+}
+
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct Arm {
+    pub span: Span,
+    pub pat: Pattern,
+    pub term: Box<Term>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
@@ -71,20 +89,52 @@ impl Term {
     }
 }
 
-impl fmt::Debug for Term {
+impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Literal::Nat(n) => write!(f, "{}", n),
+            Literal::Bool(b) => write!(f, "{}", b),
+            Literal::Unit => write!(f, "unit"),
+        }
+    }
+}
+
+impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.kind {
-            Kind::Lit(lit) => write!(f, "{:?}", lit),
+            Kind::Lit(lit) => write!(f, "{}", lit),
             Kind::Var(v) => write!(f, "#{}", v),
-            Kind::Abs(ty, term) => write!(f, "(λ_:{:?}. {:?})", ty, term),
+            Kind::Abs(ty, term) => write!(f, "(λ_:{:?}. {})", ty, term),
             Kind::Fix(term) => write!(f, "Fix {:?}", term),
             Kind::Primitive(p) => write!(f, "{:?}", p),
-            Kind::Constructor(label, tm, ty) => write!(f, "{} ({:?}) as {:?}", label, tm, ty),
-            Kind::Let(t1, t2) => write!(f, "let _ = {:?} in {:?}", t1, t2),
-            Kind::App(t1, t2) => write!(f, "({:?} {:?})", t1, t2),
-            Kind::TyAbs(ty, term) => write!(f, "(λTy{:?} {:?})", ty, term),
-            Kind::TyApp(term, ty) => write!(f, "({:?} [{:?}])", term, ty),
+            Kind::Constructor(label, tm, ty) => write!(f, "{:?}::{}({})", ty, label, tm),
+            Kind::Case(term, arms) => {
+                writeln!(f, "case {} of", term)?;
+                for arm in arms {
+                    writeln!(f, "\t| {:?} => {},", arm.pat, arm.term)?;
+                }
+                write!(f, "")
+            }
+            // Kind::Case(term, arms) => write!(
+            //     f,
+            //     "case {:?} of {:?}",
+            //     term,
+            //     arms.iter()
+            //         .map(|arm| format!("\n|\t{:?} => {:?}", arm.pat, arm.term))
+            //         .collect::<Vec<String>>()
+            //         .join("")
+            // ),
+            Kind::Let(t1, t2) => write!(f, "let _ = {} in {}", t1, t2),
+            Kind::App(t1, t2) => write!(f, "({} {})", t1, t2),
+            Kind::TyAbs(ty, term) => write!(f, "(λTy{:?} {})", ty, term),
+            Kind::TyApp(term, ty) => write!(f, "({} [{:?}])", term, ty),
         }
+    }
+}
+
+impl fmt::Debug for Term {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
     }
 }
 

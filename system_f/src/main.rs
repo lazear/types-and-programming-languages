@@ -6,7 +6,7 @@ mod syntax;
 mod types;
 
 use syntax::{parser, parser::Parser, Token, TokenKind};
-use terms::{Kind, Term};
+use terms::{Arm, Kind, Literal, Pattern, Term};
 use types::{Type, TypeError, TypeErrorKind, Variant};
 use util;
 
@@ -23,6 +23,40 @@ fn bool_variant() -> Type {
     ])
 }
 
+fn case_expr() -> Term {
+    let expr = Term::new(
+        Kind::Constructor(
+            "True".into(),
+            Box::new(Term::unit()),
+            Box::new(Type::Alias("Boolv".into())),
+        ),
+        util::span::Span::default(),
+    );
+
+    let arms = vec![
+        Arm {
+            pat: Pattern::Constructor("True".into()),
+            term: Box::new(nat!(1)),
+            span: util::span::Span::default(),
+        },
+        // Arm {
+        //     pat: Pattern::Constructor("False".into()),
+        //     term: Box::new(nat!(2)),
+        //     span: util::span::Span::default(),
+        // },
+        Arm {
+            pat: Pattern::Any,
+            term: Box::new(nat!(3)),
+            span: util::span::Span::default(),
+        },
+    ];
+
+    Term::new(
+        Kind::Case(Box::new(expr), arms),
+        util::span::Span::default(),
+    )
+}
+
 pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
     println!("{}", src);
     for (msg, span) in msgs {
@@ -33,14 +67,29 @@ pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
         println!("{}^{}^ --- {}", empty, tilde, msg);
     }
 }
+
+fn eval(ctx: &mut types::Context, mut term: Term) {
+    ctx.de_alias(&mut term);
+    let ev = eval::Eval::with_context(ctx);
+    let mut t = term;
+    let fin = loop {
+        println!("---> {}", t);
+        if let Some(res) = ev.small_step(t.clone()) {
+            t = res;
+        } else {
+            break t;
+        }
+    };
+    println!("===> {}", fin)
+}
 fn main() {
     let mut ctx = types::Context::default();
 
-    let input = "   let id = (\\X \\x: X. x) in 
-                    let y = id Nat 0 in 
-                    let z = id Bool true in 
-                    z";
-    let input = "succ 1";
+    // let input = "   let id = (\\X \\x: X. x) in
+    //                 let y = id Nat 0 in
+    //                 let z = id Bool true in
+    //                 z";
+    let input = "let id = (\\X (\\x: X. x)) Nat in let y = (\\z: Nat. id z) in y 1";
     let mut p = Parser::new(input);
 
     ctx.alias("Type".into(), arrow!(Type::Nat, Type::Bool));
@@ -57,36 +106,32 @@ fn main() {
     ctx.de_alias(&mut test);
     dbg!(ctx.type_of(&test));
 
+    let mut tm = case_expr();
+    ctx.de_alias(&mut tm);
+    dbg!(ctx.type_of(&tm));
+
     loop {
         match p.parse() {
-            Ok(mut term) => {
-                // replace any type aliases with the actual type
-                ctx.de_alias(&mut term);
-                dbg!(&term);
-                match ctx.type_of(&term) {
-                    Ok(ty) => {
-                        println!("{:?}\n-: {:?}", term, ty);
-                        let ev = eval::Eval::with_context(&ctx);
-                        let r = ev.small_step(term);
-                        // let r = ev.small_step(r);
-                        dbg!(r);
-                    }
-                    Err(tyerr) => match tyerr.kind {
-                        TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
-                            input,
-                            &[
-                                (format!("abstraction requires type {:?}", t1), tyerr.span),
-                                (format!("but it is applied to type {:?}", t2), sp),
-                            ],
-                        ),
-                        _ => {
-                            let mut diag = util::diagnostic::Diagnostic::new(input);
-                            diag.push(format!("{:?}", tyerr.kind), tyerr.span);
-                            println!("Type {}", diag.emit())
-                        }
-                    },
+            Ok(mut term) => match ctx.type_of(&term) {
+                Ok(ty) => {
+                    println!("{}\n-: {:?}", term, ty);
+                    eval(&mut ctx, term);
                 }
-            }
+                Err(tyerr) => match tyerr.kind {
+                    TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
+                        input,
+                        &[
+                            (format!("abstraction requires type {:?}", t1), tyerr.span),
+                            (format!("but it is applied to type {:?}", t2), sp),
+                        ],
+                    ),
+                    _ => {
+                        let mut diag = util::diagnostic::Diagnostic::new(input);
+                        diag.push(format!("{:?}", tyerr.kind), tyerr.span);
+                        println!("Type {}", diag.emit())
+                    }
+                },
+            },
             Err(_) => {
                 break;
             }

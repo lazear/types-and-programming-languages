@@ -1,5 +1,5 @@
-use crate::terms::{visit::MutVisitor, visit::Shift, visit::Subst, Kind, Literal, Primitive, Term};
-use crate::types::{visit, Context, Type};
+use crate::terms::{self, Kind, Literal, Primitive, Term};
+use crate::types::{self, Context, Type};
 
 pub struct Eval<'ctx> {
     context: &'ctx Context,
@@ -79,9 +79,15 @@ impl<'ctx> Eval<'ctx> {
                     Some(Term::new(Kind::Let(Box::new(t), body), term.span))
                 }
             }
-            Kind::TyApp(tm1, ty) => match tm1.kind {
-                Kind::TyAbs(_, tm2) => Some(Term::new(Kind::Abs(ty, tm2), tm1.span)),
-                _ => None,
+            Kind::TyApp(tm, ty) => match tm.kind {
+                Kind::TyAbs(_, mut tm2) => {
+                    type_subst(*ty, &mut tm2);
+                    Some(*tm2)
+                }
+                _ => {
+                    let t_prime = self.small_step(*tm)?;
+                    Some(Term::new(Kind::TyApp(Box::new(t_prime), ty), term.span))
+                }
             },
 
             _ => None,
@@ -90,7 +96,48 @@ impl<'ctx> Eval<'ctx> {
 }
 
 fn term_subst(mut s: Term, t: &mut Term) {
+    use terms::visit::*;
     Shift::new(1).visit(&mut s);
     Subst::new(s).visit(t);
     Shift::new(-1).visit(t);
+}
+
+fn type_subst(mut s: Type, t: &mut Term) {
+    use types::visit::*;
+    Shift::new(1).visit(&mut s);
+    let mut s = TyTermSubst {
+        subst: Subst::new(s),
+    };
+
+    terms::visit::MutVisitor::visit(&mut s, t);
+    terms::visit::MutVisitor::visit(&mut terms::visit::Shift::new(-1), t);
+}
+
+struct TyTermSubst {
+    subst: types::visit::Subst,
+}
+
+use types::visit::MutVisitor;
+use util::span::Span;
+
+impl terms::visit::MutVisitor for TyTermSubst {
+    fn visit_abs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+        self.subst.visit(ty);
+        self.visit(term);
+    }
+
+    fn visit_tyabs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+        self.subst.visit(ty);
+        self.visit(term);
+    }
+
+    fn visit_tyapp(&mut self, sp: &mut Span, term: &mut Term, ty: &mut Type) {
+        self.subst.visit(ty);
+        self.visit(term);
+    }
+
+    fn visit_constructor(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
+        self.subst.visit(ty);
+        self.visit(term);
+    }
 }
