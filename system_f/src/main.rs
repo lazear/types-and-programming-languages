@@ -10,43 +10,43 @@ use terms::{Arm, Kind, Literal, Pattern, Term};
 use types::{Type, TypeError, TypeErrorKind, Variant};
 use util;
 
-fn bool_variant() -> Type {
+fn test_variant() -> Type {
     Type::Variant(vec![
         Variant {
-            label: "True".into(),
+            label: "A".into(),
             ty: Type::Unit,
         },
         Variant {
-            label: "False".into(),
+            label: "B".into(),
             ty: Type::Unit,
+        },
+        Variant {
+            label: "C".into(),
+            ty: Type::Nat,
         },
     ])
 }
 
 fn case_expr() -> Term {
     let expr = Term::new(
-        Kind::Constructor(
-            "True".into(),
-            Box::new(Term::unit()),
-            Box::new(Type::Alias("Boolv".into())),
-        ),
+        Kind::Constructor("C".into(), Box::new(nat!(4)), Box::new(test_variant())),
         util::span::Span::default(),
     );
 
     let arms = vec![
         Arm {
-            pat: Pattern::Constructor("True".into()),
+            pat: Pattern::Constructor("A".into()),
             term: Box::new(nat!(1)),
             span: util::span::Span::default(),
         },
-        // Arm {
-        //     pat: Pattern::Constructor("False".into()),
-        //     term: Box::new(nat!(2)),
-        //     span: util::span::Span::default(),
-        // },
         Arm {
-            pat: Pattern::Any,
-            term: Box::new(nat!(3)),
+            pat: Pattern::Constructor("B".into()),
+            term: Box::new(nat!(2)),
+            span: util::span::Span::default(),
+        },
+        Arm {
+            pat: Pattern::Constructor("C".into()),
+            term: Box::new(var!(0)),
             span: util::span::Span::default(),
         },
     ];
@@ -93,22 +93,11 @@ fn main() {
     let mut p = Parser::new(input);
 
     ctx.alias("Type".into(), arrow!(Type::Nat, Type::Bool));
-    ctx.alias("Boolv".into(), bool_variant());
-
-    let mut test = Term::new(
-        Kind::Constructor(
-            "True".into(),
-            Box::new(Term::unit()),
-            Box::new(Type::Alias("Boolv".into())),
-        ),
-        util::span::Span::default(),
-    );
-    ctx.de_alias(&mut test);
-    dbg!(ctx.type_of(&test));
 
     let mut tm = case_expr();
     ctx.de_alias(&mut tm);
     dbg!(ctx.type_of(&tm));
+    eval(&mut ctx, tm);
 
     loop {
         match p.parse() {

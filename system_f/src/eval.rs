@@ -1,4 +1,4 @@
-use crate::terms::{self, Kind, Literal, Primitive, Term};
+use crate::terms::{self, Arm, Kind, Literal, Pattern, Primitive, Term};
 use crate::types::{self, Context, Type};
 
 pub struct Eval<'ctx> {
@@ -89,6 +89,52 @@ impl<'ctx> Eval<'ctx> {
                     Some(Term::new(Kind::TyApp(Box::new(t_prime), ty), term.span))
                 }
             },
+            Kind::Constructor(label, tm, ty) => {
+                let t_prime = self.small_step(*tm)?;
+                Some(Term::new(
+                    Kind::Constructor(label, Box::new(t_prime), ty),
+                    term.span,
+                ))
+            }
+            Kind::Case(expr, arms) => {
+                match expr.kind() {
+                    Kind::Constructor(label, tm, ty) => {
+                        for mut arm in arms {
+                            match arm.pat {
+                                Pattern::Any => return Some(*arm.term),
+                                Pattern::Variable => {
+                                    // Variable should be bound to Kind::Var(0),
+                                    // so we want to do a term substition of expr
+                                    // into Var(0)
+                                    // case ex of
+                                    //    | x => (cons x 1),
+                                    term_subst(*expr, arm.term.as_mut());
+                                    return Some(*arm.term);
+                                }
+                                Pattern::Constructor(tag) => {
+                                    if label == &tag {
+                                        // If the constructor is bound to a type
+                                        // that is not unit, we should term subst
+                                        // in the constructor's bound term to
+                                        // Var(0) so that the term in the arm
+                                        // can access it
+                                        match ty.as_ref() {
+                                            Type::Unit => {}
+                                            _ => term_subst(*tm.clone(), arm.term.as_mut()),
+                                        }
+                                        return Some(*arm.term);
+                                    }
+                                }
+                            }
+                        }
+                        None
+                    }
+                    _ => {
+                        let t_prime = self.small_step(*expr)?;
+                        Some(Term::new(Kind::Case(Box::new(t_prime), arms), term.span))
+                    }
+                }
+            }
 
             _ => None,
         }

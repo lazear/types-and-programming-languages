@@ -35,6 +35,7 @@ pub enum TypeErrorKind {
     NotArrow,
     NotUniversal,
     NotVariant,
+    NotExhaustive,
     UnreachablePattern,
     UnboundVariable(usize),
 }
@@ -182,31 +183,30 @@ impl Context {
                 let ty = self.type_of(tm)?;
                 match &ty {
                     Type::Variant(fields) => {
-                        let mut arm_types = Vec::with_capacity(arms.len());
+                        // have we seen a variable or _ pattern?
                         let mut default = false;
+
+                        // set of all possible variant fields
                         let field_set = fields.iter().map(|f| &f.label).collect::<HashSet<_>>();
-                        let mut discriminants = HashSet::new();
+
+                        let mut discriminants = HashSet::with_capacity(arms.len());
+                        let mut ty_set = HashSet::with_capacity(arms.len());
                         for arm in arms {
+                            // Check to see if we have already used a variable or _ pattern,
+                            // or if we have covered all discriminants. If so, then this arm
+                            // is unreachable
+                            if default || field_set.is_subset(&discriminants) {
+                                return Context::error(term, TypeErrorKind::UnreachablePattern);
+                            }
+
                             let ty_arm = match &arm.pat {
                                 Pattern::Any => {
-                                    if default || field_set.is_subset(&discriminants) {
-                                        return Context::error(
-                                            term,
-                                            TypeErrorKind::UnreachablePattern,
-                                        );
-                                    }
                                     default = true;
                                     self.type_of(&arm.term)?
                                 }
                                 Pattern::Variable => {
                                     // Pattern binds some variable, which should
                                     // have a type of the variant
-                                    if default || field_set.is_subset(&discriminants) {
-                                        return Context::error(
-                                            term,
-                                            TypeErrorKind::UnreachablePattern,
-                                        );
-                                    }
                                     default = true;
                                     self.push(ty.clone());
                                     let ty_arm = self.type_of(&arm.term)?;
@@ -231,14 +231,21 @@ impl Context {
                                     ty_arm
                                 }
                             };
-                            arm_types.push(ty_arm);
+                            ty_set.insert(ty_arm);
                         }
 
-                        let set = arm_types.into_iter().collect::<HashSet<_>>();
-                        if set.len() != 1 {
-                            println!("Match arms have incompatible types! {:?}", set);
+                        if !field_set.is_subset(&discriminants) && !default {
+                            println!(
+                                "Patterns {:?} not covered",
+                                field_set.difference(&discriminants)
+                            );
+                            return Context::error(term, TypeErrorKind::NotExhaustive);
                         }
-                        for s in set {
+
+                        if ty_set.len() != 1 {
+                            println!("Match arms have incompatible types! {:?}", ty_set);
+                        }
+                        for s in ty_set {
                             return Ok(s);
                         }
                         Context::error(term, TypeErrorKind::NotVariant)
