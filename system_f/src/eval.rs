@@ -20,7 +20,7 @@ impl<'ctx> Eval<'ctx> {
         }
     }
 
-    fn eval_primitive(&self, p: Primitive, mut term: Term) -> Option<Term> {
+    fn eval_primitive(&self, p: Primitive, term: Term) -> Option<Term> {
         fn map<F: Fn(u32) -> u32>(f: F, mut term: Term) -> Option<Term> {
             match &term.kind {
                 Kind::Lit(Literal::Nat(n)) => {

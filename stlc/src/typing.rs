@@ -14,14 +14,6 @@ pub enum Type {
     Nat,
     Arrow(Box<Type>, Box<Type>),
     Record(Record),
-    Variant(Variant),
-}
-
-#[derive(Clone, PartialEq, PartialOrd)]
-pub struct Variant {
-    // pub span: Span,
-    pub ident: String,
-    pub data: RecordField,
 }
 
 #[derive(Clone, PartialEq, PartialOrd)]
@@ -55,7 +47,6 @@ impl fmt::Debug for Type {
                     .collect::<Vec<String>>()
                     .join(",")
             ),
-            Type::Variant(_) => unimplemented!(),
         }
     }
 }
@@ -69,7 +60,6 @@ pub enum TypeError {
     ExpectedArrow,
     InvalidProjection,
     NotRecordType,
-    Undefined(String),
 }
 
 #[derive(Clone, Debug, Default)]
@@ -79,30 +69,19 @@ pub enum TypeError {
 /// in the other directories, but this should be more efficient, and
 /// a vec is really overkill here
 pub struct Context<'a> {
-    types: Rc<RefCell<HashMap<String, Type>>>,
     parent: Option<&'a Context<'a>>,
     ty: Option<Type>,
 }
 
 impl<'a> Context<'a> {
-    pub fn bind(&self, name: String, ty: Type) {
-        self.types.borrow_mut().insert(name, ty);
-    }
-
-    pub fn lookup(&self, name: &str) -> Option<Type> {
-        self.types.borrow().get(name).cloned()
-    }
-
     pub fn add(&self, ty: Type) -> Context {
         if self.ty.is_none() {
             Context {
-                types: self.types.clone(),
                 parent: None,
                 ty: Some(ty),
             }
         } else {
             Context {
-                types: self.types.clone(),
                 parent: Some(self),
                 ty: Some(ty),
             }

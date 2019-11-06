@@ -1,9 +1,8 @@
 use crate::lexer::{Lexer, Token, TokenKind};
 use crate::term::{Field, Term};
-use crate::typing::{Record, RecordField, Type, Variant};
+use crate::typing::{Record, RecordField, Type};
 use std::collections::VecDeque;
 use std::iter::Peekable;
-use std::rc::Rc;
 use util::diagnostic::Diagnostic;
 use util::span::*;
 

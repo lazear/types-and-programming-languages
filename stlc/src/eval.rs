@@ -31,13 +31,20 @@ fn value(ctx: &Context, term: &Term) -> bool {
     }
 }
 
-fn eval1(ctx: &Context, mut term: Term) -> Result<Box<Term>, Error> {
+fn eval1(ctx: &Context, term: Term) -> Result<Box<Term>, Error> {
     match term {
-        Term::App(t1, t2) if value(ctx, &t2) => {
-            if let Term::Abs(_, mut body) = *t1 {
-                subst(*t2, body.as_mut());
-
-                Ok(body)
+        Term::App(t1, t2) => {
+            if value(ctx, &t2) {
+                match *t1 {
+                    Term::Abs(_, mut abs) => {
+                        subst(*t2, abs.as_mut());
+                        Ok(abs)
+                    }
+                    _ => {
+                        let t_prime = eval1(ctx, *t1)?;
+                        Ok(Term::App(t_prime, t2).into())
+                    }
+                }
             } else if value(ctx, &t1) {
                 let t_prime = eval1(ctx, *t2)?;
                 Ok(Term::App(t1.clone(), t_prime).into())
@@ -45,14 +52,6 @@ fn eval1(ctx: &Context, mut term: Term) -> Result<Box<Term>, Error> {
                 let t_prime = eval1(ctx, *t1)?;
                 Ok(Term::App(t_prime, t2.clone()).into())
             }
-        }
-        Term::App(t1, t2) if value(ctx, &t1) => {
-            let t_prime = eval1(ctx, *t2)?;
-            Ok(Term::App(t1.clone(), t_prime).into())
-        }
-        Term::App(t1, t2) => {
-            let t_prime = eval1(ctx, *t1)?;
-            Ok(Term::App(t_prime, t2.clone()).into())
         }
         Term::If(guard, csq, alt) => match &*guard {
             Term::True => Ok(csq.clone()),
@@ -88,12 +87,18 @@ fn eval1(ctx: &Context, mut term: Term) -> Result<Box<Term>, Error> {
             _ => Ok(Term::IsZero(eval1(ctx, *t)?).into()),
         },
 
-        Term::Projection(rec, proj) if value(ctx, &rec) => match rec.as_ref() {
-            Term::Record(rec) => crate::term::record_access(rec, &proj).ok_or(Error::NoRuleApplies),
-            _ => Ok(Term::Projection(eval1(ctx, *rec)?, proj.clone()).into()),
-        },
-
-        Term::Projection(rec, proj) => Ok(Term::Projection(eval1(ctx, *rec)?, proj.clone()).into()),
+        Term::Projection(rec, proj) => {
+            if value(ctx, &rec) {
+                match rec.as_ref() {
+                    Term::Record(rec) => {
+                        crate::term::record_access(rec, &proj).ok_or(Error::NoRuleApplies)
+                    }
+                    _ => Ok(Term::Projection(eval1(ctx, *rec)?, proj.clone()).into()),
+                }
+            } else {
+                Ok(Term::Projection(eval1(ctx, *rec)?, proj.clone()).into())
+            }
+        }
 
         _ => Err(Error::NoRuleApplies),
     }
