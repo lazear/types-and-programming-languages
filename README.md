@@ -1,6 +1,6 @@
 # types-and-programming-languages
 
-![](https://github.com/lazear/types-and-programming-languages/workflows/rust.yml/badge.svg)
+![](https://github.com/lazear/types-and-programming-languages/workflows/Rust/badge.svg)
 
 Several Rust implementations of exercises from Benjamin Pierce's "Types and Programming Languages" are organized into different folders, as described below:
 
