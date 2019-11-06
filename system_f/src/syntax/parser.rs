@@ -386,6 +386,9 @@ impl<'s> Parser<'s> {
 
         self.expect(TokenKind::Equals)?;
         self.expect(TokenKind::Gt)?;
+
+        dbg!(&self.tmvar);
+
         let term = Box::new(self.parse()?);
 
         self.bump_if(TokenKind::Comma);
@@ -410,7 +413,6 @@ impl<'s> Parser<'s> {
         while let Ok(arm) = self.case_arm() {
             arms.push(arm);
         }
-        dbg!(&arms);
 
         Ok(Term::new(
             Kind::Case(Box::new(expr), arms),

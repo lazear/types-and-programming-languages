@@ -16,6 +16,7 @@ impl<'ctx> Eval<'ctx> {
             Kind::Abs(_, _) => true,
             Kind::TyAbs(_, _) => true,
             Kind::Primitive(_) => true,
+            Kind::Constructor(_, tm, _) => self.normal_form(tm),
             _ => false,
         }
     }
@@ -99,6 +100,7 @@ impl<'ctx> Eval<'ctx> {
             Kind::Case(expr, arms) => {
                 match expr.kind() {
                     Kind::Constructor(label, tm, ty) => {
+                        dbg!(&tm);
                         for mut arm in arms {
                             match arm.pat {
                                 Pattern::Any => return Some(*arm.term),
@@ -109,6 +111,7 @@ impl<'ctx> Eval<'ctx> {
                                     // case ex of
                                     //    | x => (cons x 1),
                                     term_subst(*expr, arm.term.as_mut());
+                                    dbg!(&arm.term);
                                     return Some(*arm.term);
                                 }
                                 Pattern::Constructor(tag) => {
@@ -122,6 +125,7 @@ impl<'ctx> Eval<'ctx> {
                                             Type::Unit => {}
                                             _ => term_subst(*tm.clone(), arm.term.as_mut()),
                                         }
+
                                         return Some(*arm.term);
                                     }
                                 }

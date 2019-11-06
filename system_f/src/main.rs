@@ -18,11 +18,11 @@ fn test_variant() -> Type {
         },
         Variant {
             label: "B".into(),
-            ty: Type::Unit,
+            ty: Type::Nat,
         },
         Variant {
             label: "C".into(),
-            ty: Type::Bool,
+            ty: Type::Nat,
         },
     ])
 }
@@ -68,8 +68,10 @@ pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
     }
 }
 
-fn eval(ctx: &mut types::Context, mut term: Term) {
+fn eval(ctx: &mut types::Context, mut term: Term) -> Result<Term, TypeError> {
     ctx.de_alias(&mut term);
+    ctx.type_of(&term)?;
+
     let ev = eval::Eval::with_context(ctx);
     let mut t = term;
     let fin = loop {
@@ -80,7 +82,8 @@ fn eval(ctx: &mut types::Context, mut term: Term) {
             break t;
         }
     };
-    println!("===> {}", fin)
+    println!("===> {}", fin);
+    Ok(fin)
 }
 fn main() {
     let mut ctx = types::Context::default();
@@ -91,26 +94,19 @@ fn main() {
     //                 z";
     // let input = "let id = (\\X (\\x: X. x)) Nat in let y = (\\z: Nat. id z) in y 1";
     //
-    let input = "case C 10 of {A | B Nat | C Nat} of 
+    let input = "case C 10 of Var of 
         | A => 0
         | B x => succ x 
         | C x => pred x";
+
+    let input = "let func = (\\x: Var. case x of | A => 0 | B x => succ x | C y => pred y) in func C 2 of Var";
     let mut p = Parser::new(input);
 
-    ctx.alias("Type".into(), arrow!(Type::Nat, Type::Bool));
-
-    // let mut tm = case_expr();
-    // ctx.de_alias(&mut tm);
-    // dbg!(ctx.type_of(&tm));
-    // eval(&mut ctx, tm);
+    ctx.alias("Var".into(), test_variant());
 
     loop {
         match p.parse() {
-            Ok(mut term) => match ctx.type_of(&term) {
-                Ok(ty) => {
-                    println!("{}\n-: {:?}", term, ty);
-                    eval(&mut ctx, term);
-                }
+            Ok(term) => match eval(&mut ctx, term) {
                 Err(tyerr) => match tyerr.kind {
                     TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
                         input,
@@ -125,6 +121,7 @@ fn main() {
                         println!("Type {}", diag.emit())
                     }
                 },
+                _ => {}
             },
             Err(_) => {
                 break;
