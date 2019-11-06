@@ -50,7 +50,6 @@ impl Diagnostic<'_> {
         let lines = self.src.lines().collect::<Vec<&str>>();
         for i in 0..self.messages.len() {
             let msg: &Spanned<String> = &self.messages[i];
-
             let mut squiggly = (1..msg.span.end.col.saturating_sub(msg.span.start.col))
                 .map(|_| '~')
                 .collect::<String>();

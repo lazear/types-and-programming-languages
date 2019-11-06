@@ -32,6 +32,7 @@ pub struct TypeError {
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum TypeErrorKind {
     ParameterMismatch(Box<Type>, Box<Type>, Span),
+    IncompatibleArms,
     NotArrow,
     NotUniversal,
     NotVariant,
@@ -204,7 +205,7 @@ impl Context {
                                     default = true;
                                     self.type_of(&arm.term)?
                                 }
-                                Pattern::Variable => {
+                                Pattern::Variable(_) => {
                                     // Pattern binds some variable, which should
                                     // have a type of the variant
                                     default = true;
@@ -234,6 +235,8 @@ impl Context {
                             ty_set.insert(ty_arm);
                         }
 
+                        // dbg!(&ty_set);
+
                         if !field_set.is_subset(&discriminants) && !default {
                             println!(
                                 "Patterns {:?} not covered",
@@ -244,6 +247,7 @@ impl Context {
 
                         if ty_set.len() != 1 {
                             println!("Match arms have incompatible types! {:?}", ty_set);
+                            return Context::error(term, TypeErrorKind::IncompatibleArms);
                         }
                         for s in ty_set {
                             return Ok(s);

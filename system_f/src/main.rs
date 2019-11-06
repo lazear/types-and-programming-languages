@@ -22,14 +22,14 @@ fn test_variant() -> Type {
         },
         Variant {
             label: "C".into(),
-            ty: Type::Nat,
+            ty: Type::Bool,
         },
     ])
 }
 
 fn case_expr() -> Term {
     let expr = Term::new(
-        Kind::Constructor("C".into(), Box::new(nat!(4)), Box::new(test_variant())),
+        Kind::Constructor("C".into(), Box::new(lit!(false)), Box::new(test_variant())),
         util::span::Span::default(),
     );
 
@@ -89,15 +89,20 @@ fn main() {
     //                 let y = id Nat 0 in
     //                 let z = id Bool true in
     //                 z";
-    let input = "let id = (\\X (\\x: X. x)) Nat in let y = (\\z: Nat. id z) in y 1";
+    // let input = "let id = (\\X (\\x: X. x)) Nat in let y = (\\z: Nat. id z) in y 1";
+    //
+    let input = "case C 10 of {A | B Nat | C Nat} of 
+        | A => 0
+        | B x => succ x 
+        | C x => pred x";
     let mut p = Parser::new(input);
 
     ctx.alias("Type".into(), arrow!(Type::Nat, Type::Bool));
 
-    let mut tm = case_expr();
-    ctx.de_alias(&mut tm);
-    dbg!(ctx.type_of(&tm));
-    eval(&mut ctx, tm);
+    // let mut tm = case_expr();
+    // ctx.de_alias(&mut tm);
+    // dbg!(ctx.type_of(&tm));
+    // eval(&mut ctx, tm);
 
     loop {
         match p.parse() {

@@ -6,8 +6,8 @@ use std::iter::Peekable;
 use util::diagnostic::Diagnostic;
 use util::span::*;
 
-use crate::terms::{Kind, Literal, Primitive, Term};
-use crate::types::Type;
+use crate::terms::{Arm, Kind, Literal, Pattern, Primitive, Term};
+use crate::types::{Type, Variant};
 
 #[derive(Clone, Debug, Default)]
 pub struct DeBruijnIndexer {
@@ -16,14 +16,9 @@ pub struct DeBruijnIndexer {
 
 impl DeBruijnIndexer {
     pub fn push(&mut self, hint: String) -> usize {
-        // if self.inner.contains(&hint) {
-        //     // self.push(format!("{}'", hint))
-        //     self.lookup(&hint).unwrap()
-        // } else {
         let idx = self.inner.len();
         self.inner.push_front(hint);
         idx
-        // }
     }
 
     pub fn pop(&mut self) {
@@ -37,6 +32,10 @@ impl DeBruijnIndexer {
             }
         }
         None
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
     }
 }
 
@@ -61,6 +60,7 @@ pub enum ErrorKind {
     ExpectedAtom,
     ExpectedIdent,
     ExpectedType,
+    ExpectedPattern,
     ExpectedToken(TokenKind),
     UnboundTypeVar,
     UnboundVar,
@@ -117,6 +117,15 @@ impl<'s> Parser<'s> {
         prev.kind
     }
 
+    fn bump_if(&mut self, kind: TokenKind) -> bool {
+        if self.token.kind == kind {
+            self.bump();
+            true
+        } else {
+            false
+        }
+    }
+
     fn expect(&mut self, kind: TokenKind) -> Result<(), Error> {
         if self.token.kind == kind {
             self.bump();
@@ -132,6 +141,29 @@ impl<'s> Parser<'s> {
 
     fn kind(&self) -> &TokenKind {
         &self.token.kind
+    }
+
+    fn ty_variant(&mut self) -> Result<Variant, Error> {
+        let label = match self.ident()? {
+            Either::Constr(con) => con,
+            Either::Ident(_) => return self.error(ErrorKind::ExpectedIdent),
+        };
+
+        let ty = match self.ty() {
+            Ok(ty) => ty,
+            _ => Type::Unit,
+        };
+
+        Ok(Variant { label, ty })
+    }
+
+    fn ty_app(&mut self) -> Result<Type, Error> {
+        if !self.bump_if(TokenKind::LSquare) {
+            return self.error(ErrorKind::ExpectedToken(TokenKind::LSquare));
+        }
+        let ty = self.ty()?;
+        self.expect(TokenKind::RSquare)?;
+        Ok(ty)
     }
 
     fn ty_atom(&mut self) -> Result<Type, Error> {
@@ -160,6 +192,18 @@ impl<'s> Parser<'s> {
                     Some(idx) => Ok(Type::Var(idx)),
                     None => Ok(Type::Alias(ty)),
                 }
+            }
+            TokenKind::LBrace => {
+                let mut span = self.span;
+                self.bump();
+                let mut fields = vec![self.ty_variant()?];
+                while let TokenKind::Bar = self.kind() {
+                    self.expect(TokenKind::Bar)?;
+                    fields.push(self.ty_variant()?);
+                }
+                self.expect(TokenKind::RBrace)?;
+                span = span + self.span;
+                Ok(Type::Variant(fields))
             }
             _ => self.error(ErrorKind::ExpectedType),
         }
@@ -296,6 +340,99 @@ impl<'s> Parser<'s> {
         Ok(Term::new(Kind::Primitive(p), self.span))
     }
 
+    fn case_arm(&mut self) -> Result<Arm, Error> {
+        match self.kind() {
+            TokenKind::Bar => self.bump(),
+            _ => return self.error(ErrorKind::ExpectedToken(TokenKind::Bar)),
+        };
+
+        // We don't track the length of the debruijn index in other methods,
+        // but we have a couple branches where variables might be bound,
+        // and this is pretty much the easiest way of doing it
+
+        let len = self.tmvar.len();
+        let mut span = self.span;
+
+        let pat = match self.kind() {
+            TokenKind::Wildcard => {
+                self.bump();
+                Pattern::Any
+            }
+            TokenKind::Ident(s) => match self.ident()? {
+                Either::Constr(tycon) => Pattern::Constructor(tycon),
+                Either::Ident(var) => {
+                    self.tmvar.push(var.clone());
+                    Pattern::Variable(var)
+                }
+            },
+            _ => return self.error(ErrorKind::ExpectedPattern),
+        };
+
+        // If our pattern is a constructor, we might want to bind a variable,
+        // for example:
+        // case expr of
+        //  | List x => head x,
+        //  | Nil => nil,
+        if let Pattern::Constructor(_) = &pat {
+            if let TokenKind::Ident(s) = self.kind() {
+                match self.ident()? {
+                    Either::Constr(_) => return self.error(ErrorKind::ExpectedIdent),
+                    Either::Ident(var) => {
+                        self.tmvar.push(var);
+                    }
+                }
+            }
+        }
+
+        self.expect(TokenKind::Equals)?;
+        self.expect(TokenKind::Gt)?;
+        let term = Box::new(self.parse()?);
+
+        self.bump_if(TokenKind::Comma);
+
+        // Unbind any variables from the parsing context
+        while self.tmvar.len() > len {
+            self.tmvar.pop();
+        }
+
+        span = span + self.span;
+
+        Ok(Arm { span, pat, term })
+    }
+
+    fn case(&mut self) -> Result<Term, Error> {
+        let span = self.span;
+        self.expect(TokenKind::Case)?;
+        let expr = self.parse()?;
+        self.expect(TokenKind::Of)?;
+
+        let mut arms = Vec::with_capacity(8);
+        while let Ok(arm) = self.case_arm() {
+            arms.push(arm);
+        }
+        dbg!(&arms);
+
+        Ok(Term::new(
+            Kind::Case(Box::new(expr), arms),
+            span + self.span,
+        ))
+    }
+
+    fn constructor(&mut self, label: String) -> Result<Term, Error> {
+        let sp = self.span;
+        let term = match self.parse() {
+            Ok(t) => t,
+            _ => Term::new(Kind::Lit(Literal::Unit), self.span),
+        };
+
+        self.expect(TokenKind::Of)?;
+        let ty = self.ty()?;
+        Ok(Term::new(
+            Kind::Constructor(label, Box::new(term), Box::new(ty)),
+            sp + self.span,
+        ))
+    }
+
     fn atom(&mut self) -> Result<Term, Error> {
         match self.kind() {
             TokenKind::LParen => self.paren(),
@@ -303,11 +440,13 @@ impl<'s> Parser<'s> {
             TokenKind::Let => self.letexpr(),
             TokenKind::Fix => self.fix(),
             TokenKind::IsZero | TokenKind::Succ | TokenKind::Pred => self.primitive(),
+            TokenKind::Case => self.case(),
             TokenKind::Ident(s) => match self.ident()? {
                 Either::Constr(ty) => {
-                    self.diagnostic
-                        .push(format!("unbound type {}", ty), self.span);
-                    self.error(ErrorKind::UnboundTypeVar)
+                    self.constructor(ty)
+                    // self.diagnostic
+                    //     .push(format!("unbound type {}", ty), self.span);
+                    // self.error(ErrorKind::UnboundTypeVar)
                 }
                 Either::Ident(tm) => match self.tmvar.lookup(&tm) {
                     Some(idx) => Ok(Term::new(Kind::Var(idx), self.span)),
@@ -329,9 +468,14 @@ impl<'s> Parser<'s> {
     /// application' = atom application' | empty
     fn application(&mut self) -> Result<Term, Error> {
         let mut app = self.atom()?;
+        let mut sp = self.span;
+        // while let Ok(term) = self.atom() {
+        //     app = Term::new(Kind::App(Box::new(app), Box::new(term)), sp + self.span);
+        //     sp = self.span;
+        // }
         loop {
             let sp = app.span;
-            if let Ok(ty) = self.ty() {
+            if let Ok(ty) = self.ty_app() {
                 // Full type inference for System F is undecidable
                 // Additionally, even partial type reconstruction,
                 // where only type application types are erased is also

@@ -10,7 +10,6 @@ pub enum TokenKind {
     TyBool,
     TyArrow,
     TyUnit,
-    TypeDecl,
     Unit,
     True,
     False,
@@ -31,8 +30,14 @@ pub enum TokenKind {
     RParen,
     LBrace,
     RBrace,
+    LSquare,
+    RSquare,
     Equals,
     Bar,
+    Wildcard,
+    Gt,
+    Case,
+    Of,
     Fix,
     Invalid(char),
     Dummy,
@@ -49,7 +54,7 @@ impl Token {
     pub const fn dummy() -> Token {
         Token {
             kind: TokenKind::Dummy,
-            span: Span::dummy(),
+            span: Span::zero(),
         }
     }
 

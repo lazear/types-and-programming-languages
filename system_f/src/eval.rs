@@ -102,7 +102,7 @@ impl<'ctx> Eval<'ctx> {
                         for mut arm in arms {
                             match arm.pat {
                                 Pattern::Any => return Some(*arm.term),
-                                Pattern::Variable => {
+                                Pattern::Variable(_) => {
                                     // Variable should be bound to Kind::Var(0),
                                     // so we want to do a term substition of expr
                                     // into Var(0)

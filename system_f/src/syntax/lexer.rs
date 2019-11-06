@@ -97,8 +97,9 @@ impl<'s> Lexer<'s> {
             "unit" => TokenKind::Unit,
             "let" => TokenKind::Let,
             "in" => TokenKind::In,
-            "type" => TokenKind::TypeDecl,
             "fix" => TokenKind::Fix,
+            "case" => TokenKind::Case,
+            "of" => TokenKind::Of,
             _ => TokenKind::Ident(data),
         };
         Token::new(kind, span)
@@ -133,11 +134,15 @@ impl<'s> Lexer<'s> {
             ',' => self.eat(',', TokenKind::Comma),
             '{' => self.eat('{', TokenKind::LBrace),
             '}' => self.eat('}', TokenKind::RBrace),
+            '[' => self.eat('[', TokenKind::LSquare),
+            ']' => self.eat(']', TokenKind::RSquare),
             '\\' => self.eat('\\', TokenKind::Lambda),
             'λ' => self.eat('λ', TokenKind::Lambda),
             '.' => self.eat('.', TokenKind::Proj),
             '=' => self.eat('=', TokenKind::Equals),
             '|' => self.eat('|', TokenKind::Bar),
+            '_' => self.eat('_', TokenKind::Wildcard),
+            '>' => self.eat('>', TokenKind::Gt),
             '-' => {
                 self.consume();
                 self.eat('>', TokenKind::TyArrow)

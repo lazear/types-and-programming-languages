@@ -51,6 +51,18 @@ impl Span {
             end: max,
         }
     }
+
+    pub const fn zero() -> Span {
+        let max = Location {
+            line: 0,
+            col: 0,
+            abs: 0,
+        };
+        Span {
+            start: max,
+            end: max,
+        }
+    }
 }
 
 impl<T> Spanned<T> {
