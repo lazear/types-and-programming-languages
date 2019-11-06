@@ -18,7 +18,7 @@ pub trait MutVisitor: Sized {
         self.visit(t2);
     }
 
-    fn visit_tyabs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+    fn visit_tyabs(&mut self, sp: &mut Span, term: &mut Term) {
         self.visit(term);
     }
 
@@ -51,7 +51,7 @@ pub trait MutVisitor: Sized {
             Kind::Constructor(label, tm, ty) => self.visit_constructor(label, tm, ty),
             Kind::Case(term, arms) => self.visit_case(term, arms),
             Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
-            Kind::TyAbs(ty, term) => self.visit_tyabs(sp, ty, term),
+            Kind::TyAbs(term) => self.visit_tyabs(sp, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
         }
     }
@@ -88,7 +88,7 @@ impl MutVisitor for Shift {
         self.cutoff -= 1;
     }
 
-    fn visit_tyabs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+    fn visit_tyabs(&mut self, sp: &mut Span, term: &mut Term) {
         self.cutoff += 1;
         self.visit(term);
         self.cutoff -= 1;
@@ -129,7 +129,7 @@ impl MutVisitor for Subst {
         self.cutoff -= 1;
     }
 
-    fn visit_tyabs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+    fn visit_tyabs(&mut self, sp: &mut Span, term: &mut Term) {
         self.cutoff += 1;
         self.visit(term);
         self.cutoff -= 1;
@@ -157,7 +157,7 @@ impl MutVisitor for Subst {
             Kind::Constructor(label, tm, ty) => self.visit_constructor(label, tm, ty),
             Kind::Case(term, arms) => self.visit_case(term, arms),
             Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
-            Kind::TyAbs(ty, term) => self.visit_tyabs(sp, ty, term),
+            Kind::TyAbs(term) => self.visit_tyabs(sp, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
         }
     }

@@ -227,13 +227,8 @@ impl<'s> Parser<'s> {
     fn tyabs(&mut self, tyvar: String) -> Result<Term, Error> {
         let sp = self.span;
         let ty = Box::new(Type::Var(self.tyvar.push(tyvar)));
-        // self.expect(TokenKind::Proj)?;
         let body = self.parse()?;
-        self.tyvar.pop();
-        Ok(Term::new(
-            Kind::TyAbs(Box::new(Type::Unit), Box::new(body)),
-            sp + self.span,
-        ))
+        Ok(Term::new(Kind::TyAbs(Box::new(body)), sp + self.span))
     }
 
     fn tmabs(&mut self, tmvar: String) -> Result<Term, Error> {
@@ -383,7 +378,7 @@ impl<'s> Parser<'s> {
         self.expect(TokenKind::Equals)?;
         self.expect(TokenKind::Gt)?;
 
-        let term = Box::new(self.parse()?);
+        let term = Box::new(self.application()?);
 
         self.bump_if(TokenKind::Comma);
 

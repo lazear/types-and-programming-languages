@@ -40,7 +40,7 @@ pub enum Kind {
     /// Application of a term to another term
     App(Box<Term>, Box<Term>),
     /// Type abstraction
-    TyAbs(Box<Type>, Box<Term>),
+    TyAbs(Box<Term>),
     /// Type application
     TyApp(Box<Term>, Box<Type>),
 }
@@ -126,7 +126,7 @@ impl fmt::Display for Term {
             // ),
             Kind::Let(t1, t2) => write!(f, "let _ = {} in {}", t1, t2),
             Kind::App(t1, t2) => write!(f, "({} {})", t1, t2),
-            Kind::TyAbs(ty, term) => write!(f, "(λTy{:?} {})", ty, term),
+            Kind::TyAbs(term) => write!(f, "(λTy {})", term),
             Kind::TyApp(term, ty) => write!(f, "({} [{:?}])", term, ty),
         }
     }

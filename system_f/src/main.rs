@@ -70,6 +70,7 @@ fn main() {
         | C x => pred x";
 
     let input = "let func = (\\x: Var. case x of | A => 0 | B x => succ x | C y => pred y) in func C 2 of Var";
+    let input = "let polyid = (\\X \\x: X. x) in (\\x: Nat. polyid [Bool] false) (polyid [Nat] 0)";
     let mut p = Parser::new(input);
 
     ctx.alias("Var".into(), test_variant());

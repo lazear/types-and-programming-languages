@@ -14,7 +14,7 @@ impl<'ctx> Eval<'ctx> {
         match &term.kind {
             Kind::Lit(_) => true,
             Kind::Abs(_, _) => true,
-            Kind::TyAbs(_, _) => true,
+            Kind::TyAbs(_) => true,
             Kind::Primitive(_) => true,
             Kind::Constructor(_, tm, _) => self.normal_form(tm),
             _ => false,
@@ -81,7 +81,7 @@ impl<'ctx> Eval<'ctx> {
                 }
             }
             Kind::TyApp(tm, ty) => match tm.kind {
-                Kind::TyAbs(_, mut tm2) => {
+                Kind::TyAbs(mut tm2) => {
                     type_subst(*ty, &mut tm2);
                     Some(*tm2)
                 }
@@ -172,11 +172,6 @@ use util::span::Span;
 
 impl terms::visit::MutVisitor for TyTermSubst {
     fn visit_abs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
-        self.subst.visit(ty);
-        self.visit(term);
-    }
-
-    fn visit_tyabs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
         self.subst.visit(ty);
         self.visit(term);
     }

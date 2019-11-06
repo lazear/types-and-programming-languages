@@ -258,7 +258,7 @@ impl Context {
                 self.pop();
                 y
             }
-            Kind::TyAbs(ty, term) => {
+            Kind::TyAbs(term) => {
                 let ty2 = self.type_of(term)?;
                 Ok(Type::Universal(Box::new(ty2)))
             }
@@ -302,11 +302,6 @@ impl<'ctx> MutVisitor for Aliaser<'ctx> {
 
 impl crate::terms::visit::MutVisitor for Context {
     fn visit_abs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
-        self.aliaser().visit(ty);
-        self.visit(term);
-    }
-
-    fn visit_tyabs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
         self.aliaser().visit(ty);
         self.visit(term);
     }
