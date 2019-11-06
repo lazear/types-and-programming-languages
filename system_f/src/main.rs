@@ -5,8 +5,8 @@ mod eval;
 mod syntax;
 mod types;
 
-use syntax::{parser, parser::Parser, Token, TokenKind};
-use terms::{Arm, Kind, Literal, Pattern, Term};
+use syntax::parser::Parser;
+use terms::Term;
 use types::{Type, TypeError, TypeErrorKind, Variant};
 use util;
 
@@ -25,36 +25,6 @@ fn test_variant() -> Type {
             ty: Type::Nat,
         },
     ])
-}
-
-fn case_expr() -> Term {
-    let expr = Term::new(
-        Kind::Constructor("C".into(), Box::new(lit!(false)), Box::new(test_variant())),
-        util::span::Span::default(),
-    );
-
-    let arms = vec![
-        Arm {
-            pat: Pattern::Constructor("A".into()),
-            term: Box::new(nat!(1)),
-            span: util::span::Span::default(),
-        },
-        Arm {
-            pat: Pattern::Constructor("B".into()),
-            term: Box::new(nat!(2)),
-            span: util::span::Span::default(),
-        },
-        Arm {
-            pat: Pattern::Constructor("C".into()),
-            term: Box::new(var!(0)),
-            span: util::span::Span::default(),
-        },
-    ];
-
-    Term::new(
-        Kind::Case(Box::new(expr), arms),
-        util::span::Span::default(),
-    )
 }
 
 pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {

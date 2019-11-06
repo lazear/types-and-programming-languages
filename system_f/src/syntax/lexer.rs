@@ -2,7 +2,7 @@ use super::{Token, TokenKind};
 use std::char;
 use std::iter::Peekable;
 use std::str::Chars;
-use util::span::{Location, Span, Spanned};
+use util::span::{Location, Span};
 
 #[derive(Clone)]
 pub struct Lexer<'s> {

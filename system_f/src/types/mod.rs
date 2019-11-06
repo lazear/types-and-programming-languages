@@ -1,4 +1,4 @@
-use crate::terms::{Arm, Kind, Literal, Pattern, Primitive, Term};
+use crate::terms::{Kind, Literal, Pattern, Primitive, Term};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use util::span::Span;
@@ -41,8 +41,6 @@ pub enum TypeErrorKind {
     UnboundVariable(usize),
 }
 
-pub enum Binding {}
-
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Context {
     stack: VecDeque<Type>,
@@ -58,10 +56,6 @@ impl Context {
         self.stack
             .pop_front()
             .expect("Context::pop() with empty type stack");
-    }
-
-    fn len(&self) -> usize {
-        self.stack.len()
     }
 
     fn find(&self, idx: usize) -> Option<&Type> {

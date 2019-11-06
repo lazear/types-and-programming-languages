@@ -1,13 +1,13 @@
-use crate::terms::{self, Arm, Kind, Literal, Pattern, Primitive, Term};
+use crate::terms::{self, Kind, Literal, Pattern, Primitive, Term};
 use crate::types::{self, Context, Type};
 
 pub struct Eval<'ctx> {
-    context: &'ctx Context,
+    _context: &'ctx Context,
 }
 
 impl<'ctx> Eval<'ctx> {
-    pub fn with_context(context: &Context) -> Eval<'_> {
-        Eval { context }
+    pub fn with_context(_context: &Context) -> Eval<'_> {
+        Eval { _context }
     }
 
     fn normal_form(&self, term: &Term) -> bool {

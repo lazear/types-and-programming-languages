@@ -2,7 +2,6 @@ use super::lexer::Lexer;
 use super::{Token, TokenKind};
 
 use std::collections::VecDeque;
-use std::iter::Peekable;
 use util::diagnostic::Diagnostic;
 use util::span::*;
 
@@ -63,7 +62,6 @@ pub enum ErrorKind {
     ExpectedPattern,
     ExpectedToken(TokenKind),
     UnboundTypeVar,
-    UnboundVar,
     Unknown,
     Eof,
 }
@@ -194,7 +192,6 @@ impl<'s> Parser<'s> {
                 }
             }
             TokenKind::LBrace => {
-                let mut span = self.span;
                 self.bump();
                 let mut fields = vec![self.ty_variant()?];
                 while let TokenKind::Bar = self.kind() {
@@ -202,7 +199,6 @@ impl<'s> Parser<'s> {
                     fields.push(self.ty_variant()?);
                 }
                 self.expect(TokenKind::RBrace)?;
-                span = span + self.span;
                 Ok(Type::Variant(fields))
             }
             _ => self.error(ErrorKind::ExpectedType),
@@ -387,8 +383,6 @@ impl<'s> Parser<'s> {
         self.expect(TokenKind::Equals)?;
         self.expect(TokenKind::Gt)?;
 
-        dbg!(&self.tmvar);
-
         let term = Box::new(self.parse()?);
 
         self.bump_if(TokenKind::Comma);
@@ -438,18 +432,10 @@ impl<'s> Parser<'s> {
     fn atom(&mut self) -> Result<Term, Error> {
         match self.kind() {
             TokenKind::LParen => self.paren(),
-            TokenKind::Lambda => self.lambda(),
-            TokenKind::Let => self.letexpr(),
             TokenKind::Fix => self.fix(),
             TokenKind::IsZero | TokenKind::Succ | TokenKind::Pred => self.primitive(),
-            TokenKind::Case => self.case(),
             TokenKind::Ident(s) => match self.ident()? {
-                Either::Constr(ty) => {
-                    self.constructor(ty)
-                    // self.diagnostic
-                    //     .push(format!("unbound type {}", ty), self.span);
-                    // self.error(ErrorKind::UnboundTypeVar)
-                }
+                Either::Constr(ty) => self.constructor(ty),
                 Either::Ident(tm) => match self.tmvar.lookup(&tm) {
                     Some(idx) => Ok(Term::new(Kind::Var(idx), self.span)),
                     None => {
@@ -470,11 +456,7 @@ impl<'s> Parser<'s> {
     /// application' = atom application' | empty
     fn application(&mut self) -> Result<Term, Error> {
         let mut app = self.atom()?;
-        let mut sp = self.span;
-        // while let Ok(term) = self.atom() {
-        //     app = Term::new(Kind::App(Box::new(app), Box::new(term)), sp + self.span);
-        //     sp = self.span;
-        // }
+
         loop {
             let sp = app.span;
             if let Ok(ty) = self.ty_app() {
@@ -500,6 +482,11 @@ impl<'s> Parser<'s> {
     }
 
     pub fn parse(&mut self) -> Result<Term, Error> {
-        self.application()
+        match self.kind() {
+            TokenKind::Case => self.case(),
+            TokenKind::Lambda => self.lambda(),
+            TokenKind::Let => self.letexpr(),
+            _ => self.application(),
+        }
     }
 }
