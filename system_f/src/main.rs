@@ -27,6 +27,19 @@ fn test_variant() -> Type {
     ])
 }
 
+fn bool_variant() -> Type {
+    Type::Variant(vec![
+        Variant {
+            label: "T".into(),
+            ty: Type::Unit,
+        },
+        Variant {
+            label: "F".into(),
+            ty: Type::Unit,
+        },
+    ])
+}
+
 pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
     println!("{}", src);
     for (msg, span) in msgs {
@@ -40,8 +53,8 @@ pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
 
 fn eval(ctx: &mut types::Context, mut term: Term) -> Result<Term, TypeError> {
     ctx.de_alias(&mut term);
-    ctx.type_of(&term)?;
-
+    let ty = ctx.type_of(&term)?;
+    println!("  -: {:?}", ty);
     let ev = eval::Eval::with_context(ctx);
     let mut t = term;
     let fin = loop {
@@ -64,16 +77,19 @@ fn main() {
     //                 z";
     // let input = "let id = (\\X (\\x: X. x)) Nat in let y = (\\z: Nat. id z) in y 1";
     //
-    let input = "case C 10 of Var of 
-        | A => 0
-        | B x => succ x 
-        | C x => pred x";
+    // let input = "let x = 1 in case C 10 of Var of
+    //     | A => 0
+    //     | B x => succ x
+    //     | C x => pred x";
 
-    let input = "let func = (\\x: Var. case x of | A => 0 | B x => succ x | C y => pred y) in func C 2 of Var";
-    let input = "let polyid = (\\X \\x: X. x) in (\\x: Nat. polyid [Bool] false) (polyid [Nat] 0)";
+    // let input = "let func = (\\x: Var. case x of | A => 0 | B x => succ x | C y => pred y) in func C 2 of Var";
+    // let input = "let polyid = (\\X \\x: X. x) in (\\x: Nat. polyid [Bool] false) (polyid [Nat] 0)";
+    let input = "let ifz = \\q: Bool. \\y: Nat. \\z: Nat. case q of | true => y | _ => z in ifz false 10 20";
+    let input = "let f = \\x: Bool. case x of | true => false | false => x in f false";
     let mut p = Parser::new(input);
 
     ctx.alias("Var".into(), test_variant());
+    ctx.alias("Boolv".into(), bool_variant());
 
     loop {
         match p.parse() {

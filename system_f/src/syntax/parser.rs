@@ -356,8 +356,16 @@ impl<'s> Parser<'s> {
                     Pattern::Variable(var)
                 }
             },
+            TokenKind::True => Pattern::Literal(Literal::Bool(true)),
+            TokenKind::False => Pattern::Literal(Literal::Bool(false)),
+            TokenKind::Unit => Pattern::Literal(Literal::Unit),
+            TokenKind::Nat(n) => Pattern::Literal(Literal::Nat(*n)),
             _ => return self.error(ErrorKind::ExpectedPattern),
         };
+
+        if let Pattern::Literal(_) = &pat {
+            self.bump();
+        }
 
         // If our pattern is a constructor, we might want to bind a variable,
         // for example:

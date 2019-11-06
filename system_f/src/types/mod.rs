@@ -177,6 +177,69 @@ impl Context {
             Kind::Case(tm, arms) => {
                 let ty = self.type_of(tm)?;
                 match &ty {
+                    Type::Bool => {
+                        let mut default = false;
+                        let mut field_set = HashSet::with_capacity(2);
+                        field_set.insert(true);
+                        field_set.insert(false);
+
+                        let mut discriminants = HashSet::with_capacity(arms.len());
+                        let mut ty_set = HashSet::with_capacity(arms.len());
+                        for arm in arms {
+                            if default {
+                                return Context::error(term, TypeErrorKind::UnreachablePattern);
+                            }
+                            let ty_arm = match &arm.pat {
+                                Pattern::Any => {
+                                    default = true;
+                                    self.type_of(&arm.term)?
+                                }
+                                Pattern::Variable(_) => {
+                                    default = true;
+                                    self.push(ty.clone());
+                                    let ty_arm = self.type_of(&arm.term)?;
+                                    self.pop();
+                                    ty_arm
+                                }
+                                Pattern::Literal(Literal::Bool(b)) => {
+                                    if !discriminants.insert(*b) {
+                                        println!("Discriminant {} already used!", b);
+                                        return Context::error(
+                                            term,
+                                            TypeErrorKind::UnreachablePattern,
+                                        );
+                                    }
+                                    self.type_of(&arm.term)?
+                                }
+                                Pattern::Literal(l) => {
+                                    println!("Literal {:?} can't be used in case Bool!", l);
+                                    return Context::error(tm, TypeErrorKind::UnreachablePattern);
+                                }
+                                Pattern::Constructor(c) => {
+                                    println!("Constructor {} can't be used in case Bool!", c);
+                                    return Context::error(tm, TypeErrorKind::UnreachablePattern);
+                                }
+                            };
+                            ty_set.insert(ty_arm);
+                        }
+                        if !field_set.is_subset(&discriminants) && !default {
+                            println!(
+                                "Patterns {:?} not covered",
+                                field_set.difference(&discriminants)
+                            );
+                            return Context::error(term, TypeErrorKind::NotExhaustive);
+                        }
+                        if ty_set.len() != 1 {
+                            println!("Match arms have incompatible types! {:?}", ty_set);
+                            return Context::error(term, TypeErrorKind::IncompatibleArms);
+                        }
+                        for s in ty_set {
+                            return Ok(s);
+                        }
+                        Context::error(term, TypeErrorKind::NotVariant)
+                    }
+                    Type::Nat => Context::error(term, TypeErrorKind::UnreachablePattern),
+                    Type::Unit => Context::error(term, TypeErrorKind::UnreachablePattern),
                     Type::Variant(fields) => {
                         // have we seen a variable or _ pattern?
                         let mut default = false;
@@ -224,6 +287,9 @@ impl Context {
                                     let ty_arm = self.type_of(&arm.term)?;
                                     self.pop();
                                     ty_arm
+                                }
+                                Pattern::Literal(_) => {
+                                    return Context::error(term, TypeErrorKind::UnreachablePattern)
                                 }
                             };
                             ty_set.insert(ty_arm);

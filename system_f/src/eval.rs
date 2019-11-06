@@ -99,8 +99,31 @@ impl<'ctx> Eval<'ctx> {
             }
             Kind::Case(expr, arms) => {
                 match expr.kind() {
+                    Kind::Lit(lit) => {
+                        for mut arm in arms {
+                            match arm.pat {
+                                Pattern::Any => return Some(*arm.term),
+                                Pattern::Variable(_) => {
+                                    // Variable should be bound to Kind::Var(0),
+                                    // so we want to do a term substition of expr
+                                    // into Var(0)
+                                    // case ex of
+                                    //    | x => (cons x 1),
+                                    term_subst(*expr, arm.term.as_mut());
+                                    dbg!(&arm.term);
+                                    return Some(*arm.term);
+                                }
+                                Pattern::Literal(l) => {
+                                    if lit == &l {
+                                        return Some(*arm.term);
+                                    }
+                                }
+                                Pattern::Constructor(_) => return None,
+                            }
+                        }
+                        None
+                    }
                     Kind::Constructor(label, tm, ty) => {
-                        dbg!(&tm);
                         for mut arm in arms {
                             match arm.pat {
                                 Pattern::Any => return Some(*arm.term),
@@ -129,6 +152,7 @@ impl<'ctx> Eval<'ctx> {
                                         return Some(*arm.term);
                                     }
                                 }
+                                Pattern::Literal(_) => return None,
                             }
                         }
                         None

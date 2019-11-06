@@ -96,11 +96,11 @@ impl MutVisitor for Shift {
 
     fn visit_case(&mut self, term: &mut Term, arms: &mut Vec<Arm>) {
         self.visit(term);
+        self.cutoff += 1;
         for arm in arms {
-            self.cutoff += 1;
             self.visit(&mut arm.term);
-            self.cutoff -= 1;
         }
+        self.cutoff -= 1;
     }
 }
 
@@ -137,11 +137,11 @@ impl MutVisitor for Subst {
 
     fn visit_case(&mut self, term: &mut Term, arms: &mut Vec<Arm>) {
         self.visit(term);
+        self.cutoff += 1;
         for arm in arms {
-            self.cutoff += 1;
             self.visit(&mut arm.term);
-            self.cutoff -= 1;
         }
+        self.cutoff -= 1;
     }
 
     fn visit(&mut self, term: &mut Term) {

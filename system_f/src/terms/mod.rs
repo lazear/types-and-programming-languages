@@ -48,6 +48,7 @@ pub enum Kind {
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Pattern {
     Any,
+    Literal(Literal),
     Variable(String),
     Constructor(String),
 }
