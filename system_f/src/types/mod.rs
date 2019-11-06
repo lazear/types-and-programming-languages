@@ -283,6 +283,8 @@ impl Context {
                                             TypeErrorKind::UnreachablePattern,
                                         );
                                     }
+
+                                    // Do not always push.
                                     self.push(ty_con);
                                     let ty_arm = self.type_of(&arm.term)?;
                                     self.pop();
@@ -306,6 +308,7 @@ impl Context {
                         }
 
                         if ty_set.len() != 1 {
+                            dbg!(&self.stack);
                             println!("Match arms have incompatible types! {:?}", ty_set);
                             return Context::error(term, TypeErrorKind::IncompatibleArms);
                         }
