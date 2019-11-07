@@ -65,12 +65,13 @@ impl<T: fmt::Debug> fmt::Debug for Entry<T> {
     }
 }
 
-impl<T> Arena<T> {
-    /// Create an `Arena` with the default minimum capacity
-    pub fn new() -> Arena<T> {
+impl<T> std::default::Default for Arena<T> {
+    fn default() -> Arena<T> {
         Arena::with_capacity(MIN_CAPACITY)
     }
+}
 
+impl<T> Arena<T> {
     /// Allocate an `Arena` capable of storing `n` items before re-allocating
     /// The mininimum capacity for an `Arena` is specified in `MIN_CAPACITY`,
     /// which defaults to `16`
@@ -310,7 +311,7 @@ impl<T> std::iter::FromIterator<T> for Arena<T> {
     ///
     /// You won't be able to receive an [`Index`] for each item
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Arena<T> {
-        let mut arena = Arena::new();
+        let mut arena = Arena::default();
         for i in iter {
             arena.insert(i);
         }

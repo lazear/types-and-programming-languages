@@ -117,7 +117,7 @@ impl<'s> Parser<'s> {
 
         // Return to previous context
         self.ctx = prev_ctx;
-        Some(Term::TmAbs(start + end, body.into()).into())
+        Some(Term::TmAbs(start + end, body).into())
     }
 
     fn term(&mut self) -> Option<RcTerm> {
@@ -136,7 +136,7 @@ impl<'s> Parser<'s> {
         while let Some(rhs) = self.atom() {
             lhs = Term::TmApp(span + self.span, lhs, rhs).into();
         }
-        Some(lhs.into())
+        Some(lhs)
     }
 
     /// Parse an atomic term

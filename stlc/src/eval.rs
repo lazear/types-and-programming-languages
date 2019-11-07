@@ -53,11 +53,11 @@ fn eval1(ctx: &Context, term: Term) -> Result<Box<Term>, Error> {
             }
         }
         Term::If(guard, csq, alt) => match &*guard {
-            Term::True => Ok(csq.clone()),
-            Term::False => Ok(alt.clone()),
+            Term::True => Ok(csq),
+            Term::False => Ok(alt),
             _ => {
                 let t_prime = eval1(ctx, *guard)?;
-                Ok(Term::If(t_prime, csq.clone(), alt.clone()).into())
+                Ok(Term::If(t_prime, csq, alt).into())
             }
         },
         Term::Let(bind, mut body) => {
@@ -66,7 +66,7 @@ fn eval1(ctx: &Context, term: Term) -> Result<Box<Term>, Error> {
                 Ok(body)
             } else {
                 let t = eval1(ctx, *bind)?;
-                Ok(Term::Let(t, body.clone()).into())
+                Ok(Term::Let(t, body).into())
             }
         }
         Term::Succ(t) => {
@@ -92,10 +92,10 @@ fn eval1(ctx: &Context, term: Term) -> Result<Box<Term>, Error> {
                     Term::Record(rec) => {
                         crate::term::record_access(rec, &proj).ok_or(Error::NoRuleApplies)
                     }
-                    _ => Ok(Term::Projection(eval1(ctx, *rec)?, proj.clone()).into()),
+                    _ => Ok(Term::Projection(eval1(ctx, *rec)?, proj).into()),
                 }
             } else {
-                Ok(Term::Projection(eval1(ctx, *rec)?, proj.clone()).into())
+                Ok(Term::Projection(eval1(ctx, *rec)?, proj).into())
             }
         }
 
