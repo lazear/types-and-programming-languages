@@ -5,7 +5,7 @@
 //! ```
 //! use util::arena::Arena;
 //!
-//! let mut arena: Arena<u32> = Arena::new();
+//! let mut arena: Arena<u32> = Arena::default();
 //! let index = arena.insert(10);
 //!
 //! // Get a reference to the item stored in the arena
@@ -330,13 +330,13 @@ mod test {
 
     #[test]
     fn smoke_insert() {
-        let mut a = Arena::new();
+        let mut a = Arena::default();
         assert_eq!(a.insert(255u8).0.get(), 1);
     }
 
     #[test]
     fn smoke_remove() {
-        let mut a = Arena::new();
+        let mut a = Arena::default();
         let idx = a.insert(255u8);
         assert_eq!(a.remove(idx), Some(255u8));
         assert_eq!(a.get(idx), None);
@@ -353,7 +353,7 @@ mod test {
 
     #[test]
     fn fill() {
-        let mut arena = Arena::new();
+        let mut arena = Arena::default();
         assert_eq!(arena.capacity(), MIN_CAPACITY);
         dbg!(&arena.data);
         for i in 0..15 {
