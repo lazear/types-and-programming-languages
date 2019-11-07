@@ -28,7 +28,7 @@ impl Diagnostic<'_> {
     /// Remove the last error message
     pub fn pop(&mut self) -> Option<String> {
         let msg = self.messages.pop()?;
-        let line = self.src.lines().skip(msg.span.start.line as usize).next()?;
+        let line = self.src.lines().nth(msg.span.start.line as usize)?;
         Some(format!(
             "Error occuring at line {}, col: {}: {}\n{}\n{}^{}\n",
             msg.span.start.line,

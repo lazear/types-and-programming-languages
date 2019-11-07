@@ -129,30 +129,22 @@ fn main() {
     ctx.alias("Var".into(), test_variant());
     ctx.alias("Boolv".into(), bool_variant());
 
-    loop {
-        match p.parse() {
-            Ok(term) => {
-                // walk(input, &term);
-                match eval(&mut ctx, term) {
-                    Err(tyerr) => match tyerr.kind {
-                        TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
-                            input,
-                            &[
-                                (format!("abstraction requires type {:?}", t1), tyerr.span),
-                                (format!("but it is applied to type {:?}", t2), sp),
-                            ],
-                        ),
-                        _ => {
-                            let mut diag = util::diagnostic::Diagnostic::new(input);
-                            diag.push(format!("{:?}", tyerr.kind), tyerr.span);
-                            println!("Type {}", diag.emit())
-                        }
-                    },
-                    _ => {}
+    while let Ok(term) = p.parse() {
+        // walk(input, &term);
+        if let Err(tyerr) = eval(&mut ctx, term) {
+            match tyerr.kind {
+                TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
+                    input,
+                    &[
+                        (format!("abstraction requires type {:?}", t1), tyerr.span),
+                        (format!("but it is applied to type {:?}", t2), sp),
+                    ],
+                ),
+                _ => {
+                    let mut diag = util::diagnostic::Diagnostic::new(input);
+                    diag.push(format!("{:?}", tyerr.kind), tyerr.span);
+                    println!("Type {}", diag.emit())
                 }
-            }
-            Err(_) => {
-                break;
             }
         }
     }

@@ -159,7 +159,7 @@ impl<'a> Context<'a> {
             }
             Let(bind, body) => {
                 let ty = self.type_of(bind)?;
-                let ctx = self.add(ty.clone());
+                let ctx = self.add(ty);
                 ctx.type_of(body)
             }
             Var(s) => match self.get(*s) {

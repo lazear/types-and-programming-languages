@@ -37,7 +37,7 @@ pub enum Term {
 
 pub fn record_access(fields: &[Field], projection: &str) -> Option<Box<Term>> {
     for f in fields {
-        if &f.ident == projection {
+        if f.ident == projection {
             return Some(f.term.clone());
         }
     }

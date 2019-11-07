@@ -72,6 +72,7 @@ impl Term {
         Term { span, kind }
     }
 
+    #[allow(dead_code)]
     pub const fn unit() -> Term {
         Term {
             span: Span::dummy(),
@@ -79,6 +80,7 @@ impl Term {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub fn span(&self) -> Span {
         self.span

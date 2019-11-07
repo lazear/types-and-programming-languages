@@ -78,14 +78,14 @@ impl Context {
 /// Helper function for extracting type from a variant
 fn variant_field(var: &[Variant], label: &str, span: Span) -> Result<Type, TypeError> {
     for f in var {
-        if label == &f.label {
+        if label == f.label {
             return Ok(f.ty.clone());
         }
     }
-    return Err(TypeError {
+    Err(TypeError {
         span,
         kind: TypeErrorKind::NotVariant,
-    });
+    })
 }
 
 impl Context {
@@ -233,10 +233,10 @@ impl Context {
                             println!("Match arms have incompatible types! {:?}", ty_set);
                             return Context::error(term, TypeErrorKind::IncompatibleArms);
                         }
-                        for s in ty_set {
-                            return Ok(s);
+                        match ty_set.into_iter().next() {
+                            Some(s) => Ok(s),
+                            None => Context::error(term, TypeErrorKind::NotVariant),
                         }
-                        Context::error(term, TypeErrorKind::NotVariant)
                     }
                     Type::Nat => Context::error(term, TypeErrorKind::UnreachablePattern),
                     Type::Unit => Context::error(term, TypeErrorKind::UnreachablePattern),
@@ -312,10 +312,10 @@ impl Context {
                             println!("Match arms have incompatible types! {:?}", ty_set);
                             return Context::error(term, TypeErrorKind::IncompatibleArms);
                         }
-                        for s in ty_set {
-                            return Ok(s);
+                        match ty_set.into_iter().next() {
+                            Some(s) => Ok(s),
+                            None => Context::error(term, TypeErrorKind::NotVariant),
                         }
-                        Context::error(term, TypeErrorKind::NotVariant)
                     }
                     _ => Context::error(term, TypeErrorKind::NotVariant),
                 }

@@ -105,7 +105,7 @@ impl<'s> Parser<'s> {
         Err(Error {
             span: self.token.span,
             tok: self.token.clone(),
-            kind: kind,
+            kind,
         })
     }
 

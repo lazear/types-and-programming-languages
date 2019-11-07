@@ -5,7 +5,7 @@
 //! ```
 //! use util::arena::Arena;
 //!
-//! let mut arena: Arena<u32> = Arena::new();
+//! let mut arena: Arena<u32> = Arena::default();
 //! let index = arena.insert(10);
 //!
 //! // Get a reference to the item stored in the arena
@@ -65,12 +65,13 @@ impl<T: fmt::Debug> fmt::Debug for Entry<T> {
     }
 }
 
-impl<T> Arena<T> {
-    /// Create an `Arena` with the default minimum capacity
-    pub fn new() -> Arena<T> {
+impl<T> std::default::Default for Arena<T> {
+    fn default() -> Arena<T> {
         Arena::with_capacity(MIN_CAPACITY)
     }
+}
 
+impl<T> Arena<T> {
     /// Allocate an `Arena` capable of storing `n` items before re-allocating
     /// The mininimum capacity for an `Arena` is specified in `MIN_CAPACITY`,
     /// which defaults to `16`
@@ -310,7 +311,7 @@ impl<T> std::iter::FromIterator<T> for Arena<T> {
     ///
     /// You won't be able to receive an [`Index`] for each item
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Arena<T> {
-        let mut arena = Arena::new();
+        let mut arena = Arena::default();
         for i in iter {
             arena.insert(i);
         }
@@ -329,13 +330,13 @@ mod test {
 
     #[test]
     fn smoke_insert() {
-        let mut a = Arena::new();
+        let mut a = Arena::default();
         assert_eq!(a.insert(255u8).0.get(), 1);
     }
 
     #[test]
     fn smoke_remove() {
-        let mut a = Arena::new();
+        let mut a = Arena::default();
         let idx = a.insert(255u8);
         assert_eq!(a.remove(idx), Some(255u8));
         assert_eq!(a.get(idx), None);
@@ -352,7 +353,7 @@ mod test {
 
     #[test]
     fn fill() {
-        let mut arena = Arena::new();
+        let mut arena = Arena::default();
         assert_eq!(arena.capacity(), MIN_CAPACITY);
         dbg!(&arena.data);
         for i in 0..15 {

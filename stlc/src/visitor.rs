@@ -13,8 +13,8 @@ pub trait Visitor: Sized {
     fn visit_iszero(&mut self, t: &Term);
     fn visit_const(&mut self, c: &Term);
     fn visit_record(&mut self, c: &[Field]);
-    fn visit_proj(&mut self, c: &Term, proj: &String);
-    fn visit_typedecl(&mut self, name: &String, ty: &Type);
+    fn visit_proj(&mut self, c: &Term, proj: &str);
+    fn visit_typedecl(&mut self, name: &str, ty: &Type);
 }
 
 pub trait MutVisitor: Sized {

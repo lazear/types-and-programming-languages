@@ -229,13 +229,13 @@ impl<'s> Parser<'s> {
 
     fn record_field(&mut self) -> Option<Field> {
         let span = self.span;
-        let label = self.ident()?;
+        let ident = self.ident()?;
         self.expect(TokenKind::Colon)?;
         let term = self.expect_term()?;
 
         Some(Field {
             span: span + self.span,
-            ident: label.into(),
+            ident,
             term,
         })
     }
