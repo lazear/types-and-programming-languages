@@ -5,3 +5,9 @@ let func = \X (\c: {None | Some X}. \x: X->(X, X).
 in func [Nat] (Some 10 of {None|Some Nat}) (\x: Nat. (x, x))
 ;
 
+let poly = \X \x: X. x in 
+	let x = poly [Nat] 0 in 
+	let y = poly [Bool] false in 
+	let z = poly [(Nat, Bool)] in 
+	z (x, y)
+;
