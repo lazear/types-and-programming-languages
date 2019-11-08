@@ -5,6 +5,7 @@ mod eval;
 mod syntax;
 mod types;
 
+use std::env;
 use std::io::{Read, Write};
 use syntax::parser::Parser;
 use terms::Term;
@@ -42,14 +43,17 @@ fn bool_variant() -> Type {
 }
 
 pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
-    let lines = msgs.iter().map(|(_, sp)| sp.start.line).collect::<std::collections::HashSet<_>>();
+    let lines = msgs
+        .iter()
+        .map(|(_, sp)| sp.start.line)
+        .collect::<std::collections::HashSet<_>>();
     let srcl = src.lines().collect::<Vec<&str>>();
     for line in lines {
         println!("{} {}", line, &srcl[line as usize]);
     }
-    
+
     for (msg, span) in msgs {
-        let empty = (0..span.start.col+2).map(|_| ' ').collect::<String>();
+        let empty = (0..span.start.col + 2).map(|_| ' ').collect::<String>();
         let tilde = (1..span.end.col.saturating_sub(span.start.col))
             .map(|_| '~')
             .collect::<String>();
@@ -57,7 +61,7 @@ pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
     }
 }
 
-fn eval(ctx: &mut types::Context, mut term: Term) -> Result<Term, TypeError> {
+fn eval(ctx: &mut types::Context, mut term: Term, verbose: bool) -> Result<Term, TypeError> {
     ctx.de_alias(&mut term);
     let ty = ctx.type_of(&term)?;
     println!("  -: {:?}", ty);
@@ -65,7 +69,9 @@ fn eval(ctx: &mut types::Context, mut term: Term) -> Result<Term, TypeError> {
     let ev = eval::Eval::with_context(ctx);
     let mut t = term;
     let fin = loop {
-        println!("---> {}", t);
+        if verbose {
+            println!("---> {}", t);
+        }
         if let Some(res) = ev.small_step(t.clone()) {
             t = res;
         } else {
@@ -110,45 +116,54 @@ fn walk(src: &str, term: &Term) {
     }
 }
 
+fn parse_and_eval(ctx: &mut types::Context, input: &str, verbose: bool) {
+    let mut p = Parser::new(input);
+    while let Ok(term) = p.parse() {
+        if let Err(tyerr) = eval(ctx, term, verbose) {
+            match tyerr.kind {
+                TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
+                    input,
+                    &[
+                        (format!("abstraction requires type {:?}", t1), tyerr.span),
+                        (format!("but it is applied to type {:?}", t2), sp),
+                    ],
+                ),
+                _ => {
+                    let mut diag = util::diagnostic::Diagnostic::new(input);
+                    diag.push(format!("{:?}", tyerr.kind), tyerr.span);
+                    println!("Type {}", diag.emit())
+                }
+            }
+        }
+    }
+
+    let diag = p.diagnostic();
+    if diag.error_count() > 0 {
+        println!("Parsing {}", diag.emit());
+    }
+}
+
 fn main() {
     let mut ctx = types::Context::default();
 
     ctx.alias("Var".into(), test_variant());
     ctx.alias("Boolv".into(), bool_variant());
 
+    let args = env::args();
+    if args.len() > 1 {
+        for f in args.skip(1) {
+            println!("reading {}", f);
+            let file = std::fs::read_to_string(f).unwrap();
+            parse_and_eval(&mut ctx, &file, false);
+        }
+    }
+
     loop {
         let mut buffer = String::new();
         print!("repl: ");
         std::io::stdout().flush().unwrap();
         std::io::stdin().read_to_string(&mut buffer).unwrap();
-        // dbg!(&buffer);
-        
-        let mut p = Parser::new(&buffer);
-        while let Ok(term) = p.parse() {
-            walk(&buffer, &term);
-            if let Err(tyerr) = eval(&mut ctx, term) {
-                match tyerr.kind {
-                    TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
-                        &buffer,
-                        &[
-                            (format!("abstraction requires type {:?}", t1), tyerr.span),
-                            (format!("but it is applied to type {:?}", t2), sp),
-                        ],
-                    ),
-                    _ => {
-                        let mut diag = util::diagnostic::Diagnostic::new(&buffer);
-                        diag.push(format!("{:?}", tyerr.kind), tyerr.span);
-                        println!("Type {}", diag.emit())
-                    }
-                }
-            }
-        }
 
-        let diag = p.diagnostic();
-        if diag.error_count() > 0 {
-            println!("Parsing {}", diag.emit());
-        }
-
-        break;
+        parse_and_eval(&mut ctx, &buffer, true);
     }
 }

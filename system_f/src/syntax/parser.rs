@@ -445,7 +445,7 @@ impl<'s> Parser<'s> {
         Ok(Arm { span, pat, term })
     }
 
-    fn case(&mut self) -> Result<Term, Error> {        
+    fn case(&mut self) -> Result<Term, Error> {
         self.expect(TokenKind::Case)?;
         let span = self.span;
         let expr = self.parse()?;
