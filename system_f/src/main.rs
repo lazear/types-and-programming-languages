@@ -42,9 +42,14 @@ fn bool_variant() -> Type {
 }
 
 pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
-    println!("{}", src);
+    let lines = msgs.iter().map(|(_, sp)| sp.start.line).collect::<std::collections::HashSet<_>>();
+    let srcl = src.lines().collect::<Vec<&str>>();
+    for line in lines {
+        println!("{} {}", line, &srcl[line as usize]);
+    }
+    
     for (msg, span) in msgs {
-        let empty = (0..span.start.col).map(|_| ' ').collect::<String>();
+        let empty = (0..span.start.col+2).map(|_| ' ').collect::<String>();
         let tilde = (1..span.end.col.saturating_sub(span.start.col))
             .map(|_| '~')
             .collect::<String>();
@@ -71,38 +76,39 @@ fn eval(ctx: &mut types::Context, mut term: Term) -> Result<Term, TypeError> {
     Ok(fin)
 }
 
-// fn walk(src: &str, term: &Term) {
-//     code_format(src, &[(format!("{}", term), term.span)]);
-//     match &term.kind {
-//         Kind::Abs(ty, tm) => {
-//             walk(src, tm);
-//         }
-//         Kind::Fix(tm) => {
-//             walk(src, tm);
-//         }
-//         Kind::Primitive(p) => {}
-//         Kind::Constructor(label, tm, ty) => {
-//             walk(src, tm);
-//         }
-//         Kind::Case(term, arms) => {
-//             walk(src, term);
-//             for a in arms {
-//                 walk(src, &a.term);
-//             }
-//         }
-//         Kind::Let(t1, t2) => {
-//             walk(src, t1);
-//             walk(src, t2);
-//         }
-//         Kind::App(t1, t2) => {
-//             walk(src, t1);
-//             walk(src, t2);
-//         }
-//         Kind::TyAbs(t) => walk(src, t),
-//         Kind::TyApp(t, _) => walk(src, t),
-//         _ => {}
-//     }
-// }
+fn walk(src: &str, term: &Term) {
+    use terms::Kind;
+    code_format(src, &[(format!("{}", term), term.span)]);
+    match &term.kind {
+        Kind::Abs(ty, tm) => {
+            walk(src, tm);
+        }
+        Kind::Fix(tm) => {
+            walk(src, tm);
+        }
+        Kind::Primitive(p) => {}
+        Kind::Injection(label, tm, ty) => {
+            walk(src, tm);
+        }
+        Kind::Case(term, arms) => {
+            walk(src, term);
+            for a in arms {
+                walk(src, &a.term);
+            }
+        }
+        Kind::Let(t1, t2) => {
+            walk(src, t1);
+            walk(src, t2);
+        }
+        Kind::App(t1, t2) => {
+            walk(src, t1);
+            walk(src, t2);
+        }
+        Kind::TyAbs(t) => walk(src, t),
+        Kind::TyApp(t, _) => walk(src, t),
+        _ => {}
+    }
+}
 
 fn main() {
     let mut ctx = types::Context::default();
@@ -115,8 +121,11 @@ fn main() {
         print!("repl: ");
         std::io::stdout().flush().unwrap();
         std::io::stdin().read_to_string(&mut buffer).unwrap();
+        // dbg!(&buffer);
+        
         let mut p = Parser::new(&buffer);
         while let Ok(term) = p.parse() {
+            walk(&buffer, &term);
             if let Err(tyerr) = eval(&mut ctx, term) {
                 match tyerr.kind {
                     TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
@@ -139,5 +148,7 @@ fn main() {
         if diag.error_count() > 0 {
             println!("Parsing {}", diag.emit());
         }
+
+        break;
     }
 }

@@ -202,9 +202,7 @@ impl<'s> Parser<'s> {
     }
 
     pub fn ty(&mut self) -> Result<Type, Error> {
-        let span = self.span;
         let mut lhs = self.ty_tuple()?;
-
         if let TokenKind::TyArrow = self.kind() {
             self.bump();
             while let Ok(rhs) = self.ty_tuple() {
@@ -216,7 +214,6 @@ impl<'s> Parser<'s> {
                 }
             }
         }
-
         Ok(lhs)
     }
 
@@ -448,9 +445,9 @@ impl<'s> Parser<'s> {
         Ok(Arm { span, pat, term })
     }
 
-    fn case(&mut self) -> Result<Term, Error> {
-        let span = self.span;
+    fn case(&mut self) -> Result<Term, Error> {        
         self.expect(TokenKind::Case)?;
+        let span = self.span;
         let expr = self.parse()?;
         self.expect(TokenKind::Of)?;
 
