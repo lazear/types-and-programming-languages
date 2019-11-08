@@ -256,6 +256,7 @@ impl<'s> Parser<'s> {
         self.expect(TokenKind::Equals)?;
 
         let t1 = self.parse()?;
+
         self.tmvar.push(id);
         self.expect(TokenKind::In)?;
         let t2 = self.parse()?;
@@ -497,6 +498,10 @@ impl<'s> Parser<'s> {
             }
             TokenKind::Nat(_) | TokenKind::True | TokenKind::False => self.literal(),
             TokenKind::Eof => self.error(ErrorKind::Eof),
+            TokenKind::Semicolon => {
+                self.bump();
+                self.error(ErrorKind::ExpectedAtom)
+            }
             _ => self.error(ErrorKind::ExpectedAtom),
         }
     }

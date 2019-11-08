@@ -116,7 +116,7 @@ fn walk(src: &str, term: &Term) {
     }
 }
 
-fn parse_and_eval(ctx: &mut types::Context, input: &str, verbose: bool) {
+fn parse_and_eval(ctx: &mut types::Context, input: &str, verbose: bool) -> bool {
     let mut p = Parser::new(input);
     while let Ok(term) = p.parse() {
         if let Err(tyerr) = eval(ctx, term, verbose) {
@@ -134,12 +134,16 @@ fn parse_and_eval(ctx: &mut types::Context, input: &str, verbose: bool) {
                     println!("Type {}", diag.emit())
                 }
             }
+            return false;
         }
     }
 
     let diag = p.diagnostic();
     if diag.error_count() > 0 {
         println!("Parsing {}", diag.emit());
+        false
+    } else {
+        true
     }
 }
 
@@ -153,8 +157,10 @@ fn main() {
     if args.len() > 1 {
         for f in args.skip(1) {
             println!("reading {}", f);
-            let file = std::fs::read_to_string(f).unwrap();
-            parse_and_eval(&mut ctx, &file, false);
+            let file = std::fs::read_to_string(&f).unwrap();
+            if !parse_and_eval(&mut ctx, &file, false) {
+                panic!("test failed! {}", f);
+            }
         }
     }
 

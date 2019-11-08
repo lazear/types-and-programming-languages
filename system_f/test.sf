@@ -1,5 +1,7 @@
 let func = \X (\c: {None | Some X}. \x: X->(X, X). 
-case c of 
-| None => None of {None | Some (X, X)}
-| Some val => Some (val, val) of {None | Some (X, X)} )
+	case c of 
+		| None => None of {None | Some (X, X)}
+		| Some val => Some (val, val) of {None | Some (X, X)} )
 in func [Nat] (Some 10 of {None|Some Nat}) (\x: Nat. (x, x))
+;
+

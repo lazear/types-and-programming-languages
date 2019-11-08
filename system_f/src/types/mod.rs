@@ -342,6 +342,7 @@ impl Context {
                 }
             }
             Kind::Let(t1, t2) => {
+                println!("{} {} {:?}", t1, t2, self.stack);
                 let ty = self.type_of(t1)?;
                 self.push(ty);
                 let y = self.type_of(t2);

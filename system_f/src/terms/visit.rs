@@ -94,8 +94,8 @@ impl MutVisitor for Shift {
     }
 
     fn visit_let(&mut self, sp: &mut Span, t1: &mut Term, t2: &mut Term) {
-        self.cutoff += 1;
         self.visit(t1);
+        self.cutoff += 1;
         self.visit(t2);
         self.cutoff -= 1;
     }
@@ -135,8 +135,8 @@ impl MutVisitor for Subst {
     }
 
     fn visit_let(&mut self, sp: &mut Span, t1: &mut Term, t2: &mut Term) {
-        self.cutoff += 1;
         self.visit(t1);
+        self.cutoff += 1;
         self.visit(t2);
         self.cutoff -= 1;
     }
