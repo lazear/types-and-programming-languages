@@ -17,7 +17,6 @@ impl<'ctx> Eval<'ctx> {
             Kind::TyAbs(_) => true,
             Kind::Primitive(_) => true,
             Kind::Injection(_, tm, _) => self.normal_form(tm),
-            Kind::Projection(tm, _) => self.normal_form(tm),
             Kind::Product(fields) => fields.iter().all(|f| self.normal_form(f)),
             _ => false,
         }
@@ -47,6 +46,9 @@ impl<'ctx> Eval<'ctx> {
     }
 
     pub fn small_step(&self, term: Term) -> Option<Term> {
+        if self.normal_form(&term) {
+            return None;
+        }
         match term.kind {
             Kind::App(t1, t2) => {
                 if self.normal_form(&t2) {

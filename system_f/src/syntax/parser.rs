@@ -115,8 +115,8 @@ impl<'s> Parser<'s> {
         prev.kind
     }
 
-    fn bump_if(&mut self, kind: TokenKind) -> bool {
-        if self.token.kind == kind {
+    fn bump_if(&mut self, kind: &TokenKind) -> bool {
+        if &self.token.kind == kind {
             self.bump();
             true
         } else {
@@ -156,7 +156,7 @@ impl<'s> Parser<'s> {
     }
 
     fn ty_app(&mut self) -> Result<Type, Error> {
-        if !self.bump_if(TokenKind::LSquare) {
+        if !self.bump_if(&TokenKind::LSquare) {
             return self.error(ErrorKind::ExpectedToken(TokenKind::LSquare));
         }
         let ty = self.ty()?;
@@ -287,11 +287,28 @@ impl<'s> Parser<'s> {
         }
     }
 
+    fn once_or_more<T, F>(&mut self, func: F, delimiter: TokenKind) -> Result<Vec<T>, Error>
+    where
+        F: Fn(&mut Parser) -> Result<T, Error>,
+    {
+        let mut v = vec![func(self)?];
+        while self.bump_if(&delimiter) {
+            v.push(func(self)?);
+        }
+        Ok(v)
+    }
+
     fn paren(&mut self) -> Result<Term, Error> {
         self.expect(TokenKind::LParen)?;
-        let n = self.parse()?;
+        let span = self.span;
+        let mut n = self.once_or_more(|p| p.parse(), TokenKind::Comma)?;
         self.expect(TokenKind::RParen)?;
-        Ok(n)
+        if n.len() > 1 {
+            Ok(Term::new(Kind::Product(n), span + self.span))
+        } else {
+            // invariant, n.len() >= 1
+            Ok(n.remove(0))
+        }
     }
 
     fn ident(&mut self) -> Result<Either<String, String>, Error> {
@@ -385,7 +402,7 @@ impl<'s> Parser<'s> {
                 self.bump();
 
                 let mut v = vec![self.pat_atom()?];
-                while self.bump_if(TokenKind::Comma) {
+                while self.bump_if(&TokenKind::Comma) {
                     v.push(self.pat_atom()?);
                 }
                 self.expect(TokenKind::RParen)?;
@@ -421,7 +438,7 @@ impl<'s> Parser<'s> {
 
         let term = Box::new(self.application()?);
 
-        self.bump_if(TokenKind::Comma);
+        self.bump_if(&TokenKind::Comma);
 
         // Unbind any variables from the parsing context
         while self.tmvar.len() > len {
@@ -487,11 +504,35 @@ impl<'s> Parser<'s> {
         }
     }
 
+    /// Parse a term of form:
+    /// projection = atom `.` projection
+    /// projection = atom
+    fn projection(&mut self) -> Result<Term, Error> {
+        let atom = self.atom()?;
+        if self.bump_if(&TokenKind::Proj) {
+            let idx = match self.bump() {
+                TokenKind::Nat(idx) => idx,
+                _ => {
+                    self.diagnostic
+                        .push(format!("expected integer index after {}", atom), self.span);
+                    return self.error(ErrorKind::ExpectedToken(TokenKind::Proj));
+                }
+            };
+            let sp = atom.span + self.span;
+            Ok(Term::new(
+                Kind::Projection(Box::new(atom), idx as usize),
+                sp,
+            ))
+        } else {
+            Ok(atom)
+        }
+    }
+
     /// Parse an application of form:
     /// application = atom application' | atom
     /// application' = atom application' | empty
     fn application(&mut self) -> Result<Term, Error> {
-        let mut app = self.atom()?;
+        let mut app = self.projection()?;
 
         loop {
             let sp = app.span;
@@ -508,7 +549,7 @@ impl<'s> Parser<'s> {
                 // erasep(λX. t) = λX. erasep(t)
                 // erasep(t T) = erasep(t) []      <--- erasure of TyApp
                 app = Term::new(Kind::TyApp(Box::new(app), Box::new(ty)), sp + self.span);
-            } else if let Ok(term) = self.atom() {
+            } else if let Ok(term) = self.projection() {
                 app = Term::new(Kind::App(Box::new(app), Box::new(term)), sp + self.span);
             } else {
                 break;

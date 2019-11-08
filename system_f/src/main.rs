@@ -139,4 +139,35 @@ fn main() {
     if diag.error_count() > 0 {
         println!("Parsing {}", diag.emit());
     }
+
+    use std::io::Read;
+    loop {
+        let mut buffer = String::new();
+        std::io::stdin().read_to_string(&mut buffer).unwrap();
+        dbg!(&buffer);
+        let mut p = Parser::new(&buffer);
+        while let Ok(term) = p.parse() {
+            if let Err(tyerr) = eval(&mut ctx, term) {
+                match tyerr.kind {
+                    TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
+                        input,
+                        &[
+                            (format!("abstraction requires type {:?}", t1), tyerr.span),
+                            (format!("but it is applied to type {:?}", t2), sp),
+                        ],
+                    ),
+                    _ => {
+                        let mut diag = util::diagnostic::Diagnostic::new(input);
+                        diag.push(format!("{:?}", tyerr.kind), tyerr.span);
+                        println!("Type {}", diag.emit())
+                    }
+                }
+            }
+        }
+
+        let diag = p.diagnostic();
+        if diag.error_count() > 0 {
+            println!("Parsing {}", diag.emit());
+        }
+    }
 }
