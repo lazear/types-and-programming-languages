@@ -186,13 +186,28 @@ impl<'s> Parser<'s> {
         }
     }
 
+    fn ty_tuple(&mut self) -> Result<Type, Error> {
+        if self.bump_if(&TokenKind::LParen) {
+            let mut v = self.once_or_more(|p| p.ty_atom(), TokenKind::Comma)?;
+            self.expect(TokenKind::RParen)?;
+
+            if v.len() > 1 {
+                Ok(Type::Product(v))
+            } else {
+                Ok(v.remove(0))
+            }
+        } else {
+            self.ty_atom()
+        }
+    }
+
     fn ty(&mut self) -> Result<Type, Error> {
         let span = self.span;
-        let mut lhs = self.ty_atom()?;
+        let mut lhs = self.ty_tuple()?;
 
         if let TokenKind::TyArrow = self.kind() {
             self.bump();
-            while let Ok(rhs) = self.ty_atom() {
+            while let Ok(rhs) = self.ty_tuple() {
                 lhs = Type::Arrow(Box::new(lhs), Box::new(rhs));
                 if let TokenKind::TyArrow = self.kind() {
                     self.bump();
