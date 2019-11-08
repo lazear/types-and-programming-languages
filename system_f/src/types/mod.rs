@@ -363,7 +363,10 @@ impl Context {
                         Shift::new(-1).visit(&mut ty12);
                         Ok(*ty12)
                     }
-                    _ => Context::error(term, TypeErrorKind::NotUniversal),
+                    _ => {
+                        dbg!(ty1);
+                        Context::error(term, TypeErrorKind::NotUniversal)
+                    }
                 }
             }
         }

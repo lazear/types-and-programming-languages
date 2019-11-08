@@ -86,6 +86,37 @@ impl<'s> Parser<'s> {
 }
 
 impl<'s> Parser<'s> {
+    /// Kleene Plus combinator
+    fn once_or_more<T, F>(&mut self, func: F, delimiter: TokenKind) -> Result<Vec<T>, Error>
+    where
+        F: Fn(&mut Parser) -> Result<T, Error>,
+    {
+        let mut v = vec![func(self)?];
+        while self.bump_if(&delimiter) {
+            v.push(func(self)?);
+        }
+        Ok(v)
+    }
+
+    /// Expect combinator
+    /// Combinator that must return Ok or a message will be pushed to
+    /// diagnostic. This method should only be called after a token has
+    /// already been bumped.
+    fn once<T, F>(&mut self, func: F, message: &str) -> Result<T, Error>
+    where
+        F: Fn(&mut Parser) -> Result<T, Error>,
+    {
+        match func(self) {
+            Ok(t) => Ok(t),
+            Err(e) => {
+                self.diagnostic.push(message, self.span);
+                Err(e)
+            }
+        }
+    }
+}
+
+impl<'s> Parser<'s> {
     fn error<T>(&self, kind: ErrorKind) -> Result<T, Error> {
         Err(Error {
             span: self.token.span,
@@ -174,11 +205,7 @@ impl<'s> Parser<'s> {
             }
             TokenKind::LBrace => {
                 self.bump();
-                let mut fields = vec![self.ty_variant()?];
-                while let TokenKind::Bar = self.kind() {
-                    self.expect(TokenKind::Bar)?;
-                    fields.push(self.ty_variant()?);
-                }
+                let fields = self.once_or_more(|p| p.ty_variant(), TokenKind::Bar)?;
                 self.expect(TokenKind::RBrace)?;
                 Ok(Type::Variant(fields))
             }
@@ -221,7 +248,7 @@ impl<'s> Parser<'s> {
         let tyvar = self.uppercase_id()?;
         let sp = self.span;
         let ty = Box::new(Type::Var(self.tyvar.push(tyvar)));
-        let body = self.parse()?;
+        let body = self.once(|p| p.parse(), "abstraction body required")?;
         Ok(Term::new(Kind::TyAbs(Box::new(body)), sp + self.span))
     }
 
@@ -229,11 +256,11 @@ impl<'s> Parser<'s> {
         let tmvar = self.lowercase_id()?;
         let sp = self.span;
         self.tmvar.push(tmvar);
-        // let tm = Box::new(Term::new(Kind::Var(self.tmvar.push(tmvar)), sp));
+
         self.expect(TokenKind::Colon)?;
-        let ty = self.ty()?;
+        let ty = self.once(|p| p.ty(), "type annotation required in abstraction")?;
         self.expect(TokenKind::Proj)?;
-        let body = self.parse()?;
+        let body = self.once(|p| p.parse(), "abstraction body required")?;
         self.tmvar.pop();
         Ok(Term::new(
             Kind::Abs(Box::new(ty), Box::new(body)),
@@ -255,11 +282,11 @@ impl<'s> Parser<'s> {
 
         self.expect(TokenKind::Equals)?;
 
-        let t1 = self.parse()?;
+        let t1 = self.once(|p| p.parse(), "let binder required")?;
 
         self.tmvar.push(id);
         self.expect(TokenKind::In)?;
-        let t2 = self.parse()?;
+        let t2 = self.once(|p| p.parse(), "let body required")?;
         self.tmvar.pop();
         Ok(Term::new(
             Kind::Let(Box::new(t1), Box::new(t2)),
@@ -280,17 +307,6 @@ impl<'s> Parser<'s> {
                 self.error(ErrorKind::ExpectedIdent)
             }
         }
-    }
-
-    fn once_or_more<T, F>(&mut self, func: F, delimiter: TokenKind) -> Result<Vec<T>, Error>
-    where
-        F: Fn(&mut Parser) -> Result<T, Error>,
-    {
-        let mut v = vec![func(self)?];
-        while self.bump_if(&delimiter) {
-            v.push(func(self)?);
-        }
-        Ok(v)
     }
 
     fn paren(&mut self) -> Result<Term, Error> {
@@ -415,10 +431,10 @@ impl<'s> Parser<'s> {
     }
 
     fn case_arm(&mut self) -> Result<Arm, Error> {
-        match self.kind() {
-            TokenKind::Bar => self.bump(),
-            _ => return self.error(ErrorKind::ExpectedToken(TokenKind::Bar)),
-        };
+        // match self.kind() {
+        //     TokenKind::Bar => self.bump(),
+        //     _ => return self.error(ErrorKind::ExpectedToken(TokenKind::Bar)),
+        // };
 
         // We don't track the length of the debruijn index in other methods,
         // but we have a couple branches where variables might be bound,
@@ -427,12 +443,12 @@ impl<'s> Parser<'s> {
         let len = self.tmvar.len();
         let mut span = self.span;
 
-        let pat = self.pattern()?;
+        let pat = self.once(|p| p.pattern(), "missing pattern")?;
 
         self.expect(TokenKind::Equals)?;
         self.expect(TokenKind::Gt)?;
 
-        let term = Box::new(self.application()?);
+        let term = Box::new(self.once(|p| p.application(), "missing case term")?);
 
         self.bump_if(&TokenKind::Comma);
 
@@ -449,13 +465,11 @@ impl<'s> Parser<'s> {
     fn case(&mut self) -> Result<Term, Error> {
         self.expect(TokenKind::Case)?;
         let span = self.span;
-        let expr = self.parse()?;
+        let expr = self.once(|p| p.parse(), "missing case expression")?;
         self.expect(TokenKind::Of)?;
 
-        let mut arms = Vec::with_capacity(8);
-        while let Ok(arm) = self.case_arm() {
-            arms.push(arm);
-        }
+        self.bump_if(&TokenKind::Bar);
+        let arms = self.once_or_more(|p| p.case_arm(), TokenKind::Bar)?;
 
         Ok(Term::new(
             Kind::Case(Box::new(expr), arms),

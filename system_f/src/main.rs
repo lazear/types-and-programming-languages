@@ -29,19 +29,6 @@ fn test_variant() -> Type {
     ])
 }
 
-fn bool_variant() -> Type {
-    Type::Variant(vec![
-        Variant {
-            label: "T".into(),
-            ty: Type::Unit,
-        },
-        Variant {
-            label: "F".into(),
-            ty: Type::Unit,
-        },
-    ])
-}
-
 pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
     let lines = msgs
         .iter()
@@ -79,6 +66,13 @@ fn eval(ctx: &mut types::Context, mut term: Term, verbose: bool) -> Result<Term,
         }
     };
     println!("===> {}", fin);
+    let fty = ctx.type_of(&fin)?;
+    if fty != ty {
+        panic!(
+            "Type of term after evaluation is different than before!\n1 {:?}\n2 {:?}",
+            ty, fty
+        );
+    }
     Ok(fin)
 }
 
@@ -151,7 +145,6 @@ fn main() {
     let mut ctx = types::Context::default();
 
     ctx.alias("Var".into(), test_variant());
-    ctx.alias("Boolv".into(), bool_variant());
 
     let args = env::args();
     if args.len() > 1 {

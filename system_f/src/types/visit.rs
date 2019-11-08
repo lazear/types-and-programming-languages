@@ -64,8 +64,8 @@ impl MutVisitor for Shift {
 }
 
 pub struct Subst {
-    cutoff: usize,
-    ty: Type,
+    pub cutoff: usize,
+    pub ty: Type,
 }
 
 impl Subst {

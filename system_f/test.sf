@@ -11,3 +11,7 @@ let poly = \X \x: X. x in
 	let z = poly [(Nat, Bool)] in 
 	z (x, y)
 ;
+
+let poly = \X \Y (\func: X->Y. \val: X. func val) in poly [Nat][Bool];
+
+let func = \x: Nat. x in func 0
