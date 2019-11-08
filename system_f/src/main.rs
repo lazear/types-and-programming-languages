@@ -5,8 +5,9 @@ mod eval;
 mod syntax;
 mod types;
 
+use std::io::{Read, Write};
 use syntax::parser::Parser;
-use terms::{Kind, Term};
+use terms::Term;
 use types::{Type, TypeError, TypeErrorKind, Variant};
 use util;
 
@@ -105,59 +106,28 @@ fn eval(ctx: &mut types::Context, mut term: Term) -> Result<Term, TypeError> {
 
 fn main() {
     let mut ctx = types::Context::default();
-    let input = "let f = \\x: Var. case x of 
-            | A _ => B 10 of Var 
-            | B x => C succ x of Var 
-            | C(y) => B succ y of Var 
-        in f (f (f A of Var))";
-    let mut p = Parser::new(input);
 
     ctx.alias("Var".into(), test_variant());
     ctx.alias("Boolv".into(), bool_variant());
 
-    while let Ok(term) = p.parse() {
-        // walk(input, &term);
-        if let Err(tyerr) = eval(&mut ctx, term) {
-            match tyerr.kind {
-                TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
-                    input,
-                    &[
-                        (format!("abstraction requires type {:?}", t1), tyerr.span),
-                        (format!("but it is applied to type {:?}", t2), sp),
-                    ],
-                ),
-                _ => {
-                    let mut diag = util::diagnostic::Diagnostic::new(input);
-                    diag.push(format!("{:?}", tyerr.kind), tyerr.span);
-                    println!("Type {}", diag.emit())
-                }
-            }
-        }
-    }
-
-    let diag = p.diagnostic();
-    if diag.error_count() > 0 {
-        println!("Parsing {}", diag.emit());
-    }
-
-    use std::io::Read;
     loop {
         let mut buffer = String::new();
+        print!("repl: ");
+        std::io::stdout().flush().unwrap();
         std::io::stdin().read_to_string(&mut buffer).unwrap();
-        dbg!(&buffer);
         let mut p = Parser::new(&buffer);
         while let Ok(term) = p.parse() {
             if let Err(tyerr) = eval(&mut ctx, term) {
                 match tyerr.kind {
                     TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
-                        input,
+                        &buffer,
                         &[
                             (format!("abstraction requires type {:?}", t1), tyerr.span),
                             (format!("but it is applied to type {:?}", t2), sp),
                         ],
                     ),
                     _ => {
-                        let mut diag = util::diagnostic::Diagnostic::new(input);
+                        let mut diag = util::diagnostic::Diagnostic::new(&buffer);
                         diag.push(format!("{:?}", tyerr.kind), tyerr.span);
                         println!("Type {}", diag.emit())
                     }

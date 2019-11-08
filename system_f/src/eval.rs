@@ -246,16 +246,17 @@ impl terms::visit::MutVisitor for TyTermSubst {
 #[cfg(test)]
 mod test {
     use super::*;
+    use util::span::Span;
 
     #[test]
-    fn eval_literal() {
+    fn literal() {
         let ctx = crate::types::Context::default();
         let eval = Eval::with_context(&ctx);
         assert_eq!(eval.small_step(lit!(false)), None);
     }
 
     #[test]
-    fn eval_application() {
+    fn application() {
         let ctx = crate::types::Context::default();
         let eval = Eval::with_context(&ctx);
         let tm = app!(
@@ -272,7 +273,7 @@ mod test {
     }
 
     #[test]
-    fn eval_type_application() {
+    fn type_application() {
         let ctx = crate::types::Context::default();
         let eval = Eval::with_context(&ctx);
         let tm = tyapp!(
@@ -287,5 +288,24 @@ mod test {
         );
         let t2 = eval.small_step(t1.unwrap());
         assert_eq!(t2, None);
+    }
+
+    #[test]
+    fn projection() {
+        let ctx = crate::types::Context::default();
+        let eval = Eval::with_context(&ctx);
+        let product = Term::new(
+            Kind::Product(vec![nat!(5), nat!(6), nat!(29)]),
+            Span::zero(),
+        );
+        let projection = Term::new(Kind::Projection(Box::new(product), 2), Span::zero());
+        let term = app!(prim!(Primitive::Succ), projection);
+
+        let t1 = eval.small_step(term);
+        assert_eq!(t1, Some(app!(prim!(Primitive::Succ), nat!(29))));
+        let t2 = eval.small_step(t1.unwrap());
+        assert_eq!(t2, Some(nat!(30)));
+        let t3 = eval.small_step(t2.unwrap());
+        assert_eq!(t3, None);
     }
 }

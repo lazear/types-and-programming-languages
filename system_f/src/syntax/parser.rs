@@ -201,7 +201,7 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn ty(&mut self) -> Result<Type, Error> {
+    pub fn ty(&mut self) -> Result<Type, Error> {
         let span = self.span;
         let mut lhs = self.ty_tuple()?;
 
