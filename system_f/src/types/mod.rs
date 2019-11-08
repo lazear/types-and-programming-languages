@@ -13,6 +13,7 @@ pub enum Type {
     Alias(String),
     Var(usize),
     Variant(Vec<Variant>),
+    Product(Vec<Type>),
     Arrow(Box<Type>, Box<Type>),
     Universal(Box<Type>),
 }
@@ -33,9 +34,11 @@ pub struct TypeError {
 pub enum TypeErrorKind {
     ParameterMismatch(Box<Type>, Box<Type>, Span),
     IncompatibleArms,
+    InvalidProjection,
     NotArrow,
     NotUniversal,
     NotVariant,
+    NotProduct,
     NotExhaustive,
     UnreachablePattern,
     UnboundVariable(usize),
@@ -151,7 +154,7 @@ impl Context {
                 Primitive::IsZero => Ok(Type::Arrow(Box::new(Type::Nat), Box::new(Type::Bool))),
                 _ => Ok(Type::Arrow(Box::new(Type::Nat), Box::new(Type::Nat))),
             },
-            Kind::Constructor(label, tm, ty) => match ty.as_ref() {
+            Kind::Injection(label, tm, ty) => match ty.as_ref() {
                 Type::Variant(fields) => {
                     for f in fields {
                         if label == &f.label {
@@ -174,6 +177,19 @@ impl Context {
                 }
                 _ => Context::error(term, TypeErrorKind::NotVariant),
             },
+            Kind::Projection(term, idx) => match self.type_of(term)? {
+                Type::Product(types) => match types.get(*idx) {
+                    Some(ty) => Ok(ty.clone()),
+                    None => Context::error(term, TypeErrorKind::InvalidProjection),
+                },
+                _ => Context::error(term, TypeErrorKind::NotProduct),
+            },
+            Kind::Product(terms) => Ok(Type::Product(
+                terms
+                    .iter()
+                    .map(|t| self.type_of(t))
+                    .collect::<Result<_, _>>()?,
+            )),
             Kind::Case(tm, arms) => {
                 let ty = self.type_of(tm)?;
                 match &ty {
@@ -215,8 +231,12 @@ impl Context {
                                     println!("Literal {:?} can't be used in case Bool!", l);
                                     return Context::error(tm, TypeErrorKind::UnreachablePattern);
                                 }
-                                Pattern::Constructor(c) => {
+                                Pattern::Constructor(c, pat) => {
                                     println!("Constructor {} can't be used in case Bool!", c);
+                                    return Context::error(tm, TypeErrorKind::UnreachablePattern);
+                                }
+                                Pattern::Product(v) => {
+                                    println!("Tuple {:?} can't be used in case Bool!", v);
                                     return Context::error(tm, TypeErrorKind::UnreachablePattern);
                                 }
                             };
@@ -271,7 +291,7 @@ impl Context {
                                     self.pop();
                                     ty_arm
                                 }
-                                Pattern::Constructor(c) => {
+                                Pattern::Constructor(c, pat) => {
                                     let ty_con = variant_field(&fields, c, arm.span)?;
 
                                     // Set::insert() returns false if the
@@ -290,6 +310,7 @@ impl Context {
                                     self.pop();
                                     ty_arm
                                 }
+                                Pattern::Product(_) => unimplemented!(),
                                 Pattern::Literal(_) => {
                                     return Context::error(term, TypeErrorKind::UnreachablePattern)
                                 }
@@ -363,6 +384,8 @@ impl<'ctx> MutVisitor for Aliaser<'ctx> {
                 }
             }
             Type::Variant(v) => self.visit_variant(v),
+            Type::Product(v) => self.visit_product(v),
+
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
         }
@@ -380,7 +403,7 @@ impl crate::terms::visit::MutVisitor for Context {
         self.visit(term);
     }
 
-    fn visit_constructor(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
+    fn visit_injection(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
         self.aliaser().visit(ty);
         self.visit(term);
     }
@@ -400,6 +423,14 @@ impl fmt::Debug for Type {
                     .map(|x| format!("{}: {:?}", x.label, x.ty))
                     .collect::<Vec<String>>()
                     .join(" | ")
+            ),
+            Type::Product(v) => write!(
+                f,
+                "({})",
+                v.iter()
+                    .map(|x| format!("{:?}", x))
+                    .collect::<Vec<String>>()
+                    .join(",")
             ),
             Type::Alias(s) => write!(f, "{}", s),
             Type::Arrow(t1, t2) => write!(f, "({:?}->{:?})", t1, t2),

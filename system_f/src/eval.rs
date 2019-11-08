@@ -16,7 +16,9 @@ impl<'ctx> Eval<'ctx> {
             Kind::Abs(_, _) => true,
             Kind::TyAbs(_) => true,
             Kind::Primitive(_) => true,
-            Kind::Constructor(_, tm, _) => self.normal_form(tm),
+            Kind::Injection(_, tm, _) => self.normal_form(tm),
+            Kind::Projection(tm, _) => self.normal_form(tm),
+            Kind::Product(fields) => fields.iter().all(|f| self.normal_form(f)),
             _ => false,
         }
     }
@@ -90,12 +92,38 @@ impl<'ctx> Eval<'ctx> {
                     Some(Term::new(Kind::TyApp(Box::new(t_prime), ty), term.span))
                 }
             },
-            Kind::Constructor(label, tm, ty) => {
+            Kind::Injection(label, tm, ty) => {
                 let t_prime = self.small_step(*tm)?;
                 Some(Term::new(
-                    Kind::Constructor(label, Box::new(t_prime), ty),
+                    Kind::Injection(label, Box::new(t_prime), ty),
                     term.span,
                 ))
+            }
+            Kind::Projection(tm, idx) => {
+                if self.normal_form(&tm) {
+                    match tm.kind {
+                        // Typechecker ensures that idx is in bounds
+                        Kind::Product(terms) => terms.get(idx).cloned(),
+                        _ => None,
+                    }
+                } else {
+                    let t_prime = self.small_step(*tm)?;
+                    Some(Term::new(
+                        Kind::Projection(Box::new(t_prime), idx),
+                        term.span,
+                    ))
+                }
+            }
+            Kind::Product(terms) => {
+                let mut v = Vec::with_capacity(terms.len());
+                for term in terms {
+                    if self.normal_form(&term) {
+                        v.push(term);
+                    } else {
+                        v.push(self.small_step(term)?);
+                    }
+                }
+                Some(Term::new(Kind::Product(v), term.span))
             }
             Kind::Case(expr, arms) => {
                 match expr.kind() {
@@ -118,12 +146,13 @@ impl<'ctx> Eval<'ctx> {
                                         return Some(*arm.term);
                                     }
                                 }
-                                Pattern::Constructor(_) => return None,
+                                Pattern::Constructor(_, _) => return None,
+                                Pattern::Product(_) => unimplemented!(),
                             }
                         }
                         None
                     }
-                    Kind::Constructor(label, tm, ty) => {
+                    Kind::Injection(label, tm, ty) => {
                         for mut arm in arms {
                             match arm.pat {
                                 Pattern::Any => return Some(*arm.term),
@@ -137,7 +166,7 @@ impl<'ctx> Eval<'ctx> {
                                     dbg!(&arm.term);
                                     return Some(*arm.term);
                                 }
-                                Pattern::Constructor(tag) => {
+                                Pattern::Constructor(tag, _) => {
                                     if label == &tag {
                                         // If the constructor is bound to a type
                                         // that is not unit, we should term subst
@@ -153,6 +182,7 @@ impl<'ctx> Eval<'ctx> {
                                     }
                                 }
                                 Pattern::Literal(_) => return None,
+                                Pattern::Product(_) => unimplemented!(),
                             }
                         }
                         None
@@ -205,7 +235,7 @@ impl terms::visit::MutVisitor for TyTermSubst {
         self.visit(term);
     }
 
-    fn visit_constructor(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
+    fn visit_injection(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
         self.subst.visit(ty);
         self.visit(term);
     }

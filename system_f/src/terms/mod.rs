@@ -28,8 +28,14 @@ pub enum Kind {
 
     Primitive(Primitive),
 
-    /// A type constructor tag, term, and variant type
-    Constructor(String, Box<Term>, Box<Type>),
+    /// Injection into a sum type
+    /// fields: type constructor tag, term, and sum type
+    Injection(String, Box<Term>, Box<Type>),
+
+    /// Product type (tuple)
+    Product(Vec<Term>),
+    /// Projection into a term
+    Projection(Box<Term>, usize),
 
     /// A case expr, with case arms
     Case(Box<Term>, Vec<Arm>),
@@ -47,10 +53,15 @@ pub enum Kind {
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Pattern {
+    // Wildcard
     Any,
+    // Constant
     Literal(Literal),
+    // Variable binding
     Variable(String),
-    Constructor(String),
+    // Tuple of pattern bindings
+    Product(Vec<Pattern>),
+    Constructor(String, Box<Pattern>),
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -110,7 +121,9 @@ impl fmt::Display for Term {
             Kind::Abs(ty, term) => write!(f, "(λ_:{:?}. {})", ty, term),
             Kind::Fix(term) => write!(f, "Fix {:?}", term),
             Kind::Primitive(p) => write!(f, "{:?}", p),
-            Kind::Constructor(label, tm, ty) => write!(f, "{:?}::{}({})", ty, label, tm),
+            Kind::Injection(label, tm, ty) => write!(f, "{:?}::{}({})", ty, label, tm),
+            Kind::Projection(term, idx) => write!(f, "{}.{}", term, idx),
+            Kind::Product(terms) => write!(f, "{:?}", terms),
             Kind::Case(term, arms) => {
                 writeln!(f, "case {} of", term)?;
                 for arm in arms {

@@ -27,7 +27,7 @@ pub trait MutVisitor: Sized {
     }
 
     fn visit_primitive(&mut self, prim: &mut Primitive) {}
-    fn visit_constructor(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
+    fn visit_injection(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
         self.visit(term);
     }
 
@@ -36,6 +36,16 @@ pub trait MutVisitor: Sized {
         for arm in arms {
             self.visit(&mut arm.term);
         }
+    }
+
+    fn visit_product(&mut self, product: &mut Vec<Term>) {
+        for t in product {
+            self.visit(t);
+        }
+    }
+
+    fn visit_projection(&mut self, term: &mut Term, index: &mut usize) {
+        self.visit(term);
     }
 
     fn visit(&mut self, term: &mut Term) {
@@ -48,7 +58,9 @@ pub trait MutVisitor: Sized {
             // Do we need a separate branch?
             Kind::Fix(term) => self.visit(term),
             Kind::Primitive(p) => self.visit_primitive(p),
-            Kind::Constructor(label, tm, ty) => self.visit_constructor(label, tm, ty),
+            Kind::Injection(label, tm, ty) => self.visit_injection(label, tm, ty),
+            Kind::Projection(term, idx) => self.visit_projection(term, idx),
+            Kind::Product(terms) => self.visit_product(terms),
             Kind::Case(term, arms) => self.visit_case(term, arms),
             Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
             Kind::TyAbs(term) => self.visit_tyabs(sp, term),
@@ -154,7 +166,9 @@ impl MutVisitor for Subst {
             Kind::App(t1, t2) => self.visit_app(sp, t1, t2),
             Kind::Fix(term) => self.visit(term),
             Kind::Primitive(p) => self.visit_primitive(p),
-            Kind::Constructor(label, tm, ty) => self.visit_constructor(label, tm, ty),
+            Kind::Injection(label, tm, ty) => self.visit_injection(label, tm, ty),
+            Kind::Projection(term, idx) => self.visit_projection(term, idx),
+            Kind::Product(terms) => self.visit_product(terms),
             Kind::Case(term, arms) => self.visit_case(term, arms),
             Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
             Kind::TyAbs(term) => self.visit_tyabs(sp, term),

@@ -105,25 +105,11 @@ fn eval(ctx: &mut types::Context, mut term: Term) -> Result<Term, TypeError> {
 
 fn main() {
     let mut ctx = types::Context::default();
-
-    // let input = "   let id = (\\X \\x: X. x) in
-    //                 let y = id Nat 0 in
-    //                 let z = id Bool true in
-    //                 z";
-    // let input = "let id = (\\X (\\x: X. x)) Nat in let y = (\\z: Nat. id z) in y
-    // 1";
-    //
-    // let input = "let x = 1 in case C 10 of Var of
-    //     | A => 0
-    //     | B x => succ x
-    //     | C x => pred x";
-
-    // let input = "let func = (\\x: Var. case x of | A => 0 | B x => succ x | C y
-    // => pred y) in func C 2 of Var"; let input = "let polyid = (\\X \\x: X. x)
-    // in (\\x: Nat. polyid [Bool] false) (polyid [Nat] 0)";
-    let input = "let ifz = \\q: Bool. \\y: Nat. \\z: Nat. case q of | true => y | _ => false in ifz false 10 20";
-    // let input = "let f = \\x: Var. case x of | A => B 10 of Var | B x => C succ x
-    // of Var | C b => B succ b of Var in f (f (f A of Var))";
+    let input = "let f = \\x: Var. case x of 
+            | A _ => B 10 of Var 
+            | B x => C succ x of Var 
+            | C(y) => B succ y of Var 
+        in f (f (f A of Var))";
     let mut p = Parser::new(input);
 
     ctx.alias("Var".into(), test_variant());

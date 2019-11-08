@@ -331,6 +331,76 @@ impl<'s> Parser<'s> {
         Ok(Term::new(Kind::Primitive(p), self.span))
     }
 
+    /// Important to note that this function can push variable names to the
+    /// de Bruijn naming context. Callers of this function are responsible for
+    /// making sure that the stack is balanced afterwards
+    fn pat_atom(&mut self) -> Result<Pattern, Error> {
+        match self.kind() {
+            TokenKind::Wildcard => {
+                self.bump();
+                Ok(Pattern::Any)
+            }
+            TokenKind::Ident(s) => match self.ident()? {
+                Either::Constr(tycon) => {
+                    // If the constructor isn't explicity followed by a pattern
+                    // binding, we insert a wildcard match. Currently, enum-like
+                    // variants (without a data binding) are treated as variants
+                    // of type Unit, so they can't have anything bound anyway
+                    let inner = match self.pattern() {
+                        Ok(pat) => pat,
+                        _ => Pattern::Any,
+                    };
+                    Ok(Pattern::Constructor(tycon, Box::new(inner)))
+                }
+                Either::Ident(var) => {
+                    self.tmvar.push(var.clone());
+                    Ok(Pattern::Variable(var))
+                }
+            },
+            TokenKind::True => {
+                self.bump();
+                Ok(Pattern::Literal(Literal::Bool(true)))
+            }
+            TokenKind::False => {
+                self.bump();
+                Ok(Pattern::Literal(Literal::Bool(false)))
+            }
+            TokenKind::Unit => {
+                self.bump();
+                Ok(Pattern::Literal(Literal::Unit))
+            }
+            TokenKind::Nat(n) => {
+                // O great borrowck, may this humble offering appease thee
+                let n = *n;
+                self.bump();
+                Ok(Pattern::Literal(Literal::Nat(n)))
+            }
+            _ => return self.error(ErrorKind::ExpectedPattern),
+        }
+    }
+
+    fn pattern(&mut self) -> Result<Pattern, Error> {
+        match self.kind() {
+            TokenKind::LParen => {
+                self.bump();
+
+                let mut v = vec![self.pat_atom()?];
+                while self.bump_if(TokenKind::Comma) {
+                    v.push(self.pat_atom()?);
+                }
+                self.expect(TokenKind::RParen)?;
+                if v.len() > 1 {
+                    Ok(Pattern::Product(v))
+                } else {
+                    // v must have length == 1, else we would have early returned
+                    assert_eq!(v.len(), 1);
+                    Ok(v.remove(0))
+                }
+            }
+            _ => self.pat_atom(),
+        }
+    }
+
     fn case_arm(&mut self) -> Result<Arm, Error> {
         match self.kind() {
             TokenKind::Bar => self.bump(),
@@ -344,44 +414,7 @@ impl<'s> Parser<'s> {
         let len = self.tmvar.len();
         let mut span = self.span;
 
-        let pat = match self.kind() {
-            TokenKind::Wildcard => {
-                self.bump();
-                Pattern::Any
-            }
-            TokenKind::Ident(s) => match self.ident()? {
-                Either::Constr(tycon) => Pattern::Constructor(tycon),
-                Either::Ident(var) => {
-                    self.tmvar.push(var.clone());
-                    Pattern::Variable(var)
-                }
-            },
-            TokenKind::True => Pattern::Literal(Literal::Bool(true)),
-            TokenKind::False => Pattern::Literal(Literal::Bool(false)),
-            TokenKind::Unit => Pattern::Literal(Literal::Unit),
-            TokenKind::Nat(n) => Pattern::Literal(Literal::Nat(*n)),
-            _ => return self.error(ErrorKind::ExpectedPattern),
-        };
-
-        if let Pattern::Literal(_) = &pat {
-            self.bump();
-        }
-
-        // If our pattern is a constructor, we might want to bind a variable,
-        // for example:
-        // case expr of
-        //  | List x => head x,
-        //  | Nil => nil,
-        if let Pattern::Constructor(_) = &pat {
-            if let TokenKind::Ident(s) = self.kind() {
-                match self.ident()? {
-                    Either::Constr(_) => return self.error(ErrorKind::ExpectedIdent),
-                    Either::Ident(var) => {
-                        self.tmvar.push(var);
-                    }
-                }
-            }
-        }
+        let pat = self.pattern()?;
 
         self.expect(TokenKind::Equals)?;
         self.expect(TokenKind::Gt)?;
@@ -417,7 +450,7 @@ impl<'s> Parser<'s> {
         ))
     }
 
-    fn constructor(&mut self, label: String) -> Result<Term, Error> {
+    fn injection(&mut self, label: String) -> Result<Term, Error> {
         let sp = self.span;
         let term = match self.parse() {
             Ok(t) => t,
@@ -427,7 +460,7 @@ impl<'s> Parser<'s> {
         self.expect(TokenKind::Of)?;
         let ty = self.ty()?;
         Ok(Term::new(
-            Kind::Constructor(label, Box::new(term), Box::new(ty)),
+            Kind::Injection(label, Box::new(term), Box::new(ty)),
             sp + self.span,
         ))
     }
@@ -438,7 +471,7 @@ impl<'s> Parser<'s> {
             TokenKind::Fix => self.fix(),
             TokenKind::IsZero | TokenKind::Succ | TokenKind::Pred => self.primitive(),
             TokenKind::Ident(s) => match self.ident()? {
-                Either::Constr(ty) => self.constructor(ty),
+                Either::Constr(ty) => self.injection(ty),
                 Either::Ident(tm) => match self.tmvar.lookup(&tm) {
                     Some(idx) => Ok(Term::new(Kind::Var(idx), self.span)),
                     None => {

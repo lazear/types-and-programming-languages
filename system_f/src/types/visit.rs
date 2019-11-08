@@ -19,11 +19,18 @@ pub trait MutVisitor: Sized {
         }
     }
 
+    fn visit_product(&mut self, product: &mut Vec<Type>) {
+        for v in product {
+            self.visit(v);
+        }
+    }
+
     fn visit(&mut self, ty: &mut Type) {
         match ty {
             Type::Unit | Type::Bool | Type::Nat => {}
             Type::Var(v) => self.visit_var(v),
             Type::Variant(v) => self.visit_variant(v),
+            Type::Product(v) => self.visit_product(v),
             Type::Alias(s) => self.visit_alias(s),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
@@ -82,6 +89,7 @@ impl MutVisitor for Subst {
             }
             Type::Var(v) => self.visit_var(v),
             Type::Variant(v) => self.visit_variant(v),
+            Type::Product(v) => self.visit_product(v),
             Type::Alias(v) => self.visit_alias(v),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
