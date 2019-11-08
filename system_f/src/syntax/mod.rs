@@ -4,7 +4,8 @@ use util::span::Span;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum TokenKind {
-    Ident(String),
+    Uppercase(String),
+    Lowercase(String),
     Nat(u32),
     TyNat,
     TyBool,

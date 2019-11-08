@@ -65,21 +65,6 @@ pub enum ErrorKind {
     Unknown,
     Eof,
 }
-
-pub enum Either<L, R> {
-    Constr(L),
-    Ident(R),
-}
-
-impl<T> Either<T, T> {
-    pub fn inner(self) -> T {
-        match self {
-            Either::Constr(t) => t,
-            Either::Ident(t) => t,
-        }
-    }
-}
-
 impl<'s> Parser<'s> {
     /// Create a new [`Parser`] for the input `&str`
     pub fn new(input: &'s str) -> Parser<'s> {
@@ -142,11 +127,7 @@ impl<'s> Parser<'s> {
     }
 
     fn ty_variant(&mut self) -> Result<Variant, Error> {
-        let label = match self.ident()? {
-            Either::Constr(con) => con,
-            Either::Ident(_) => return self.error(ErrorKind::ExpectedIdent),
-        };
-
+        let label = self.uppercase_id()?;
         let ty = match self.ty() {
             Ok(ty) => ty,
             _ => Type::Unit,
@@ -184,8 +165,8 @@ impl<'s> Parser<'s> {
                 self.expect(TokenKind::RParen)?;
                 Ok(r)
             }
-            TokenKind::Ident(s) if s.starts_with(|ch: char| ch.is_ascii_uppercase()) => {
-                let ty = self.ident()?.inner();
+            TokenKind::Uppercase(_) => {
+                let ty = self.uppercase_id()?;
                 match self.tyvar.lookup(&ty) {
                     Some(idx) => Ok(Type::Var(idx)),
                     None => Ok(Type::Alias(ty)),
@@ -224,14 +205,16 @@ impl<'s> Parser<'s> {
         Ok(lhs)
     }
 
-    fn tyabs(&mut self, tyvar: String) -> Result<Term, Error> {
+    fn tyabs(&mut self) -> Result<Term, Error> {
+        let tyvar = self.uppercase_id()?;
         let sp = self.span;
         let ty = Box::new(Type::Var(self.tyvar.push(tyvar)));
         let body = self.parse()?;
         Ok(Term::new(Kind::TyAbs(Box::new(body)), sp + self.span))
     }
 
-    fn tmabs(&mut self, tmvar: String) -> Result<Term, Error> {
+    fn tmabs(&mut self) -> Result<Term, Error> {
+        let tmvar = self.lowercase_id()?;
         let sp = self.span;
         self.tmvar.push(tmvar);
         // let tm = Box::new(Term::new(Kind::Var(self.tmvar.push(tmvar)), sp));
@@ -256,16 +239,8 @@ impl<'s> Parser<'s> {
     fn letexpr(&mut self) -> Result<Term, Error> {
         let sp = self.span;
         self.expect(TokenKind::Let)?;
-        let id = match self.ident()? {
-            Either::Constr(ty) => {
-                self.diagnostic.push(
-                    format!("expected lowercase identifier in let expr, found {}", ty),
-                    self.span,
-                );
-                return self.error(ErrorKind::ExpectedIdent);
-            }
-            Either::Ident(id) => id,
-        };
+        let id = self.lowercase_id()?;
+
         self.expect(TokenKind::Equals)?;
 
         let t1 = self.parse()?;
@@ -281,9 +256,16 @@ impl<'s> Parser<'s> {
 
     fn lambda(&mut self) -> Result<Term, Error> {
         self.expect(TokenKind::Lambda)?;
-        match self.ident()? {
-            Either::Constr(ty) => self.tyabs(ty),
-            Either::Ident(term) => self.tmabs(term),
+        match self.kind() {
+            TokenKind::Uppercase(_) => self.tyabs(),
+            TokenKind::Lowercase(_) => self.tmabs(),
+            _ => {
+                self.diagnostic.push(
+                    "expected identifier after lambda, found".to_string(),
+                    self.span,
+                );
+                self.error(ErrorKind::ExpectedIdent)
+            }
         }
     }
 
@@ -311,18 +293,27 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn ident(&mut self) -> Result<Either<String, String>, Error> {
+    fn uppercase_id(&mut self) -> Result<String, Error> {
         match self.bump() {
-            TokenKind::Ident(ident) => {
-                if ident.starts_with(|ch: char| ch.is_ascii_uppercase()) {
-                    Ok(Either::Constr(ident))
-                } else {
-                    Ok(Either::Ident(ident))
-                }
-            }
+            TokenKind::Uppercase(s) => Ok(s),
             tk => {
-                self.diagnostic
-                    .push(format!("expected identifier, found {:?}", tk), self.span);
+                self.diagnostic.push(
+                    format!("expected uppercase identifier, found {:?}", tk),
+                    self.span,
+                );
+                self.error(ErrorKind::ExpectedIdent)
+            }
+        }
+    }
+
+    fn lowercase_id(&mut self) -> Result<String, Error> {
+        match self.bump() {
+            TokenKind::Lowercase(s) => Ok(s),
+            tk => {
+                self.diagnostic.push(
+                    format!("expected lowercase identifier, found {:?}", tk),
+                    self.span,
+                );
                 self.error(ErrorKind::ExpectedIdent)
             }
         }
@@ -357,23 +348,19 @@ impl<'s> Parser<'s> {
                 self.bump();
                 Ok(Pattern::Any)
             }
-            TokenKind::Ident(s) => match self.ident()? {
-                Either::Constr(tycon) => {
-                    // If the constructor isn't explicity followed by a pattern
-                    // binding, we insert a wildcard match. Currently, enum-like
-                    // variants (without a data binding) are treated as variants
-                    // of type Unit, so they can't have anything bound anyway
-                    let inner = match self.pattern() {
-                        Ok(pat) => pat,
-                        _ => Pattern::Any,
-                    };
-                    Ok(Pattern::Constructor(tycon, Box::new(inner)))
-                }
-                Either::Ident(var) => {
-                    self.tmvar.push(var.clone());
-                    Ok(Pattern::Variable(var))
-                }
-            },
+            TokenKind::Uppercase(_) => {
+                let tycon = self.uppercase_id()?;
+                let inner = match self.pattern() {
+                    Ok(pat) => pat,
+                    _ => Pattern::Any,
+                };
+                Ok(Pattern::Constructor(tycon, Box::new(inner)))
+            }
+            TokenKind::Lowercase(_) => {
+                let var = self.lowercase_id()?;
+                self.tmvar.push(var.clone());
+                Ok(Pattern::Variable(var))
+            }
             TokenKind::True => {
                 self.bump();
                 Ok(Pattern::Literal(Literal::Bool(true)))
@@ -392,7 +379,7 @@ impl<'s> Parser<'s> {
                 self.bump();
                 Ok(Pattern::Literal(Literal::Nat(n)))
             }
-            _ => return self.error(ErrorKind::ExpectedPattern),
+            _ => self.error(ErrorKind::ExpectedPattern),
         }
     }
 
@@ -400,11 +387,7 @@ impl<'s> Parser<'s> {
         match self.kind() {
             TokenKind::LParen => {
                 self.bump();
-
-                let mut v = vec![self.pat_atom()?];
-                while self.bump_if(&TokenKind::Comma) {
-                    v.push(self.pat_atom()?);
-                }
+                let mut v = self.once_or_more(|p| p.pat_atom(), TokenKind::Comma)?;
                 self.expect(TokenKind::RParen)?;
                 if v.len() > 1 {
                     Ok(Pattern::Product(v))
@@ -467,7 +450,8 @@ impl<'s> Parser<'s> {
         ))
     }
 
-    fn injection(&mut self, label: String) -> Result<Term, Error> {
+    fn injection(&mut self) -> Result<Term, Error> {
+        let label = self.uppercase_id()?;
         let sp = self.span;
         let term = match self.parse() {
             Ok(t) => t,
@@ -487,17 +471,18 @@ impl<'s> Parser<'s> {
             TokenKind::LParen => self.paren(),
             TokenKind::Fix => self.fix(),
             TokenKind::IsZero | TokenKind::Succ | TokenKind::Pred => self.primitive(),
-            TokenKind::Ident(s) => match self.ident()? {
-                Either::Constr(ty) => self.injection(ty),
-                Either::Ident(tm) => match self.tmvar.lookup(&tm) {
+            TokenKind::Uppercase(_) => self.injection(),
+            TokenKind::Lowercase(s) => {
+                let var = self.lowercase_id()?;
+                match self.tmvar.lookup(&var) {
                     Some(idx) => Ok(Term::new(Kind::Var(idx), self.span)),
                     None => {
                         self.diagnostic
-                            .push(format!("unbound variable {}", tm), self.span);
+                            .push(format!("unbound variable {}", var), self.span);
                         self.error(ErrorKind::UnboundTypeVar)
                     }
-                },
-            },
+                }
+            }
             TokenKind::Nat(_) | TokenKind::True | TokenKind::False => self.literal(),
             TokenKind::Eof => self.error(ErrorKind::Eof),
             _ => self.error(ErrorKind::ExpectedAtom),

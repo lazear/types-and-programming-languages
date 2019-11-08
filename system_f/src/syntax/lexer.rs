@@ -100,7 +100,13 @@ impl<'s> Lexer<'s> {
             "fix" => TokenKind::Fix,
             "case" => TokenKind::Case,
             "of" => TokenKind::Of,
-            _ => TokenKind::Ident(data),
+            _ => {
+                if data.starts_with(|ch: char| ch.is_ascii_uppercase()) {
+                    TokenKind::Uppercase(data)
+                } else {
+                    TokenKind::Lowercase(data)
+                }
+            }
         };
         Token::new(kind, span)
     }
