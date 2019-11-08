@@ -1,8 +1,9 @@
+pub mod patterns;
+pub mod visit;
 use crate::terms::{Kind, Literal, Pattern, Primitive, Term};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use util::span::Span;
-pub mod visit;
 use visit::{MutVisitor, Shift, Subst};
 
 #[derive(Clone, PartialEq, PartialOrd, Eq, Hash)]
@@ -192,6 +193,19 @@ impl Context {
             )),
             Kind::Case(tm, arms) => {
                 let ty = self.type_of(tm)?;
+                for arm in arms {
+                    if !self.pattern_type_eq(&arm.pat, &ty) {
+                        println!(
+                            "Pattern in case arm {:?} does not match type of {}: {:?}",
+                            arm.pat, tm, ty
+                        );
+                        return Err(TypeError {
+                            span: arm.span,
+                            kind: TypeErrorKind::IncompatibleArms,
+                        });
+                    }
+                }
+
                 match &ty {
                     Type::Bool => {
                         let mut default = false;

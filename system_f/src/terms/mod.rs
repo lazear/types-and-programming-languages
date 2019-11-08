@@ -51,7 +51,7 @@ pub enum Kind {
     TyApp(Box<Term>, Box<Type>),
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub enum Pattern {
     // Wildcard
     Any,
@@ -71,7 +71,7 @@ pub struct Arm {
     pub term: Box<Term>,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub enum Literal {
     Unit,
     Bool(bool),
