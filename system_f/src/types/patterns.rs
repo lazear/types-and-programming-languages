@@ -1,20 +1,36 @@
-//! https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_mir/hair/pattern/_match.rs.html#352
+//! Naive, inefficient exhaustiveness checking for pattern matching
+//!
+//! Inspired somewhat by the docs for the Rust compiler (and linked paper), we
+//! create a "usefulness" predicate. We store current patterns in a row-wise
+//! [`Matrix`], and iterate through each row in the matrix every time we want
+//! to add a new pattern. If no existing rows completely overlap the new row,
+//! then we can determine that the new row is "useful", and add it.
+//!
+//! To check for exhaustiveness, we simply create a row of Wildcard matches,
+//! and see if it would be useful to add
+//!
+//! https://doc.rust-lang.org/nightly/nightly-rustc/src/rustc_mir/hair/pattern/_match.rs.html
+//! http://moscova.inria.fr/~maranget/papers/warn/index.html
+//!
 
 use super::*;
 use crate::terms::{Arm, Kind, Literal, Pattern, Primitive, Term};
-use std::{collections::HashSet, hash::Hash};
 
 fn overlap(existing: &Pattern, new: &Pattern) -> bool {
     use Pattern::*;
     match (existing, new) {
         (Any, _) => true,
         (Variable(_), _) => true,
+        (Constructor(l, a), Constructor(l2, b)) => {
+            if l == l2 {
+                overlap(a, b)
+            } else {
+                false
+            }
+        }
+        (Product(a), Product(b)) => a.iter().zip(b.iter()).all(|(a, b)| overlap(a, b)),
         (x, y) => x == y,
     }
-}
-
-fn row_overlap(existing: &[&Pattern], new: &[Pattern]) -> bool {
-    existing.iter().zip(new.iter()).all(|(a, b)| overlap(a, b))
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -23,90 +39,88 @@ pub struct Matrix<'pat> {
     matrix: Vec<Vec<&'pat Pattern>>,
 }
 
-pub fn pattern_is_useful(pats: &[Pattern], len: usize) -> Option<Matrix<'_>> {
-    let mut matrix: Vec<Vec<&Pattern>> = Vec::new();
-
-    for pat in pats {
-        match pat {
-            Pattern::Variable(_) | Pattern::Any => {
-                let filler = (0..len).map(|_| Pattern::Any).collect::<Vec<_>>();
-                for row in &matrix {
-                    if row_overlap(row, &filler) {
-                        println!("pattern {:?} is not useful\n{:?}", pat, matrix);
-                        return None;
-                    }
-                }
-            }
-            Pattern::Product(tuple) => {
-                for row in &matrix {
-                    if row_overlap(row, tuple) {
-                        println!("pattern {:?} is not useful\n{:?}", pat, matrix);
-                        return None;
-                    }
-                }
-                matrix.push(tuple.iter().collect());
-            }
-            Pattern::Literal(_) | Pattern::Constructor(_, _) => {
-                panic!("invalid pattern given to pattern_is_useful")
-            }
-        }
-    }
-
-    Some(Matrix { matrix, len })
-}
-
 impl<'pat> Matrix<'pat> {
-    pub fn exhaustive(&self) -> bool {
-        let filler = (0..self.len).map(|_| Pattern::Any).collect::<Vec<_>>();
+    pub fn new(len: usize) -> Matrix<'pat> {
+        Matrix {
+            len,
+            matrix: Vec::new(),
+        }
+    }
+
+    /// Is the pattern [`Matrix`] exhaustive for this type?
+    pub fn exhaustive(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Variant(v) => v.iter().all(|variant| {
+                let con = Pattern::Constructor(variant.label.clone(), Box::new(Pattern::Any));
+                let temp = [&con];
+                let mut ret = false;
+                for row in &self.matrix {
+                    if row.iter().zip(&temp).all(|(a, b)| overlap(a, b)) {
+                        ret = true;
+                        break;
+                    }
+                }
+                ret
+            }),
+            Type::Product(_) | Type::Nat => {
+                let filler = (0..self.len).map(|_| Pattern::Any).collect::<Vec<_>>();
+                for row in &self.matrix {
+                    if row.iter().zip(filler.iter()).all(|(a, b)| overlap(a, b)) {
+                        return true;
+                    }
+                }
+                false
+            }
+            Type::Bool => {
+                let tru = Pattern::Literal(Literal::Bool(true));
+                let fal = Pattern::Literal(Literal::Bool(false));
+                !(self.can_add_row(vec![&tru]) && self.can_add_row(vec![&fal]))
+            }
+            _ => false,
+        }
+    }
+
+    fn can_add_row(&self, new_row: Vec<&'pat Pattern>) -> bool {
+        assert_eq!(self.len, new_row.len());
         for row in &self.matrix {
-            if row_overlap(row, &filler) {
-                return true;
+            if row.iter().zip(new_row.iter()).all(|(a, b)| overlap(a, b)) {
+                return false;
             }
         }
-        false
+        true
     }
-}
 
-fn exhaustive_product(pats: &[Pattern], product: &[Type]) -> bool {
-    // Strategy here is to go through each type in the product, and make sure
-    // that our pattern is exhaustive for that type
-    //
-    // Given a product type (ty1 * ty2 * ty3) we will first see if ty1
-    // is exhausted, then ty2, etc
-    let mut ex = (0..product.len()).map(|_| false).collect::<Vec<_>>();
-    let mut v = (0..product.len()).map(|_| Vec::new()).collect::<Vec<_>>();
-    for pat in pats {
+    fn try_add_row(&mut self, new_row: Vec<&'pat Pattern>) -> bool {
+        assert_eq!(self.len, new_row.len());
+        for row in &self.matrix {
+            if row.iter().zip(new_row.iter()).all(|(a, b)| overlap(a, b)) {
+                return false;
+            }
+        }
+        self.matrix.push(new_row);
+        true
+    }
+
+    /// Attempt to add a new [`Pattern`] to the [`Matrix`]
+    ///
+    /// Returns true on success, and false if the new pattern is
+    /// unreachable
+    pub fn add_pattern(&mut self, pat: &'pat Pattern) -> bool {
         match pat {
-            Pattern::Variable(_) | Pattern::Any => return true,
-            Pattern::Product(prod) => {
-                for (idx, p) in prod.iter().enumerate() {
-                    v[idx].push(p.clone());
+            Pattern::Any | Pattern::Variable(_) => {
+                let filler = (0..self.len).map(|_| &Pattern::Any).collect::<Vec<_>>();
+                self.try_add_row(filler)
+            }
+            Pattern::Product(tuple) => self.try_add_row(tuple.iter().collect()),
+            Pattern::Literal(lit) => {
+                if self.len == 1 {
+                    self.try_add_row(vec![pat])
+                } else {
+                    false
                 }
             }
-            _ => unreachable!(),
+            Pattern::Constructor(label, inner) => self.try_add_row(vec![pat]),
         }
-    }
-    for (idx, ty) in product.iter().enumerate() {
-        ex[idx] = exhaustive(&v.remove(0), ty);
-    }
-    ex.into_iter().all(|b| b)
-}
-
-/// Invariants:
-/// - `pats` are valid for the type `ty`
-/// - `pats` are unique (no duplicates)
-fn exhaustive(pats: &[Pattern], ty: &Type) -> bool {
-    for p in pats {
-        match p {
-            Pattern::Any | Pattern::Variable(_) => return true,
-            _ => {}
-        }
-    }
-
-    match ty {
-        // Type::Variant(v) => {},
-        Type::Product(p) => exhaustive_product(pats, p),
-        _ => false,
     }
 }
 
@@ -165,14 +179,34 @@ impl Context {
 #[cfg(test)]
 mod test {
     use super::*;
+    use Pattern::*;
+
+    macro_rules! boolean {
+        ($ex:expr) => {
+            Literal(crate::terms::Literal::Bool($ex))
+        };
+    }
+
+    macro_rules! num {
+        ($ex:expr) => {
+            Literal(crate::terms::Literal::Nat($ex))
+        };
+    }
+
+    macro_rules! prod {
+        ($($ex:expr),+) => { Product(vec![$($ex),+]) }
+    }
+
+    macro_rules! con {
+        ($label:expr, $ex:expr) => {
+            Constructor($label.to_string(), Box::new($ex))
+        };
+    }
+
     #[test]
     fn product() {
         let ty = Type::Product(vec![Type::Bool, Type::Bool, Type::Nat]);
-        let pat = Pattern::Product(vec![
-            Pattern::Literal(Literal::Bool(true)),
-            Pattern::Literal(Literal::Bool(true)),
-            Pattern::Literal(Literal::Nat(10)),
-        ]);
+        let pat = prod!(boolean!(true), boolean!(true), num!(10));
         let ctx = Context::default();
         assert!(ctx.pattern_type_eq(&pat, &ty));
     }
@@ -181,11 +215,7 @@ mod test {
     #[should_panic]
     fn product_mistyped() {
         let ty = Type::Product(vec![Type::Bool, Type::Bool, Type::Bool]);
-        let pat = Pattern::Product(vec![
-            Pattern::Literal(Literal::Bool(true)),
-            Pattern::Literal(Literal::Bool(true)),
-            Pattern::Literal(Literal::Nat(10)),
-        ]);
+        let pat = prod!(boolean!(true), boolean!(true), num!(10));
         let ctx = Context::default();
         assert!(ctx.pattern_type_eq(&pat, &ty));
     }
@@ -203,10 +233,9 @@ mod test {
             },
         ]);
 
-        let pat1 = Pattern::Constructor("A".into(), Box::new(Pattern::Any));
-        let pat2 =
-            Pattern::Constructor("A".into(), Box::new(Pattern::Literal(Literal::Bool(true))));
-        let pat3 = Pattern::Constructor("B".into(), Box::new(Pattern::Literal(Literal::Nat(1))));
+        let pat1 = con!("A", Pattern::Any);
+        let pat2 = con!("A", boolean!(true));
+        let pat3 = con!("B", num!(1));
 
         let ctx = Context::default();
         assert!(ctx.pattern_type_eq(&pat1, &ty));
@@ -227,23 +256,11 @@ mod test {
             },
         ]);
 
-        let pat1 = Pattern::Constructor("A".into(), Box::new(Pattern::Any));
-        let pat2 = Pattern::Constructor("B".into(), Box::new(Pattern::Any));
-        let pat3 = Pattern::Constructor(
-            "B".into(),
-            Box::new(Pattern::Product(vec![
-                Pattern::Any,
-                Pattern::Variable("x".into()),
-            ])),
-        );
-        let pat4 = Pattern::Constructor(
-            "B".into(),
-            Box::new(Pattern::Product(vec![
-                Pattern::Literal(Literal::Nat(1)),
-                Pattern::Variable("x".into()),
-            ])),
-        );
-        let pat5 = Pattern::Constructor("A".into(), Box::new(Pattern::Literal(Literal::Nat(1))));
+        let pat1 = con!("A", Any);
+        let pat2 = con!("B", Any);
+        let pat3 = con!("B", prod!(Any, Variable("x".into())));
+        let pat4 = con!("B", prod!(num!(1), Variable("x".into())));
+        let pat5 = con!("A", num!(1));
 
         let ctx = Context::default();
         assert!(ctx.pattern_type_eq(&pat1, &ty));
@@ -251,5 +268,80 @@ mod test {
         assert!(ctx.pattern_type_eq(&pat3, &ty));
         assert!(ctx.pattern_type_eq(&pat4, &ty));
         assert!(!ctx.pattern_type_eq(&pat5, &ty));
+    }
+
+    #[test]
+    fn matrix_tuple() {
+        let pats = vec![
+            prod!(num!(0), num!(1)),
+            prod!(num!(1), num!(1)),
+            prod!(Any, num!(2)),
+            prod!(num!(2), Any),
+            prod!(num!(1), num!(4)),
+            prod!(Any, Variable(String::default())),
+        ];
+
+        let mut matrix = Matrix::new(2);
+        for pat in &pats {
+            assert!(matrix.add_pattern(pat));
+        }
+        assert!(!matrix.add_pattern(&Any));
+        assert!(matrix.exhaustive(&Type::Product(vec![Type::Nat, Type::Nat])));
+    }
+
+    macro_rules! variant {
+        ($label:expr, $ty:expr) => {
+            Variant {
+                label: $label.to_string(),
+                ty: $ty,
+            }
+        };
+    }
+
+    #[test]
+    fn matrix_constructor() {
+        let ty = Type::Variant(vec![
+            variant!("A", Type::Nat),
+            variant!("B", Type::Nat),
+            variant!("C", Type::Product(vec![Type::Nat, Type::Nat])),
+        ]);
+
+        let pats = vec![
+            con!("A", num!(20)),
+            con!("A", Any),
+            con!("B", Any),
+            con!("C", prod!(num!(1), num!(1))),
+            con!("C", prod!(Any, num!(1))),
+            con!("C", prod!(num!(1), Any)),
+        ];
+
+        let ctx = Context::default();
+        let mut matrix = Matrix::new(1);
+        assert!(pats.iter().all(|p| ctx.pattern_type_eq(p, &ty)));
+
+        for p in &pats {
+            assert!(matrix.add_pattern(p));
+        }
+        let last = con!("C", Any);
+
+        assert!(!matrix.exhaustive(&ty));
+        assert!(matrix.add_pattern(&last));
+        assert!(matrix.exhaustive(&ty));
+    }
+
+    #[test]
+    fn matrix_bool() {
+        let pats = vec![boolean!(true), boolean!(false)];
+
+        let ty = Type::Bool;
+        let ctx = Context::default();
+        assert!(pats.iter().all(|p| ctx.pattern_type_eq(p, &ty)));
+
+        let mut matrix = Matrix::new(1);
+        for p in &pats {
+            assert!(matrix.add_pattern(p));
+        }
+        assert!(!matrix.add_pattern(&pats[1]));
+        assert!(matrix.exhaustive(&ty));
     }
 }

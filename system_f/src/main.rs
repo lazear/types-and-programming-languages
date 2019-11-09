@@ -157,30 +157,6 @@ fn main() {
         }
     }
 
-    use terms::{Literal, Pattern};
-    use types::patterns::pattern_is_useful;
-
-    let pats = vec![
-        Pattern::Product(vec![
-            Pattern::Literal(Literal::Nat(0)),
-            Pattern::Literal(Literal::Nat(1)),
-        ]),
-        Pattern::Product(vec![
-            Pattern::Literal(Literal::Nat(1)),
-            Pattern::Literal(Literal::Nat(1)),
-        ]),
-        Pattern::Product(vec![Pattern::Any, Pattern::Literal(Literal::Nat(2))]),
-        Pattern::Product(vec![Pattern::Literal(Literal::Nat(2)), Pattern::Any]),
-        Pattern::Product(vec![
-            Pattern::Literal(Literal::Nat(1)),
-            Pattern::Literal(Literal::Nat(4)),
-        ]),
-        Pattern::Product(vec![Pattern::Any, Pattern::Any]),
-    ];
-
-    let matrix = pattern_is_useful(&pats, 2).unwrap();
-    dbg!(matrix.exhaustive());
-
     loop {
         let mut buffer = String::new();
         print!("repl: ");
