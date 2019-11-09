@@ -1,4 +1,4 @@
-use crate::terms::visit::MutVisitor;
+use crate::terms::visit::{MutVisitor, Shift, Subst, TyTermSubst};
 use crate::terms::{self, Kind, Literal, Pattern, Primitive, Term};
 use crate::types::{self, Context, Type};
 use util::span::Span;
@@ -204,60 +204,14 @@ impl<'ctx> Eval<'ctx> {
 }
 
 fn term_subst(mut s: Term, t: &mut Term) {
-    use terms::visit::*;
     Shift::new(1).visit(&mut s);
     Subst::new(s).visit(t);
     Shift::new(-1).visit(t);
 }
 
-fn type_subst(mut s: Type, t: &mut Term) {
+fn type_subst(s: Type, t: &mut Term) {
     TyTermSubst::new(s).visit(t);
-    terms::visit::Shift::new(-1).visit(t);
-}
-
-struct TyTermSubst {
-    cutoff: usize,
-    ty: Type,
-}
-
-impl TyTermSubst {
-    pub fn new(ty: Type) -> TyTermSubst {
-        use types::visit::*;
-        let mut ty = ty;
-        Shift::new(1).visit(&mut ty);
-        TyTermSubst { cutoff: 0, ty }
-    }
-    fn try_visit(&mut self, ty: &mut Type) {
-        use types::visit::*;
-        let mut s = Subst {
-            cutoff: self.cutoff,
-            ty: self.ty.clone(),
-        };
-        s.visit(ty);
-    }
-}
-
-impl terms::visit::MutVisitor for TyTermSubst {
-    fn visit_abs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
-        self.try_visit(ty);
-        self.visit(term);
-    }
-
-    fn visit_tyapp(&mut self, sp: &mut Span, term: &mut Term, ty: &mut Type) {
-        self.try_visit(ty);
-        self.visit(term);
-    }
-
-    fn visit_tyabs(&mut self, sp: &mut Span, term: &mut Term) {
-        self.cutoff += 1;
-        self.visit(term);
-        self.cutoff -= 1;
-    }
-
-    fn visit_injection(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
-        self.try_visit(ty);
-        self.visit(term);
-    }
+    Shift::new(-1).visit(t);
 }
 
 #[cfg(test)]

@@ -50,7 +50,7 @@ pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
 
 fn eval(ctx: &mut types::Context, mut term: Term, verbose: bool) -> Result<Term, TypeError> {
     ctx.de_alias(&mut term);
-    let ty = ctx.type_of(&term)?;
+    let ty = ctx.type_check(&term)?;
     println!("  -: {:?}", ty);
 
     let ev = eval::Eval::with_context(ctx);
@@ -66,7 +66,7 @@ fn eval(ctx: &mut types::Context, mut term: Term, verbose: bool) -> Result<Term,
         }
     };
     println!("===> {}", fin);
-    let fty = ctx.type_of(&fin)?;
+    let fty = ctx.type_check(&fin)?;
     if fty != ty {
         panic!(
             "Type of term after evaluation is different than before!\n1 {:?}\n2 {:?}",

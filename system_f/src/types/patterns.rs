@@ -14,9 +14,11 @@
 //!
 
 use super::*;
-use crate::terms::{Arm, Kind, Literal, Pattern, Primitive, Term};
+use crate::terms::{Arm, Literal, Pattern, Term};
 use std::collections::HashSet;
 
+/// Return true if `existing` covers `new`, i.e. if new is a useful pattern
+/// then `overlap` will return `false`
 fn overlap(existing: &Pattern, new: &Pattern) -> bool {
     use Pattern::*;
     match (existing, new) {
@@ -57,9 +59,24 @@ impl<'pat> Matrix<'pat> {
     }
 
     /// Is the pattern [`Matrix`] exhaustive for this type?
+    ///
+    /// For a boolean type, True, False, or a wildcard/variable match are
+    /// required For a product type (tuple), the algorithm is slightly more
+    /// complicated: We generate a tuple of length N (equal to the length of
+    /// the case expressions' tuple) filled with Wildcard patterns, and see
+    /// if addition of tuple is a useful pattern. If the pattern is not
+    /// useful (i.e. it totally `overlap's` with an existing row), then the
+    /// matrix is exhaustive
+    ///
+    /// For a sum type, a dummy constructor of pattern `Const_i _` is generated
+    /// for all `i` of the possible constructors of the type. If none of the
+    /// dummy constructors are useful, then the current patterns are exhaustive
     pub fn exhaustive(&self) -> bool {
         match &self.expr_ty {
             Type::Variant(v) => v.iter().all(|variant| {
+                // For all constructors in the sum type, generate a constructor
+                // pattern that will match all possible inhabitants of that
+                // constructor
                 let con = Pattern::Constructor(variant.label.clone(), Box::new(Pattern::Any));
                 let temp = [&con];
                 let mut ret = false;
@@ -72,6 +89,8 @@ impl<'pat> Matrix<'pat> {
                 ret
             }),
             Type::Product(_) | Type::Nat => {
+                // Generate a tuple of wildcard patterns. If the pattern is
+                // useful, then we do not have an exhaustive matrix
                 let filler = (0..self.len).map(|_| Pattern::Any).collect::<Vec<_>>();
                 for row in &self.matrix {
                     if row.iter().zip(filler.iter()).all(|(a, b)| overlap(a, b)) {
@@ -81,11 +100,15 @@ impl<'pat> Matrix<'pat> {
                 false
             }
             Type::Bool => {
+                // Boolean type is one of the simplest cases: we only need
+                // to match `true` and `false`, or one of those + a wildcard,
+                // or just a wildcard
                 let tru = Pattern::Literal(Literal::Bool(true));
                 let fal = Pattern::Literal(Literal::Bool(false));
                 !(self.can_add_row(vec![&tru]) && self.can_add_row(vec![&fal]))
             }
             Type::Unit => {
+                // Unit is a degenerate case
                 let unit = Pattern::Literal(Literal::Unit);
                 !self.can_add_row(vec![&unit])
             }
@@ -93,6 +116,7 @@ impl<'pat> Matrix<'pat> {
         }
     }
 
+    /// Return true if a new pattern row is reachable
     fn can_add_row(&self, new_row: Vec<&'pat Pattern>) -> bool {
         assert_eq!(self.len, new_row.len());
         for row in &self.matrix {
@@ -137,8 +161,32 @@ impl<'pat> Matrix<'pat> {
     }
 }
 impl Context {
-    pub(crate) fn typeck_case(&mut self, expr: &Term, arms: &[Arm]) -> Result<Type, TypeError> {
-        let ty = self.type_of(expr)?;
+    /// Type check a case expression, returning the Type of the arms, assuming
+    /// that the case expression is exhaustive and well-typed
+    ///
+    /// This is one of the more complicated functions in the typechecker.
+    /// 1) We first have to check that each arm in the case expression has
+    /// a pattern that is proper for type of the case expression - we shouldn't
+    /// have case arms with patterns that can be never be matched!
+    ///
+    /// 2) We then need to bind any variables referenced in the pattern into
+    /// the typing context - `Cons (x, xs)` needs to bind both x and xs, as does
+    /// just `Cons x`.
+    ///
+    /// 3) After variable binding, we need to typecheck the actual case arm's
+    /// term, and store the result so that we can compare it to the types of
+    /// the other arms in the case expression
+    ///
+    /// 4) If the arm is properly typed, then we need to add it to a matrix so
+    /// that we can determine if the pattern is reachable, and if the case arms
+    /// are exhaustive - one, and only one, pattern should be matchable
+    ///
+    /// 5) Finally, assuming all of the previous checks have passed, we return
+    /// the shared type of all of the case arms - the term associated with each
+    /// arm should have one type, and that type should be the same for all of
+    /// the arms.
+    pub(crate) fn type_check_case(&mut self, expr: &Term, arms: &[Arm]) -> Result<Type, TypeError> {
+        let ty = self.type_check(expr)?;
         let mut matrix = patterns::Matrix::new(ty);
 
         let mut set = HashSet::new();
@@ -146,7 +194,7 @@ impl Context {
             if self.pattern_type_eq(&arm.pat, &matrix.expr_ty) {
                 let height = self.stack.len();
                 self.walk_pattern_and_bind(&matrix.expr_ty, &arm.pat);
-                let arm_ty = self.type_of(&arm.term)?;
+                let arm_ty = self.type_check(&arm.term)?;
 
                 while self.stack.len() > height {
                     self.pop();
@@ -184,6 +232,17 @@ impl Context {
     }
 
     /// Helper function for pattern to type equivalence
+    ///
+    /// A `_` wildcard pattern is obviously valid for every type, as is a
+    /// variable binding:
+    ///     case Some(10) of
+    ///         | None => None
+    ///         | x => x -- x will always match to Some(10) here
+    ///
+    /// A literal pattern should only be equal to the equivalent type, etc
+    ///
+    /// This function is primarily used as a first pass to ensure that a pattern
+    /// is valid for a given case expression
     pub(crate) fn pattern_type_eq(&self, pat: &Pattern, ty: &Type) -> bool {
         match pat {
             Pattern::Any => true,

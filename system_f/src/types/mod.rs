@@ -1,7 +1,7 @@
 pub mod patterns;
 pub mod visit;
 use crate::terms::{Kind, Literal, Pattern, Primitive, Term};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use util::span::Span;
 use visit::{MutVisitor, Shift, Subst};
@@ -96,6 +96,7 @@ fn variant_field(var: &[Variant], label: &str, span: Span) -> Result<Type, TypeE
 }
 
 impl Context {
+    /// Return an error with a span derived from `term` and `kind`
     pub const fn error(term: &Term, kind: TypeErrorKind) -> Result<Type, TypeError> {
         Err(TypeError {
             span: term.span,
@@ -103,6 +104,11 @@ impl Context {
         })
     }
 
+    /// Helper function to traverse a [`Pattern`] and bind variables
+    /// to the typing context as needed.
+    ///
+    /// It is the caller's responsibiliy to track stack growth and pop off
+    /// types after calling this function
     fn walk_pattern_and_bind(&mut self, ty: &Type, pat: &Pattern) {
         use Pattern::*;
         match pat {
@@ -130,7 +136,7 @@ impl Context {
         }
     }
 
-    pub fn type_of(&mut self, term: &Term) -> Result<Type, TypeError> {
+    pub fn type_check(&mut self, term: &Term) -> Result<Type, TypeError> {
         match term.kind() {
             Kind::Lit(Literal::Unit) => Ok(Type::Unit),
             Kind::Lit(Literal::Bool(_)) => Ok(Type::Bool),
@@ -141,7 +147,7 @@ impl Context {
             }),
             Kind::Abs(ty, t2) => {
                 self.push(*ty.clone());
-                let ty2 = self.type_of(t2)?;
+                let ty2 = self.type_check(t2)?;
                 // println!("{:?} -: {:?}", ty2, t2);
                 // Shift::new(-1).visit(&mut ty2);
                 // println!("{:?} -: {:?}", ty2, t2);
@@ -149,8 +155,8 @@ impl Context {
                 Ok(Type::Arrow(ty.clone(), Box::new(ty2)))
             }
             Kind::App(t1, t2) => {
-                let ty1 = self.type_of(t1)?;
-                let ty2 = self.type_of(t2)?;
+                let ty1 = self.type_check(t1)?;
+                let ty2 = self.type_check(t2)?;
                 match ty1 {
                     Type::Arrow(ty11, ty12) => {
                         if *ty11 == ty2 {
@@ -166,7 +172,7 @@ impl Context {
                 }
             }
             Kind::Fix(inner) => {
-                let ty = self.type_of(inner)?;
+                let ty = self.type_check(inner)?;
                 match ty {
                     Type::Arrow(ty1, ty2) => {
                         if ty1 == ty2 {
@@ -189,7 +195,7 @@ impl Context {
                 Type::Variant(fields) => {
                     for f in fields {
                         if label == &f.label {
-                            let ty_ = self.type_of(tm)?;
+                            let ty_ = self.type_check(tm)?;
                             if ty_ == f.ty {
                                 return Ok(*ty.clone());
                             } else {
@@ -208,7 +214,7 @@ impl Context {
                 }
                 _ => Context::error(term, TypeErrorKind::NotVariant),
             },
-            Kind::Projection(term, idx) => match self.type_of(term)? {
+            Kind::Projection(term, idx) => match self.type_check(term)? {
                 Type::Product(types) => match types.get(*idx) {
                     Some(ty) => Ok(ty.clone()),
                     None => Context::error(term, TypeErrorKind::InvalidProjection),
@@ -218,24 +224,24 @@ impl Context {
             Kind::Product(terms) => Ok(Type::Product(
                 terms
                     .iter()
-                    .map(|t| self.type_of(t))
+                    .map(|t| self.type_check(t))
                     .collect::<Result<_, _>>()?,
             )),
             Kind::Let(t1, t2) => {
                 println!("{} {} {:?}", t1, t2, self.stack);
-                let ty = self.type_of(t1)?;
+                let ty = self.type_check(t1)?;
                 self.push(ty);
-                let y = self.type_of(t2);
+                let y = self.type_check(t2);
                 self.pop();
                 y
             }
             Kind::TyAbs(term) => {
-                let ty2 = self.type_of(term)?;
+                let ty2 = self.type_check(term)?;
                 Ok(Type::Universal(Box::new(ty2)))
             }
             Kind::TyApp(term, ty) => {
                 let mut ty = ty.clone();
-                let ty1 = self.type_of(term)?;
+                let ty1 = self.type_check(term)?;
                 match ty1 {
                     Type::Universal(mut ty12) => {
                         Shift::new(1).visit(&mut ty);
@@ -249,7 +255,9 @@ impl Context {
                     }
                 }
             }
-            Kind::Case(expr, arms) => self.typeck_case(expr, arms),
+            // See src/types/patterns.rs for exhaustiveness and typechecking
+            // of case expressions
+            Kind::Case(expr, arms) => self.type_check_case(expr, arms),
         }
     }
 }

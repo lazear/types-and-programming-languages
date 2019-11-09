@@ -176,3 +176,49 @@ impl MutVisitor for Subst {
         }
     }
 }
+
+pub struct TyTermSubst {
+    cutoff: usize,
+    ty: Type,
+}
+
+impl TyTermSubst {
+    pub fn new(ty: Type) -> TyTermSubst {
+        use crate::types::visit::*;
+        let mut ty = ty;
+        Shift::new(1).visit(&mut ty);
+        TyTermSubst { cutoff: 0, ty }
+    }
+
+    fn visit_ty(&mut self, ty: &mut Type) {
+        use crate::types::visit::*;
+        let mut s = Subst {
+            cutoff: self.cutoff,
+            ty: self.ty.clone(),
+        };
+        s.visit(ty);
+    }
+}
+
+impl MutVisitor for TyTermSubst {
+    fn visit_abs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+        self.visit_ty(ty);
+        self.visit(term);
+    }
+
+    fn visit_tyapp(&mut self, sp: &mut Span, term: &mut Term, ty: &mut Type) {
+        self.visit_ty(ty);
+        self.visit(term);
+    }
+
+    fn visit_tyabs(&mut self, sp: &mut Span, term: &mut Term) {
+        self.cutoff += 1;
+        self.visit(term);
+        self.cutoff -= 1;
+    }
+
+    fn visit_injection(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
+        self.visit_ty(ty);
+        self.visit(term);
+    }
+}
