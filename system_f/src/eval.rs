@@ -212,7 +212,6 @@ impl<'ctx> Eval<'ctx> {
             //         }
             //     }
             // }
-
             _ => None,
         }
     }
@@ -235,7 +234,7 @@ impl<'ctx> Eval<'ctx> {
             Constructor(label, v) => {
                 if let Kind::Injection(label_, tm, _) = &expr.kind {
                     if label == label_ {
-                        self.case_subst(&pat, &tm, term);
+                        self.case_subst(&v, &tm, term);
                     }
                 }
             }

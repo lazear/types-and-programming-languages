@@ -161,7 +161,6 @@ impl<'pat> Matrix<'pat> {
     }
 }
 impl Context {
-
     /// Helper function to traverse a [`Pattern`] and bind variables
     /// to the typing context as needed.
     ///
@@ -187,7 +186,7 @@ impl Context {
             Constructor(label, v) => {
                 if let Type::Variant(variant) = ty {
                     let t_prime = variant_field(&variant, label, Span::zero()).unwrap();
-                    self.push(t_prime.clone());
+                    // self.push(t_prime.clone());
                     self.walk_pattern_and_bind(&t_prime, &v);
                 }
             }
