@@ -222,16 +222,18 @@ impl<'ctx> Eval<'ctx> {
             Any => {}
             Literal(_) => {}
             Variable(_) => {
-                println!("--- subst {} -> {}", expr, term);
                 term_subst(expr.clone(), term);
             }
             Product(v) => {
                 if let Kind::Product(terms) = &expr.kind {
                     let mut idx = 0;
-                    for tm in terms.iter().rev() {
+                    for tm in terms.iter() {
+                        println!("{:?} {}", &v[idx], tm);
                         self.case_subst(&v[idx], tm, term);
                         idx += 1;
                     }
+                } else {
+                    panic!("wrong type!")
                 }
             }
             Constructor(label, v) => {
@@ -239,6 +241,8 @@ impl<'ctx> Eval<'ctx> {
                     if label == label_ {
                         self.case_subst(&v, &tm, term);
                     }
+                } else {
+                    panic!("wrong type!")
                 }
             }
         }

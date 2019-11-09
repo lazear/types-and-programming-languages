@@ -373,6 +373,7 @@ impl<'s> Parser<'s> {
     /// making sure that the stack is balanced afterwards
     fn pat_atom(&mut self) -> Result<Pattern, Error> {
         match self.kind() {
+            TokenKind::LParen => self.pattern(),
             TokenKind::Wildcard => {
                 self.bump();
                 Ok(Pattern::Any)
