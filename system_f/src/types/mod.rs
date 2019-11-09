@@ -103,6 +103,32 @@ impl Context {
         })
     }
 
+    fn walk_pattern_and_bind(&mut self, ty: &Type, pat: &Pattern) {
+        use Pattern::*;
+        match pat {
+            Any => {
+                if let Type::Unit = ty {
+                    self.push(Type::Unit);
+                }
+            }
+            Literal(_) => {}
+            Variable(_) => self.push(ty.clone()),
+            Product(v) => {
+                if let Type::Product(types) = ty {
+                    for (idx, pat) in v.iter().enumerate() {
+                        self.walk_pattern_and_bind(&types[idx], &pat);
+                    }
+                }
+            }
+            Constructor(label, v) => {
+                if let Type::Variant(variant) = ty {
+                    let t_prime = variant_field(&variant, label, Span::zero()).unwrap();
+                    self.walk_pattern_and_bind(&t_prime, &v);
+                }
+            }
+        }
+    }
+
     pub fn type_of(&mut self, term: &Term) -> Result<Type, TypeError> {
         match term.kind() {
             Kind::Lit(Literal::Unit) => Ok(Type::Unit),
@@ -222,178 +248,212 @@ impl Context {
                     }
                 }
             }
-            // Kind::Case(expr, arms) => {
-            //     let matrix = patterns::Matrix::from_case_expr(self, expr, arms)?;
-            //     if matrix.exhaustive() {
-            //         Ok(matrix.result_ty)
-            //     } else {
-            //         Context::error(term, TypeErrorKind::NotExhaustive)
-            //     }
-            // }
-            Kind::Case(tm, arms) => {
-                let ty = self.type_of(tm)?;
+            Kind::Case(expr, arms) => {
+                let ty = self.type_of(expr)?;
+                let mut matrix = patterns::Matrix::new(ty);
+
+                let mut set = HashSet::new();
                 for arm in arms {
-                    if !self.pattern_type_eq(&arm.pat, &ty) {
-                        println!(
-                            "Pattern in case arm {:?} does not match type of {}: {:?}",
-                            arm.pat, tm, ty
-                        );
+                    if self.pattern_type_eq(&arm.pat, &matrix.expr_ty) {
+                        let height = self.stack.len();
+                        self.walk_pattern_and_bind(&matrix.expr_ty, &arm.pat);
+                        let arm_ty = self.type_of(&arm.term)?;
+
+                        while self.stack.len() > height {
+                            self.pop();
+                        }
+
+                        set.insert(arm_ty);
+                        if !matrix.add_pattern(&arm.pat) {
+                            return Err(TypeError {
+                                kind: TypeErrorKind::UnreachablePattern,
+                                span: arm.span,
+                            });
+                        }
+                    } else {
                         return Err(TypeError {
+                            kind: TypeErrorKind::InvalidPattern,
                             span: arm.span,
-                            kind: TypeErrorKind::IncompatibleArms,
                         });
                     }
                 }
 
-                match &ty {
-                    Type::Bool => {
-                        let mut default = false;
-                        let mut field_set = HashSet::with_capacity(2);
-                        field_set.insert(true);
-                        field_set.insert(false);
-
-                        let mut discriminants = HashSet::with_capacity(arms.len());
-                        let mut ty_set = HashSet::with_capacity(arms.len());
-                        for arm in arms {
-                            if default {
-                                return Context::error(term, TypeErrorKind::UnreachablePattern);
-                            }
-                            let ty_arm = match &arm.pat {
-                                Pattern::Any => {
-                                    default = true;
-                                    self.type_of(&arm.term)?
-                                }
-                                Pattern::Variable(_) => {
-                                    default = true;
-                                    self.push(ty.clone());
-                                    let ty_arm = self.type_of(&arm.term)?;
-                                    self.pop();
-                                    ty_arm
-                                }
-                                Pattern::Literal(Literal::Bool(b)) => {
-                                    if !discriminants.insert(*b) {
-                                        println!("Discriminant {} already used!", b);
-                                        return Context::error(
-                                            term,
-                                            TypeErrorKind::UnreachablePattern,
-                                        );
-                                    }
-                                    self.type_of(&arm.term)?
-                                }
-                                Pattern::Literal(l) => {
-                                    println!("Literal {:?} can't be used in case Bool!", l);
-                                    return Context::error(tm, TypeErrorKind::UnreachablePattern);
-                                }
-                                Pattern::Constructor(c, pat) => {
-                                    println!("Constructor {} can't be used in case Bool!", c);
-                                    return Context::error(tm, TypeErrorKind::UnreachablePattern);
-                                }
-                                Pattern::Product(v) => {
-                                    println!("Tuple {:?} can't be used in case Bool!", v);
-                                    return Context::error(tm, TypeErrorKind::UnreachablePattern);
-                                }
-                            };
-                            ty_set.insert(ty_arm);
-                        }
-                        if !field_set.is_subset(&discriminants) && !default {
-                            println!(
-                                "Patterns {:?} not covered",
-                                field_set.difference(&discriminants)
-                            );
-                            return Context::error(term, TypeErrorKind::NotExhaustive);
-                        }
-                        if ty_set.len() != 1 {
-                            println!("Match arms have incompatible types! {:?}", ty_set);
-                            return Context::error(term, TypeErrorKind::IncompatibleArms);
-                        }
-                        match ty_set.into_iter().next() {
-                            Some(s) => Ok(s),
-                            None => Context::error(term, TypeErrorKind::NotVariant),
-                        }
-                    }
-                    Type::Nat => Context::error(term, TypeErrorKind::UnreachablePattern),
-                    Type::Unit => Context::error(term, TypeErrorKind::UnreachablePattern),
-                    Type::Variant(fields) => {
-                        // have we seen a variable or _ pattern?
-                        let mut default = false;
-
-                        // set of all possible variant fields
-                        let field_set = fields.iter().map(|f| &f.label).collect::<HashSet<_>>();
-
-                        let mut discriminants = HashSet::with_capacity(arms.len());
-                        let mut ty_set = HashSet::with_capacity(arms.len());
-                        for arm in arms {
-                            // Check to see if we have already used a variable or _ pattern,
-                            // or if we have covered all discriminants. If so, then this arm
-                            // is unreachable
-                            if default || field_set.is_subset(&discriminants) {
-                                return Context::error(term, TypeErrorKind::UnreachablePattern);
-                            }
-
-                            let ty_arm = match &arm.pat {
-                                Pattern::Any => {
-                                    default = true;
-                                    self.type_of(&arm.term)?
-                                }
-                                Pattern::Variable(_) => {
-                                    // Pattern binds some variable, which should
-                                    // have a type of the variant
-                                    default = true;
-                                    self.push(ty.clone());
-                                    let ty_arm = self.type_of(&arm.term)?;
-                                    self.pop();
-                                    ty_arm
-                                }
-                                Pattern::Constructor(c, pat) => {
-                                    let ty_con = variant_field(&fields, c, arm.span)?;
-
-                                    // Set::insert() returns false if the
-                                    // element is already present
-                                    if !discriminants.insert(c) {
-                                        println!("Discriminant {} already used!", c);
-                                        return Context::error(
-                                            term,
-                                            TypeErrorKind::UnreachablePattern,
-                                        );
-                                    }
-
-                                    // Do not always push.
-                                    self.push(ty_con);
-                                    let ty_arm = self.type_of(&arm.term)?;
-                                    self.pop();
-                                    ty_arm
-                                }
-                                Pattern::Product(_) => unimplemented!(),
-                                Pattern::Literal(_) => {
-                                    return Context::error(term, TypeErrorKind::UnreachablePattern)
-                                }
-                            };
-                            ty_set.insert(ty_arm);
-                        }
-
-                        // dbg!(&ty_set);
-
-                        if !field_set.is_subset(&discriminants) && !default {
-                            println!(
-                                "Patterns {:?} not covered",
-                                field_set.difference(&discriminants)
-                            );
-                            return Context::error(term, TypeErrorKind::NotExhaustive);
-                        }
-
-                        if ty_set.len() != 1 {
-                            dbg!(&self.stack);
-                            println!("Match arms have incompatible types! {:?}", ty_set);
-                            return Context::error(term, TypeErrorKind::IncompatibleArms);
-                        }
-                        match ty_set.into_iter().next() {
-                            Some(s) => Ok(s),
-                            None => Context::error(term, TypeErrorKind::NotVariant),
-                        }
-                    }
-                    _ => Context::error(term, TypeErrorKind::NotVariant),
+                if set.len() != 1 {
+                    return Err(TypeError {
+                        kind: TypeErrorKind::IncompatibleArms,
+                        span: expr.span,
+                    });
+                }
+                if matrix.exhaustive() {
+                    Ok(matrix.result_ty)
+                } else {
+                    Context::error(term, TypeErrorKind::NotExhaustive)
                 }
             }
+            // Kind::Case(tm, arms) => {
+            //     let ty = self.type_of(tm)?;
+            //     for arm in arms {
+            //         if !self.pattern_type_eq(&arm.pat, &ty) {
+            //             println!(
+            //                 "Pattern in case arm {:?} does not match type of {}: {:?}",
+            //                 arm.pat, tm, ty
+            //             );
+            //             return Err(TypeError {
+            //                 span: arm.span,
+            //                 kind: TypeErrorKind::IncompatibleArms,
+            //             });
+            //         }
+            //     }
+
+            //     match &ty {
+            //         Type::Bool => {
+            //             let mut default = false;
+            //             let mut field_set = HashSet::with_capacity(2);
+            //             field_set.insert(true);
+            //             field_set.insert(false);
+
+            //             let mut discriminants = HashSet::with_capacity(arms.len());
+            //             let mut ty_set = HashSet::with_capacity(arms.len());
+            //             for arm in arms {
+            //                 if default {
+            //                     return Context::error(term, TypeErrorKind::UnreachablePattern);
+            //                 }
+            //                 let ty_arm = match &arm.pat {
+            //                     Pattern::Any => {
+            //                         default = true;
+            //                         self.type_of(&arm.term)?
+            //                     }
+            //                     Pattern::Variable(_) => {
+            //                         default = true;
+            //                         self.push(ty.clone());
+            //                         let ty_arm = self.type_of(&arm.term)?;
+            //                         self.pop();
+            //                         ty_arm
+            //                     }
+            //                     Pattern::Literal(Literal::Bool(b)) => {
+            //                         if !discriminants.insert(*b) {
+            //                             println!("Discriminant {} already used!", b);
+            //                             return Context::error(
+            //                                 term,
+            //                                 TypeErrorKind::UnreachablePattern,
+            //                             );
+            //                         }
+            //                         self.type_of(&arm.term)?
+            //                     }
+            //                     Pattern::Literal(l) => {
+            //                         println!("Literal {:?} can't be used in case Bool!", l);
+            //                         return Context::error(tm, TypeErrorKind::UnreachablePattern);
+            //                     }
+            //                     Pattern::Constructor(c, pat) => {
+            //                         println!("Constructor {} can't be used in case Bool!", c);
+            //                         return Context::error(tm, TypeErrorKind::UnreachablePattern);
+            //                     }
+            //                     Pattern::Product(v) => {
+            //                         println!("Tuple {:?} can't be used in case Bool!", v);
+            //                         return Context::error(tm, TypeErrorKind::UnreachablePattern);
+            //                     }
+            //                 };
+            //                 ty_set.insert(ty_arm);
+            //             }
+            //             if !field_set.is_subset(&discriminants) && !default {
+            //                 println!(
+            //                     "Patterns {:?} not covered",
+            //                     field_set.difference(&discriminants)
+            //                 );
+            //                 return Context::error(term, TypeErrorKind::NotExhaustive);
+            //             }
+            //             if ty_set.len() != 1 {
+            //                 println!("Match arms have incompatible types! {:?}", ty_set);
+            //                 return Context::error(term, TypeErrorKind::IncompatibleArms);
+            //             }
+            //             match ty_set.into_iter().next() {
+            //                 Some(s) => Ok(s),
+            //                 None => Context::error(term, TypeErrorKind::NotVariant),
+            //             }
+            //         }
+            //         Type::Nat => Context::error(term, TypeErrorKind::UnreachablePattern),
+            //         Type::Unit => Context::error(term, TypeErrorKind::UnreachablePattern),
+            //         Type::Variant(fields) => {
+            //             // have we seen a variable or _ pattern?
+            //             let mut default = false;
+
+            //             // set of all possible variant fields
+            //             let field_set = fields.iter().map(|f| &f.label).collect::<HashSet<_>>();
+
+            //             let mut discriminants = HashSet::with_capacity(arms.len());
+            //             let mut ty_set = HashSet::with_capacity(arms.len());
+            //             for arm in arms {
+            //                 // Check to see if we have already used a variable or _ pattern,
+            //                 // or if we have covered all discriminants. If so, then this arm
+            //                 // is unreachable
+            //                 if default || field_set.is_subset(&discriminants) {
+            //                     return Context::error(term, TypeErrorKind::UnreachablePattern);
+            //                 }
+
+            //                 let ty_arm = match &arm.pat {
+            //                     Pattern::Any => {
+            //                         default = true;
+            //                         self.type_of(&arm.term)?
+            //                     }
+            //                     Pattern::Variable(_) => {
+            //                         // Pattern binds some variable, which should
+            //                         // have a type of the variant
+            //                         default = true;
+            //                         self.push(ty.clone());
+            //                         let ty_arm = self.type_of(&arm.term)?;
+            //                         self.pop();
+            //                         ty_arm
+            //                     }
+            //                     Pattern::Constructor(c, pat) => {
+            //                         let ty_con = variant_field(&fields, c, arm.span)?;
+
+            //                         // Set::insert() returns false if the
+            //                         // element is already present
+            //                         if !discriminants.insert(c) {
+            //                             println!("Discriminant {} already used!", c);
+            //                             return Context::error(
+            //                                 term,
+            //                                 TypeErrorKind::UnreachablePattern,
+            //                             );
+            //                         }
+
+            //                         // Do not always push.
+            //                         self.push(ty_con);
+            //                         let ty_arm = self.type_of(&arm.term)?;
+            //                         self.pop();
+            //                         ty_arm
+            //                     }
+            //                     Pattern::Product(_) => unimplemented!(),
+            //                     Pattern::Literal(_) => {
+            //                         return Context::error(term, TypeErrorKind::UnreachablePattern)
+            //                     }
+            //                 };
+            //                 ty_set.insert(ty_arm);
+            //             }
+
+            //             // dbg!(&ty_set);
+
+            //             if !field_set.is_subset(&discriminants) && !default {
+            //                 println!(
+            //                     "Patterns {:?} not covered",
+            //                     field_set.difference(&discriminants)
+            //                 );
+            //                 return Context::error(term, TypeErrorKind::NotExhaustive);
+            //             }
+
+            //             if ty_set.len() != 1 {
+            //                 dbg!(&self.stack);
+            //                 println!("Match arms have incompatible types! {:?}", ty_set);
+            //                 return Context::error(term, TypeErrorKind::IncompatibleArms);
+            //             }
+            //             match ty_set.into_iter().next() {
+            //                 Some(s) => Ok(s),
+            //                 None => Context::error(term, TypeErrorKind::NotVariant),
+            //             }
+            //         }
+            //         _ => Context::error(term, TypeErrorKind::NotVariant),
+            //     }
+            // }
         }
     }
 }
