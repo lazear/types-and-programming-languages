@@ -57,13 +57,13 @@ fn eval(ctx: &mut types::Context, mut term: Term, verbose: bool) -> Result<Term,
     let ev = eval::Eval::with_context(ctx);
     let mut t = term;
     let fin = loop {
-        if verbose {
-            println!("---> {}", t);
-        }
         if let Some(res) = ev.small_step(t.clone()) {
             t = res;
         } else {
             break t;
+        }
+        if verbose {
+            println!("---> {}", t);
         }
     };
     println!("===> {}", fin);

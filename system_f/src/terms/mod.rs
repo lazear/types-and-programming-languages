@@ -158,15 +158,6 @@ impl fmt::Display for Term {
                 }
                 write!(f, "")
             }
-            // Kind::Case(term, arms) => write!(
-            //     f,
-            //     "case {:?} of {:?}",
-            //     term,
-            //     arms.iter()
-            //         .map(|arm| format!("\n|\t{:?} => {:?}", arm.pat, arm.term))
-            //         .collect::<Vec<String>>()
-            //         .join("")
-            // ),
             Kind::Let(t1, t2) => write!(f, "let _ = {} in {}", t1, t2),
             Kind::App(t1, t2) => write!(f, "({} {})", t1, t2),
             Kind::TyAbs(term) => write!(f, "(λTy {})", term),

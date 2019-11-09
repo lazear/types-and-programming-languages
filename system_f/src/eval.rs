@@ -160,7 +160,6 @@ impl<'ctx> Eval<'ctx> {
                 if let Kind::Product(terms) = &expr.kind {
                     let mut idx = 0;
                     for tm in terms.iter() {
-                        println!("{:?} {}", &v[idx], tm);
                         self.case_subst(&v[idx], tm, term);
                         idx += 1;
                     }

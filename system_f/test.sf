@@ -16,11 +16,10 @@ let poly = \X \Y (\func: X->Y. \val: X. func val) in poly [Nat][Bool]
 ;
 
 
-case Some (1, 2) of {None | Some (Nat, Nat)} of 
+case Some (5, 2) of {None | Some (Nat, Nat)} of 
  | None => (0, 0)
  | Some (1, _) => (1, 1)
- | Some(_, 2) => (2, 2),
- | Some _ => (99, 99)
+ | Some(x, y) => (y, x),
 ;
 
 case (1, (2, 3)) of 

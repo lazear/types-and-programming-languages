@@ -116,9 +116,7 @@ impl Context {
             Kind::Abs(ty, t2) => {
                 self.push(*ty.clone());
                 let ty2 = self.type_check(t2)?;
-                // println!("{:?} -: {:?}", ty2, t2);
                 // Shift::new(-1).visit(&mut ty2);
-                // println!("{:?} -: {:?}", ty2, t2);
                 self.pop();
                 Ok(Type::Arrow(ty.clone(), Box::new(ty2)))
             }
@@ -196,7 +194,6 @@ impl Context {
                     .collect::<Result<_, _>>()?,
             )),
             Kind::Let(t1, t2) => {
-                println!("{} {} {:?}", t1, t2, self.stack);
                 let ty = self.type_check(t1)?;
                 self.push(ty);
                 let y = self.type_check(t2);
