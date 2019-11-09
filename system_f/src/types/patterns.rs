@@ -32,6 +32,7 @@ fn overlap(existing: &Pattern, new: &Pattern) -> bool {
             }
         }
         (Product(a), Product(b)) => a.iter().zip(b.iter()).all(|(a, b)| overlap(a, b)),
+        (Product(a), b) => a.iter().all(|a| overlap(a, b)),
         (x, y) => x == y,
     }
 }
