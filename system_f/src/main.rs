@@ -1,8 +1,9 @@
 #![allow(unused_variables, unused_macros)]
 #[macro_use]
-mod terms;
+mod macros;
 mod eval;
 mod syntax;
+mod terms;
 mod types;
 
 use std::env;

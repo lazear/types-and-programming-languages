@@ -64,6 +64,33 @@ pub enum Pattern {
     Constructor(String, Box<Pattern>),
 }
 
+impl Pattern {
+    pub fn matches(&self, term: &Term) -> bool {
+        match self {
+            Pattern::Any => return true,
+            Pattern::Variable(_) => return true,
+            Pattern::Literal(l) => {
+                if let Kind::Lit(l2) = &term.kind {
+                    return l == l2;
+                }
+            }
+            Pattern::Product(vec) => {
+                if let Kind::Product(terms) = &term.kind {
+                    return vec.iter().zip(terms).all(|(p, t)| p.matches(t));
+                }
+            }
+            Pattern::Constructor(label, inner) => {
+                if let Kind::Injection(label_, tm, _) = &term.kind {
+                    if label == label_ {
+                        return inner.matches(&tm);
+                    }
+                }
+            }
+        }
+        false
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Arm {
     pub span: Span,
@@ -154,74 +181,40 @@ impl fmt::Debug for Term {
     }
 }
 
-macro_rules! lit {
-    ($x:expr) => {
-        crate::terms::Term::new(
-            crate::terms::Kind::Lit(crate::terms::Literal::Bool($x)),
-            util::span::Span::dummy(),
-        )
-    };
-}
+#[cfg(test)]
+mod test {
+    use super::*;
 
-macro_rules! nat {
-    ($x:expr) => {
-        crate::terms::Term::new(
-            crate::terms::Kind::Lit(crate::terms::Literal::Nat($x)),
-            util::span::Span::dummy(),
-        )
-    };
-}
+    #[test]
+    fn pattern_matches() {
+        let ty = Type::Variant(vec![
+            variant!("A", Type::Nat),
+            variant!("B", Type::Product(vec![Type::Nat, Type::Bool])),
+        ]);
 
-macro_rules! var {
-    ($x:expr) => {
-        crate::terms::Term::new(crate::terms::Kind::Var($x), util::span::Span::dummy())
-    };
-}
+        let a_pats = vec![
+            con!("A", Pattern::Any),
+            con!("A", num!(9)),
+            con!("A", num!(10)),
+        ];
 
-macro_rules! app {
-    ($t1:expr, $t2:expr) => {
-        crate::terms::Term::new(
-            crate::terms::Kind::App(Box::new($t1), Box::new($t2)),
-            util::span::Span::dummy(),
-        )
-    };
-}
+        let b_pats = vec![
+            con!("B", Pattern::Any),
+            con!("B", prod!(num!(1), boolean!(true))),
+            con!("B", prod!(Pattern::Any, boolean!(false))),
+        ];
 
-macro_rules! abs {
-    ($ty:expr, $t:expr) => {
-        crate::terms::Term::new(
-            crate::terms::Kind::Abs(Box::new($ty), Box::new($t)),
-            util::span::Span::dummy(),
-        )
-    };
-}
+        let res = [true, false, true];
 
-macro_rules! tyapp {
-    ($t1:expr, $t2:expr) => {
-        crate::terms::Term::new(
-            crate::terms::Kind::TyApp(Box::new($t1), Box::new($t2)),
-            util::span::Span::dummy(),
-        )
-    };
-}
+        let a = inj!("A", nat!(10), ty.clone());
+        let b = inj!("B", tuple!(nat!(1), lit!(false)), ty.clone());
 
-macro_rules! tyabs {
-    ( $t:expr) => {
-        crate::terms::Term::new(
-            crate::terms::Kind::TyAbs(Box::new($t)),
-            util::span::Span::dummy(),
-        )
-    };
-}
+        for (pat, result) in a_pats.iter().zip(&res) {
+            assert_eq!(pat.matches(&a), *result);
+        }
 
-macro_rules! prim {
-    ($t:expr) => {
-        crate::terms::Term::new(crate::terms::Kind::Primitive($t), util::span::Span::dummy())
-    };
-}
-
-macro_rules! arrow {
-    ($ty1:expr, $ty2:expr) => {
-        crate::types::Type::Arrow(Box::new($ty1), Box::new($ty2))
-    };
+        for (pat, result) in b_pats.iter().zip(&res) {
+            assert_eq!(pat.matches(&b), *result, "{:?}", pat);
+        }
+    }
 }

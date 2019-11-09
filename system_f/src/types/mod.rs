@@ -104,38 +104,6 @@ impl Context {
         })
     }
 
-    /// Helper function to traverse a [`Pattern`] and bind variables
-    /// to the typing context as needed.
-    ///
-    /// It is the caller's responsibiliy to track stack growth and pop off
-    /// types after calling this function
-    fn walk_pattern_and_bind(&mut self, ty: &Type, pat: &Pattern) {
-        use Pattern::*;
-        match pat {
-            Any => {
-                // if let Type::Unit = ty {
-                //     self.push(Type::Unit);
-                // }
-            }
-            Literal(_) => {}
-            Variable(_) => self.push(ty.clone()),
-            Product(v) => {
-                if let Type::Product(types) = ty {
-                    for (idx, pat) in v.iter().enumerate() {
-                        self.walk_pattern_and_bind(&types[idx], &pat);
-                    }
-                }
-            }
-            Constructor(label, v) => {
-                if let Type::Variant(variant) = ty {
-                    let t_prime = variant_field(&variant, label, Span::zero()).unwrap();
-                    self.push(t_prime.clone());
-                    self.walk_pattern_and_bind(&t_prime, &v);
-                }
-            }
-        }
-    }
-
     pub fn type_check(&mut self, term: &Term) -> Result<Type, TypeError> {
         match term.kind() {
             Kind::Lit(Literal::Unit) => Ok(Type::Unit),

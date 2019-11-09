@@ -161,6 +161,39 @@ impl<'pat> Matrix<'pat> {
     }
 }
 impl Context {
+
+    /// Helper function to traverse a [`Pattern`] and bind variables
+    /// to the typing context as needed.
+    ///
+    /// It is the caller's responsibiliy to track stack growth and pop off
+    /// types after calling this function
+    fn walk_pattern_and_bind(&mut self, ty: &Type, pat: &Pattern) {
+        use Pattern::*;
+        match pat {
+            Any => {
+                // if let Type::Unit = ty {
+                //     self.push(Type::Unit);
+                // }
+            }
+            Literal(_) => {}
+            Variable(_) => self.push(ty.clone()),
+            Product(v) => {
+                if let Type::Product(types) = ty {
+                    for (idx, pat) in v.iter().enumerate() {
+                        self.walk_pattern_and_bind(&types[idx], &pat);
+                    }
+                }
+            }
+            Constructor(label, v) => {
+                if let Type::Variant(variant) = ty {
+                    let t_prime = variant_field(&variant, label, Span::zero()).unwrap();
+                    self.push(t_prime.clone());
+                    self.walk_pattern_and_bind(&t_prime, &v);
+                }
+            }
+        }
+    }
+
     /// Type check a case expression, returning the Type of the arms, assuming
     /// that the case expression is exhaustive and well-typed
     ///
@@ -282,28 +315,6 @@ mod test {
     use super::*;
     use Pattern::*;
 
-    macro_rules! boolean {
-        ($ex:expr) => {
-            Literal(crate::terms::Literal::Bool($ex))
-        };
-    }
-
-    macro_rules! num {
-        ($ex:expr) => {
-            Literal(crate::terms::Literal::Nat($ex))
-        };
-    }
-
-    macro_rules! prod {
-        ($($ex:expr),+) => { Product(vec![$($ex),+]) }
-    }
-
-    macro_rules! con {
-        ($label:expr, $ex:expr) => {
-            Constructor($label.to_string(), Box::new($ex))
-        };
-    }
-
     #[test]
     fn product() {
         let ty = Type::Product(vec![Type::Bool, Type::Bool, Type::Nat]);
@@ -388,15 +399,6 @@ mod test {
         }
         assert!(!matrix.add_pattern(&Any));
         assert!(matrix.exhaustive());
-    }
-
-    macro_rules! variant {
-        ($label:expr, $ty:expr) => {
-            Variant {
-                label: $label.to_string(),
-                ty: $ty,
-            }
-        };
     }
 
     #[test]

@@ -130,75 +130,115 @@ impl<'ctx> Eval<'ctx> {
                 Some(Term::new(Kind::Product(v), term.span))
             }
             Kind::Case(expr, arms) => {
-                match expr.kind() {
-                    Kind::Lit(lit) => {
-                        for mut arm in arms {
-                            match arm.pat {
-                                Pattern::Any => return Some(*arm.term),
-                                Pattern::Variable(_) => {
-                                    // Variable should be bound to Kind::Var(0),
-                                    // so we want to do a term substition of expr
-                                    // into Var(0)
-                                    // case ex of
-                                    //    | x => (cons x 1),
-                                    term_subst(*expr, arm.term.as_mut());
-                                    dbg!(&arm.term);
-                                    return Some(*arm.term);
-                                }
-                                Pattern::Literal(l) => {
-                                    if lit == &l {
-                                        return Some(*arm.term);
-                                    }
-                                }
-                                Pattern::Constructor(_, _) => return None,
-                                Pattern::Product(_) => unimplemented!(),
-                            }
-                        }
-                        None
-                    }
-                    Kind::Injection(label, tm, ty) => {
-                        for mut arm in arms {
-                            match arm.pat {
-                                Pattern::Any => return Some(*arm.term),
-                                Pattern::Variable(_) => {
-                                    // Variable should be bound to Kind::Var(0),
-                                    // so we want to do a term substition of expr
-                                    // into Var(0)
-                                    // case ex of
-                                    //    | x => (cons x 1),
-                                    term_subst(*expr, arm.term.as_mut());
-                                    dbg!(&arm.term);
-                                    return Some(*arm.term);
-                                }
-                                Pattern::Constructor(tag, _) => {
-                                    if label == &tag {
-                                        // If the constructor is bound to a type
-                                        // that is not unit, we should term subst
-                                        // in the constructor's bound term to
-                                        // Var(0) so that the term in the arm
-                                        // can access it
-                                        match ty.as_ref() {
-                                            Type::Unit => {}
-                                            _ => term_subst(*tm.clone(), arm.term.as_mut()),
-                                        }
+                if !self.normal_form(&expr) {
+                    let t_prime = self.small_step(*expr)?;
+                    return Some(Term::new(Kind::Case(Box::new(t_prime), arms), term.span));
+                }
 
-                                        return Some(*arm.term);
-                                    }
-                                }
-                                Pattern::Literal(_) => return None,
-                                Pattern::Product(_) => unimplemented!(),
-                            }
-                        }
-                        None
+                for mut arm in arms {
+                    if arm.pat.matches(&expr) {
+                        self.case_subst(&arm.pat, &expr, arm.term.as_mut());
+                        return Some(*arm.term);
                     }
-                    _ => {
-                        let t_prime = self.small_step(*expr)?;
-                        Some(Term::new(Kind::Case(Box::new(t_prime), arms), term.span))
+                }
+
+                None
+            }
+            // Kind::Case(expr, arms) => {
+            //     match expr.kind() {
+            //         Kind::Lit(lit) => {
+            //             for mut arm in arms {
+            //                 match arm.pat {
+            //                     Pattern::Any => return Some(*arm.term),
+            //                     Pattern::Variable(_) => {
+            //                         // Variable should be bound to Kind::Var(0),
+            //                         // so we want to do a term substition of expr
+            //                         // into Var(0)
+            //                         // case ex of
+            //                         //    | x => (cons x 1),
+            //                         term_subst(*expr, arm.term.as_mut());
+            //                         dbg!(&arm.term);
+            //                         return Some(*arm.term);
+            //                     }
+            //                     Pattern::Literal(l) => {
+            //                         if lit == &l {
+            //                             return Some(*arm.term);
+            //                         }
+            //                     }
+            //                     Pattern::Constructor(_, _) => return None,
+            //                     Pattern::Product(_) => unimplemented!(),
+            //                 }
+            //             }
+            //             None
+            //         }
+            //         Kind::Injection(label, tm, ty) => {
+            //             for mut arm in arms {
+            //                 match arm.pat {
+            //                     Pattern::Any => return Some(*arm.term),
+            //                     Pattern::Variable(_) => {
+            //                         // Variable should be bound to Kind::Var(0),
+            //                         // so we want to do a term substition of expr
+            //                         // into Var(0)
+            //                         // case ex of
+            //                         //    | x => (cons x 1),
+            //                         term_subst(*expr, arm.term.as_mut());
+            //                         dbg!(&arm.term);
+            //                         return Some(*arm.term);
+            //                     }
+            //                     Pattern::Constructor(tag, _) => {
+            //                         if label == &tag {
+            //                             // If the constructor is bound to a type
+            //                             // that is not unit, we should term subst
+            //                             // in the constructor's bound term to
+            //                             // Var(0) so that the term in the arm
+            //                             // can access it
+            //                             match ty.as_ref() {
+            //                                 Type::Unit => {}
+            //                                 _ => term_subst(*tm.clone(), arm.term.as_mut()),
+            //                             }
+
+            //                             return Some(*arm.term);
+            //                         }
+            //                     }
+            //                     Pattern::Literal(_) => return None,
+            //                     Pattern::Product(_) => unimplemented!(),
+            //                 }
+            //             }
+            //             None
+            //         }
+            //         _ => {
+            //             let t_prime = self.small_step(*expr)?;
+            //             Some(Term::new(Kind::Case(Box::new(t_prime), arms), term.span))
+            //         }
+            //     }
+            // }
+
+            _ => None,
+        }
+    }
+
+    fn case_subst(&self, pat: &Pattern, expr: &Term, term: &mut Term) {
+        use Pattern::*;
+        match pat {
+            Any => {}
+            Literal(_) => {}
+            Variable(_) => {
+                term_subst(expr.clone(), term);
+            }
+            Product(v) => {
+                if let Kind::Product(terms) = &expr.kind {
+                    for (idx, pat) in v.iter().enumerate() {
+                        self.case_subst(&pat, &terms[idx], term);
                     }
                 }
             }
-
-            _ => None,
+            Constructor(label, v) => {
+                if let Kind::Injection(label_, tm, _) = &expr.kind {
+                    if label == label_ {
+                        self.case_subst(&pat, &tm, term);
+                    }
+                }
+            }
         }
     }
 }
