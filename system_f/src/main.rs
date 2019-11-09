@@ -1,10 +1,10 @@
 #![allow(unused_variables, unused_macros)]
 #[macro_use]
-mod macros;
-mod eval;
-mod syntax;
-mod terms;
-mod types;
+pub mod macros;
+pub mod eval;
+pub mod syntax;
+pub mod terms;
+pub mod types;
 
 use std::env;
 use std::io::{Read, Write};

@@ -1,3 +1,5 @@
+//! Typechecking of the simply typed lambda calculus with parametric
+//! polymorphism
 pub mod patterns;
 pub mod visit;
 use crate::terms::{Kind, Literal, Pattern, Primitive, Term};

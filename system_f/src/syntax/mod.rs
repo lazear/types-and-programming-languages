@@ -1,3 +1,4 @@
+//! Lexical analysis and recursive descent parser for System F
 pub mod lexer;
 pub mod parser;
 use util::span::Span;

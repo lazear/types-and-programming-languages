@@ -1,3 +1,4 @@
+//! Representation lambda calculus terms
 use crate::types::Type;
 use std::fmt;
 use util::span::Span;
@@ -9,6 +10,7 @@ pub struct Term {
     pub kind: Kind,
 }
 
+/// Primitive functions supported by this implementation
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd)]
 pub enum Primitive {
     Succ,
@@ -51,20 +53,23 @@ pub enum Kind {
     TyApp(Box<Term>, Box<Type>),
 }
 
+/// Patterns for case and let expressions
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub enum Pattern {
-    // Wildcard
+    /// Wildcard pattern, this always matches
     Any,
-    // Constant
+    /// Constant pattern
     Literal(Literal),
-    // Variable binding
+    /// Variable binding pattern, this always matches
     Variable(String),
-    // Tuple of pattern bindings
+    /// Tuple of pattern bindings
     Product(Vec<Pattern>),
+    /// Algebraic datatype constructor, along with binding pattern
     Constructor(String, Box<Pattern>),
 }
 
 impl Pattern {
+    /// Does this pattern match the given [`Term`]?
     pub fn matches(&self, term: &Term) -> bool {
         match self {
             Pattern::Any => return true,
@@ -91,6 +96,7 @@ impl Pattern {
     }
 }
 
+/// Arm of a case expression
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Arm {
     pub span: Span,
@@ -98,6 +104,7 @@ pub struct Arm {
     pub term: Box<Term>,
 }
 
+/// Constant literal expression or pattern
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub enum Literal {
     Unit,
