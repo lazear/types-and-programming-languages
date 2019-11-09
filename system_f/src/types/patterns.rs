@@ -37,54 +37,11 @@ fn overlap(existing: &Pattern, new: &Pattern) -> bool {
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Matrix<'pat> {
     pub expr_ty: Type,
-    pub result_ty: Type,
     len: usize,
     matrix: Vec<Vec<&'pat Pattern>>,
 }
 
 impl<'pat> Matrix<'pat> {
-    pub fn from_case_expr(
-        ctx: &mut Context,
-        expr: &Term,
-        arms: &'pat [Arm],
-    ) -> Result<Matrix<'pat>, TypeError> {
-        let ty = ctx.type_of(expr)?;
-        let mut m = Matrix::new(ty);
-
-        let mut set = HashSet::new();
-        for arm in arms {
-            if pattern_type_eq(&arm.pat, &m.expr_ty) {
-                let arm_ty = ctx.type_of(&arm.term)?;
-                set.insert(arm_ty);
-                if !m.add_pattern(&arm.pat) {
-                    return Err(TypeError {
-                        kind: TypeErrorKind::UnreachablePattern,
-                        span: arm.span,
-                    });
-                }
-            } else {
-                return Err(TypeError {
-                    kind: TypeErrorKind::InvalidPattern,
-                    span: arm.span,
-                });
-            }
-        }
-
-        if set.len() != 1 {
-            return Err(TypeError {
-                kind: TypeErrorKind::IncompatibleArms,
-                span: expr.span,
-            });
-        }
-
-        m.result_ty = match set.into_iter().next() {
-            Some(s) => s,
-            None => unreachable!(),
-        };
-
-        Ok(m)
-    }
-
     pub fn new(expr_ty: Type) -> Matrix<'pat> {
         let len = match &expr_ty {
             Type::Product(p) => p.len(),
@@ -93,7 +50,6 @@ impl<'pat> Matrix<'pat> {
 
         Matrix {
             expr_ty,
-            result_ty: Type::Unit,
             len,
             matrix: Vec::new(),
         }

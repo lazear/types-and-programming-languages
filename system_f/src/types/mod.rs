@@ -107,9 +107,9 @@ impl Context {
         use Pattern::*;
         match pat {
             Any => {
-                if let Type::Unit = ty {
-                    self.push(Type::Unit);
-                }
+                // if let Type::Unit = ty {
+                //     self.push(Type::Unit);
+                // }
             }
             Literal(_) => {}
             Variable(_) => self.push(ty.clone()),
@@ -123,6 +123,7 @@ impl Context {
             Constructor(label, v) => {
                 if let Type::Variant(variant) = ty {
                     let t_prime = variant_field(&variant, label, Span::zero()).unwrap();
+                    self.push(t_prime.clone());
                     self.walk_pattern_and_bind(&t_prime, &v);
                 }
             }
@@ -285,7 +286,10 @@ impl Context {
                     });
                 }
                 if matrix.exhaustive() {
-                    Ok(matrix.result_ty)
+                    match set.into_iter().next() {
+                        Some(s) => Ok(s),
+                        None => Context::error(term, TypeErrorKind::NotVariant),
+                    }
                 } else {
                     Context::error(term, TypeErrorKind::NotExhaustive)
                 }
