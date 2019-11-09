@@ -15,6 +15,7 @@
 
 use super::*;
 use crate::terms::{Arm, Kind, Literal, Pattern, Primitive, Term};
+use std::collections::HashSet;
 
 fn overlap(existing: &Pattern, new: &Pattern) -> bool {
     use Pattern::*;
@@ -35,21 +36,74 @@ fn overlap(existing: &Pattern, new: &Pattern) -> bool {
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Matrix<'pat> {
+    pub expr_ty: Type,
+    pub result_ty: Type,
     len: usize,
     matrix: Vec<Vec<&'pat Pattern>>,
 }
 
 impl<'pat> Matrix<'pat> {
-    pub fn new(len: usize) -> Matrix<'pat> {
+    pub fn from_case_expr(
+        ctx: &mut Context,
+        expr: &Term,
+        arms: &'pat [Arm],
+    ) -> Result<Matrix<'pat>, TypeError> {
+        let ty = ctx.type_of(expr)?;
+        let mut m = Matrix::new(ty);
+
+        let mut set = HashSet::new();
+        for arm in arms {
+            if pattern_type_eq(&arm.pat, &m.expr_ty) {
+                let arm_ty = ctx.type_of(&arm.term)?;
+                set.insert(arm_ty);
+                if !m.add_pattern(&arm.pat) {
+                    return Err(TypeError {
+                        kind: TypeErrorKind::UnreachablePattern,
+                        span: arm.span,
+                    });
+                }
+            } else {
+                return Err(TypeError {
+                    kind: TypeErrorKind::InvalidPattern,
+                    span: arm.span,
+                });
+            }
+        }
+
+        if set.len() != 1 {
+            return Err(TypeError {
+                kind: TypeErrorKind::IncompatibleArms,
+                span: expr.span,
+            });
+        }
+
+        m.result_ty = match set.into_iter().next() {
+            Some(s) => s,
+            None => unreachable!(),
+        };
+
+        Ok(m)
+    }
+
+    pub fn new(expr_ty: Type) -> Matrix<'pat> {
+        let len = match &expr_ty {
+            Type::Product(p) => p.len(),
+            _ => 1,
+        };
+
         Matrix {
+            expr_ty,
+            result_ty: Type::Unit,
             len,
             matrix: Vec::new(),
         }
     }
 
     /// Is the pattern [`Matrix`] exhaustive for this type?
-    pub fn exhaustive(&self, ty: &Type) -> bool {
-        match ty {
+    /// Invariant: a deconstructed pattern row will have the same length
+    /// as the Type (primararily for tuples).
+    pub fn exhaustive(&self) -> bool {
+        match &self.expr_ty {
             Type::Variant(v) => v.iter().all(|variant| {
                 let con = Pattern::Constructor(variant.label.clone(), Box::new(Pattern::Any));
                 let temp = [&con];
@@ -75,6 +129,10 @@ impl<'pat> Matrix<'pat> {
                 let tru = Pattern::Literal(Literal::Bool(true));
                 let fal = Pattern::Literal(Literal::Bool(false));
                 !(self.can_add_row(vec![&tru]) && self.can_add_row(vec![&fal]))
+            }
+            Type::Unit => {
+                let unit = Pattern::Literal(Literal::Unit);
+                !self.can_add_row(vec![&unit])
             }
             _ => false,
         }
@@ -121,6 +179,37 @@ impl<'pat> Matrix<'pat> {
             }
             Pattern::Constructor(label, inner) => self.try_add_row(vec![pat]),
         }
+    }
+}
+
+fn pattern_type_eq(pat: &Pattern, ty: &Type) -> bool {
+    match pat {
+        Pattern::Any => true,
+        Pattern::Variable(_) => true,
+        Pattern::Literal(lit) => match (lit, ty) {
+            (Literal::Bool(_), Type::Bool) => true,
+            (Literal::Nat(_), Type::Nat) => true,
+            (Literal::Unit, Type::Unit) => true,
+            _ => false,
+        },
+        Pattern::Product(patterns) => match ty {
+            Type::Product(types) => patterns
+                .iter()
+                .zip(types.iter())
+                .all(|(pt, tt)| pattern_type_eq(pt, tt)),
+            _ => false,
+        },
+        Pattern::Constructor(label, inner) => match ty {
+            Type::Variant(v) => {
+                for discriminant in v {
+                    if label == &discriminant.label && pattern_type_eq(&inner, &discriminant.ty) {
+                        return true;
+                    }
+                }
+                false
+            }
+            _ => false,
+        },
     }
 }
 
@@ -280,13 +369,13 @@ mod test {
             prod!(num!(1), num!(4)),
             prod!(Any, Variable(String::default())),
         ];
-
-        let mut matrix = Matrix::new(2);
+        let ty = Type::Product(vec![Type::Nat, Type::Nat]);
+        let mut matrix = Matrix::new(ty);
         for pat in &pats {
             assert!(matrix.add_pattern(pat));
         }
         assert!(!matrix.add_pattern(&Any));
-        assert!(matrix.exhaustive(&Type::Product(vec![Type::Nat, Type::Nat])));
+        assert!(matrix.exhaustive());
     }
 
     macro_rules! variant {
@@ -316,17 +405,17 @@ mod test {
         ];
 
         let ctx = Context::default();
-        let mut matrix = Matrix::new(1);
         assert!(pats.iter().all(|p| ctx.pattern_type_eq(p, &ty)));
+        let mut matrix = Matrix::new(ty);
 
         for p in &pats {
             assert!(matrix.add_pattern(p));
         }
         let last = con!("C", Any);
 
-        assert!(!matrix.exhaustive(&ty));
+        assert!(!matrix.exhaustive());
         assert!(matrix.add_pattern(&last));
-        assert!(matrix.exhaustive(&ty));
+        assert!(matrix.exhaustive());
     }
 
     #[test]
@@ -337,11 +426,11 @@ mod test {
         let ctx = Context::default();
         assert!(pats.iter().all(|p| ctx.pattern_type_eq(p, &ty)));
 
-        let mut matrix = Matrix::new(1);
+        let mut matrix = Matrix::new(ty);
         for p in &pats {
             assert!(matrix.add_pattern(p));
         }
         assert!(!matrix.add_pattern(&pats[1]));
-        assert!(matrix.exhaustive(&ty));
+        assert!(matrix.exhaustive());
     }
 }

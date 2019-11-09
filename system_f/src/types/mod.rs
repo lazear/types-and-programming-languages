@@ -34,12 +34,15 @@ pub struct TypeError {
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum TypeErrorKind {
     ParameterMismatch(Box<Type>, Box<Type>, Span),
-    IncompatibleArms,
+
     InvalidProjection,
     NotArrow,
     NotUniversal,
     NotVariant,
     NotProduct,
+
+    IncompatibleArms,
+    InvalidPattern,
     NotExhaustive,
     UnreachablePattern,
     UnboundVariable(usize),
@@ -191,6 +194,42 @@ impl Context {
                     .map(|t| self.type_of(t))
                     .collect::<Result<_, _>>()?,
             )),
+            Kind::Let(t1, t2) => {
+                println!("{} {} {:?}", t1, t2, self.stack);
+                let ty = self.type_of(t1)?;
+                self.push(ty);
+                let y = self.type_of(t2);
+                self.pop();
+                y
+            }
+            Kind::TyAbs(term) => {
+                let ty2 = self.type_of(term)?;
+                Ok(Type::Universal(Box::new(ty2)))
+            }
+            Kind::TyApp(term, ty) => {
+                let mut ty = ty.clone();
+                let ty1 = self.type_of(term)?;
+                match ty1 {
+                    Type::Universal(mut ty12) => {
+                        Shift::new(1).visit(&mut ty);
+                        Subst::new(*ty).visit(&mut ty12);
+                        Shift::new(-1).visit(&mut ty12);
+                        Ok(*ty12)
+                    }
+                    _ => {
+                        dbg!(ty1);
+                        Context::error(term, TypeErrorKind::NotUniversal)
+                    }
+                }
+            }
+            // Kind::Case(expr, arms) => {
+            //     let matrix = patterns::Matrix::from_case_expr(self, expr, arms)?;
+            //     if matrix.exhaustive() {
+            //         Ok(matrix.result_ty)
+            //     } else {
+            //         Context::error(term, TypeErrorKind::NotExhaustive)
+            //     }
+            // }
             Kind::Case(tm, arms) => {
                 let ty = self.type_of(tm)?;
                 for arm in arms {
@@ -353,34 +392,6 @@ impl Context {
                         }
                     }
                     _ => Context::error(term, TypeErrorKind::NotVariant),
-                }
-            }
-            Kind::Let(t1, t2) => {
-                println!("{} {} {:?}", t1, t2, self.stack);
-                let ty = self.type_of(t1)?;
-                self.push(ty);
-                let y = self.type_of(t2);
-                self.pop();
-                y
-            }
-            Kind::TyAbs(term) => {
-                let ty2 = self.type_of(term)?;
-                Ok(Type::Universal(Box::new(ty2)))
-            }
-            Kind::TyApp(term, ty) => {
-                let mut ty = ty.clone();
-                let ty1 = self.type_of(term)?;
-                match ty1 {
-                    Type::Universal(mut ty12) => {
-                        Shift::new(1).visit(&mut ty);
-                        Subst::new(*ty).visit(&mut ty12);
-                        Shift::new(-1).visit(&mut ty12);
-                        Ok(*ty12)
-                    }
-                    _ => {
-                        dbg!(ty1);
-                        Context::error(term, TypeErrorKind::NotUniversal)
-                    }
                 }
             }
         }
