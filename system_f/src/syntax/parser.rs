@@ -353,6 +353,7 @@ impl<'s> Parser<'s> {
             TokenKind::Nat(x) => Literal::Nat(x),
             TokenKind::True => Literal::Bool(true),
             TokenKind::False => Literal::Bool(false),
+            TokenKind::Unit => Literal::Unit,
             _ => return self.error(ErrorKind::Unknown),
         };
         Ok(Term::new(Kind::Lit(lit), self.span))
@@ -388,7 +389,7 @@ impl<'s> Parser<'s> {
             }
             TokenKind::Lowercase(_) => {
                 let var = self.lowercase_id()?;
-                self.tmvar.push(var.clone());
+                // self.tmvar.push(var.clone());
                 Ok(Pattern::Variable(var))
             }
             TokenKind::True => {
@@ -431,6 +432,19 @@ impl<'s> Parser<'s> {
         }
     }
 
+    fn pat_stack(pat: &Pattern, stack: &mut Vec<String>) {
+        match pat {
+            Pattern::Variable(s) => stack.push(s.clone()),
+            Pattern::Constructor(_, inner) => Parser::pat_stack(inner, stack),
+            Pattern::Product(v) => {
+                for x in v {
+                    Parser::pat_stack(x, stack);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn case_arm(&mut self) -> Result<Arm, Error> {
         // match self.kind() {
         //     TokenKind::Bar => self.bump(),
@@ -445,6 +459,13 @@ impl<'s> Parser<'s> {
         let mut span = self.span;
 
         let pat = self.once(|p| p.pattern(), "missing pattern")?;
+
+        let mut vars = Vec::new();
+        Parser::pat_stack(&pat, &mut vars);
+        // dbg!(vars);
+        for v in vars.into_iter().rev() {
+            self.tmvar.push(v);
+        }
 
         self.expect(TokenKind::Equals)?;
         self.expect(TokenKind::Gt)?;
@@ -511,7 +532,9 @@ impl<'s> Parser<'s> {
                     }
                 }
             }
-            TokenKind::Nat(_) | TokenKind::True | TokenKind::False => self.literal(),
+            TokenKind::Nat(_) | TokenKind::True | TokenKind::False | TokenKind::Unit => {
+                self.literal()
+            }
             TokenKind::Eof => self.error(ErrorKind::Eof),
             TokenKind::Semicolon => {
                 self.bump();

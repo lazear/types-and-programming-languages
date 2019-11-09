@@ -24,6 +24,5 @@ case Some (1, 2) of {None | Some (Nat, Nat)} of
 ;
 
 case (1, (2, 3)) of 
-	| (x, (y, 3)) => (x, y)
-	| _ => (1, 1)
+	| (x, (y, z)) => (z, y, x)
 ;
