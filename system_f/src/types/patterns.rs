@@ -42,6 +42,7 @@ pub struct Matrix<'pat> {
 }
 
 impl<'pat> Matrix<'pat> {
+    /// Create a new [`Matrix`] for a given type
     pub fn new(expr_ty: Type) -> Matrix<'pat> {
         let len = match &expr_ty {
             Type::Product(p) => p.len(),
@@ -56,8 +57,6 @@ impl<'pat> Matrix<'pat> {
     }
 
     /// Is the pattern [`Matrix`] exhaustive for this type?
-    /// Invariant: a deconstructed pattern row will have the same length
-    /// as the Type (primararily for tuples).
     pub fn exhaustive(&self) -> bool {
         match &self.expr_ty {
             Type::Variant(v) => v.iter().all(|variant| {
@@ -137,39 +136,53 @@ impl<'pat> Matrix<'pat> {
         }
     }
 }
-
-fn pattern_type_eq(pat: &Pattern, ty: &Type) -> bool {
-    match pat {
-        Pattern::Any => true,
-        Pattern::Variable(_) => true,
-        Pattern::Literal(lit) => match (lit, ty) {
-            (Literal::Bool(_), Type::Bool) => true,
-            (Literal::Nat(_), Type::Nat) => true,
-            (Literal::Unit, Type::Unit) => true,
-            _ => false,
-        },
-        Pattern::Product(patterns) => match ty {
-            Type::Product(types) => patterns
-                .iter()
-                .zip(types.iter())
-                .all(|(pt, tt)| pattern_type_eq(pt, tt)),
-            _ => false,
-        },
-        Pattern::Constructor(label, inner) => match ty {
-            Type::Variant(v) => {
-                for discriminant in v {
-                    if label == &discriminant.label && pattern_type_eq(&inner, &discriminant.ty) {
-                        return true;
-                    }
-                }
-                false
-            }
-            _ => false,
-        },
-    }
-}
-
 impl Context {
+    pub(crate) fn typeck_case(&mut self, expr: &Term, arms: &[Arm]) -> Result<Type, TypeError> {
+        let ty = self.type_of(expr)?;
+        let mut matrix = patterns::Matrix::new(ty);
+
+        let mut set = HashSet::new();
+        for arm in arms {
+            if self.pattern_type_eq(&arm.pat, &matrix.expr_ty) {
+                let height = self.stack.len();
+                self.walk_pattern_and_bind(&matrix.expr_ty, &arm.pat);
+                let arm_ty = self.type_of(&arm.term)?;
+
+                while self.stack.len() > height {
+                    self.pop();
+                }
+
+                set.insert(arm_ty);
+                if !matrix.add_pattern(&arm.pat) {
+                    return Err(TypeError {
+                        kind: TypeErrorKind::UnreachablePattern,
+                        span: arm.span,
+                    });
+                }
+            } else {
+                return Err(TypeError {
+                    kind: TypeErrorKind::InvalidPattern,
+                    span: arm.span,
+                });
+            }
+        }
+
+        if set.len() != 1 {
+            return Err(TypeError {
+                kind: TypeErrorKind::IncompatibleArms,
+                span: expr.span,
+            });
+        }
+        if matrix.exhaustive() {
+            match set.into_iter().next() {
+                Some(s) => Ok(s),
+                None => Context::error(expr, TypeErrorKind::NotVariant),
+            }
+        } else {
+            Context::error(expr, TypeErrorKind::NotExhaustive)
+        }
+    }
+
     /// Helper function for pattern to type equivalence
     pub(crate) fn pattern_type_eq(&self, pat: &Pattern, ty: &Type) -> bool {
         match pat {
@@ -202,22 +215,6 @@ impl Context {
                 _ => false,
             },
         }
-    }
-
-    fn case_type(&mut self, expr: &Term, arms: &[Arm]) -> Result<Type, TypeError> {
-        let expr_ty = self.type_of(expr)?;
-        // Go through and make sure all of the patterns are appropriate for
-        // the expression type
-        for arm in arms {
-            if !self.pattern_type_eq(&arm.pat, &expr_ty) {
-                println!(
-                    "Pattern in case arm {:?} does not match type of {}: {:?}",
-                    arm, expr, expr_ty
-                );
-                return Context::error(expr, TypeErrorKind::IncompatibleArms);
-            }
-        }
-        Context::error(expr, TypeErrorKind::IncompatibleArms)
     }
 }
 
