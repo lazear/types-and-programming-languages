@@ -49,9 +49,9 @@ pub struct Parser<'s> {
 
 #[derive(Clone, Debug)]
 pub struct Error {
-    span: Span,
-    tok: Token,
-    kind: ErrorKind,
+    pub span: Span,
+    pub tok: Token,
+    pub kind: ErrorKind,
 }
 
 #[derive(Clone, Debug)]

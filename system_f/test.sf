@@ -19,9 +19,16 @@ let poly = \X \Y (\func: X->Y. \val: X. func val) in poly [Nat][Bool]
 case Some (5, 2) of {None | Some (Nat, Nat)} of 
  | None => (0, 0)
  | Some (1, _) => (1, 1)
- | Some(x, y) => (y, x),
+ | Some(x, y) => (y, x)
 ;
 
 case (1, (2, 3)) of 
 	| (x, (y, z)) => (z, y, x)
 ;
+let x = 
+	\z: (Nat, Nat)->Nat. 
+		\y: (Nat, Nat).
+			case y of
+				| (0, x) => x,
+				| x => z (pred x.0, succ (succ x.1))
+	in (fix x) (10, 0)

@@ -160,7 +160,7 @@ impl MutVisitor for Subst {
         let sp = &mut term.span;
         match &mut term.kind {
             Kind::Lit(l) => self.visit_lit(sp, l),
-            Kind::Var(v) if *v == self.cutoff => *term = self.term.clone(),
+            Kind::Var(v) if *v >= self.cutoff => *term = self.term.clone(),
             Kind::Var(_) => {}
             Kind::Abs(ty, term) => self.visit_abs(sp, ty, term),
             Kind::App(t1, t2) => self.visit_app(sp, t1, t2),

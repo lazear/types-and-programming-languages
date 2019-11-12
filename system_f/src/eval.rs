@@ -129,6 +129,21 @@ impl<'ctx> Eval<'ctx> {
                 }
                 Some(Term::new(Kind::Product(v), term.span))
             }
+            Kind::Fix(tm) => {
+                if !self.normal_form(&tm) {
+                    let t_prime = self.small_step(*tm)?;
+                    return Some(Term::new(Kind::Fix(Box::new(t_prime)), term.span));
+                }
+
+                let x = Term::new(Kind::Fix(tm.clone()), term.span);
+                match tm.kind {
+                    Kind::Abs(_, mut body) => {
+                        term_subst(x, &mut body);
+                        Some(*body)
+                    }
+                    _ => None,
+                }
+            }
             Kind::Case(expr, arms) => {
                 if !self.normal_form(&expr) {
                     let t_prime = self.small_step(*expr)?;
@@ -181,6 +196,8 @@ impl<'ctx> Eval<'ctx> {
 }
 
 fn term_subst(mut s: Term, t: &mut Term) {
+    println!("SUB {} -> {}", s, t);
+
     Shift::new(1).visit(&mut s);
     Subst::new(s).visit(t);
     Shift::new(-1).visit(t);

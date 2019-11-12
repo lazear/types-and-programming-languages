@@ -170,11 +170,7 @@ impl Context {
     fn walk_pattern_and_bind(&mut self, ty: &Type, pat: &Pattern) {
         use Pattern::*;
         match pat {
-            Any => {
-                // if let Type::Unit = ty {
-                //     self.push(Type::Unit);
-                // }
-            }
+            Any => {}
             Literal(_) => {}
             Variable(_) => self.push(ty.clone()),
             Product(v) => {

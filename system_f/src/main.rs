@@ -8,7 +8,7 @@ pub mod types;
 
 use std::env;
 use std::io::{Read, Write};
-use syntax::parser::Parser;
+use syntax::parser::{self, Parser};
 use terms::Term;
 use types::{Type, TypeError, TypeErrorKind, Variant};
 use util;
@@ -113,7 +113,18 @@ fn walk(src: &str, term: &Term) {
 
 fn parse_and_eval(ctx: &mut types::Context, input: &str, verbose: bool) -> bool {
     let mut p = Parser::new(input);
-    while let Ok(term) = p.parse() {
+    loop {
+        let term = match p.parse() {
+            Ok(term) => term,
+            Err(parser::Error {
+                kind: parser::ErrorKind::Eof,
+                ..
+            }) => break,
+            Err(e) => {
+                dbg!(e);
+                break;
+            }
+        };
         if let Err(tyerr) = eval(ctx, term, verbose) {
             match tyerr.kind {
                 TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
@@ -132,7 +143,6 @@ fn parse_and_eval(ctx: &mut types::Context, input: &str, verbose: bool) -> bool 
             return false;
         }
     }
-
     let diag = p.diagnostic();
     if diag.error_count() > 0 {
         println!("Parsing {}", diag.emit());
