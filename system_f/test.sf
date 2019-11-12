@@ -34,8 +34,16 @@ let x =
 	in (fix x) (10, 0)
 
 ;
-let add = \f: Nat->Nat->Nat. \m: Nat. \n: Nat.
-	case m of 
-		| 0 => 0,
+let add = fix \f: Nat->Nat->Nat. \m: Nat. \n: Nat.
+	case (m, n) of 
+		| (0, n) => n,
 		| x => succ (f (pred m) n)
-in (fix add) 5 3;
+in let mul = fix \f: Nat->Nat->Nat. \m: Nat. \n: Nat.
+	case (m, n) of 
+		| (0, n) => n,
+		| x => add n (f (pred m) n)
+in let fact = fix \f: Nat->Nat. \m: Nat. 
+	case m of 
+		| 0 => 1 
+		| x => mul m (f (pred m))
+in fact 6
