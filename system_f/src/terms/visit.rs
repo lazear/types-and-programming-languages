@@ -26,37 +26,46 @@ pub trait MutVisitor: Sized {
         self.visit(term);
     }
 
-    fn visit_primitive(&mut self, prim: &mut Primitive) {}
-    fn visit_injection(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
+    fn visit_primitive(&mut self, sp: &mut Span, prim: &mut Primitive) {}
+    fn visit_injection(
+        &mut self,
+        sp: &mut Span,
+        label: &mut String,
+        term: &mut Term,
+        ty: &mut Type,
+    ) {
         self.visit(term);
     }
 
-    fn visit_case(&mut self, term: &mut Term, arms: &mut Vec<Arm>) {
+    fn visit_case(&mut self, sp: &mut Span, term: &mut Term, arms: &mut Vec<Arm>) {
         self.visit(term);
         for arm in arms {
             self.visit(&mut arm.term);
         }
     }
 
-    fn visit_product(&mut self, product: &mut Vec<Term>) {
+    fn visit_product(&mut self, sp: &mut Span, product: &mut Vec<Term>) {
         for t in product {
             self.visit(t);
         }
     }
 
-    fn visit_projection(&mut self, term: &mut Term, index: &mut usize) {
+    fn visit_projection(&mut self, sp: &mut Span, term: &mut Term, index: &mut usize) {
         self.visit(term);
     }
 
     fn visit_fold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
         self.visit(term);
     }
-
     fn visit_unfold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
         self.visit(term);
     }
 
     fn visit(&mut self, term: &mut Term) {
+        self.walk(term);
+    }
+
+    fn walk(&mut self, term: &mut Term) {
         let sp = &mut term.span;
         match &mut term.kind {
             Kind::Lit(l) => self.visit_lit(sp, l),
@@ -65,11 +74,11 @@ pub trait MutVisitor: Sized {
             Kind::App(t1, t2) => self.visit_app(sp, t1, t2),
             // Do we need a separate branch?
             Kind::Fix(term) => self.visit(term),
-            Kind::Primitive(p) => self.visit_primitive(p),
-            Kind::Injection(label, tm, ty) => self.visit_injection(label, tm, ty),
-            Kind::Projection(term, idx) => self.visit_projection(term, idx),
-            Kind::Product(terms) => self.visit_product(terms),
-            Kind::Case(term, arms) => self.visit_case(term, arms),
+            Kind::Primitive(p) => self.visit_primitive(sp, p),
+            Kind::Injection(label, tm, ty) => self.visit_injection(sp, label, tm, ty),
+            Kind::Projection(term, idx) => self.visit_projection(sp, term, idx),
+            Kind::Product(terms) => self.visit_product(sp, terms),
+            Kind::Case(term, arms) => self.visit_case(sp, term, arms),
             Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
             Kind::TyAbs(term) => self.visit_tyabs(sp, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
@@ -116,13 +125,14 @@ impl MutVisitor for Shift {
         self.cutoff -= 1;
     }
 
-    fn visit_case(&mut self, term: &mut Term, arms: &mut Vec<Arm>) {
+    fn visit_case(&mut self, sp: &mut Span, term: &mut Term, arms: &mut Vec<Arm>) {
         self.visit(term);
-        self.cutoff += 1;
         for arm in arms {
+            let c = PatternCount::collect(&mut arm.pat);
+            self.cutoff += c;
             self.visit(&mut arm.term);
+            self.cutoff -= c;
         }
-        self.cutoff -= 1;
     }
 }
 
@@ -157,13 +167,14 @@ impl MutVisitor for Subst {
         self.cutoff -= 1;
     }
 
-    fn visit_case(&mut self, term: &mut Term, arms: &mut Vec<Arm>) {
+    fn visit_case(&mut self, sp: &mut Span, term: &mut Term, arms: &mut Vec<Arm>) {
         self.visit(term);
-        self.cutoff += 1;
         for arm in arms {
+            let c = PatternCount::collect(&mut arm.pat);
+            self.cutoff += c;
             self.visit(&mut arm.term);
+            self.cutoff -= c;
         }
-        self.cutoff -= 1;
     }
 
     fn visit(&mut self, term: &mut Term) {
@@ -175,15 +186,15 @@ impl MutVisitor for Subst {
             Kind::Abs(ty, term) => self.visit_abs(sp, ty, term),
             Kind::App(t1, t2) => self.visit_app(sp, t1, t2),
             Kind::Fix(term) => self.visit(term),
-            Kind::Primitive(p) => self.visit_primitive(p),
-            Kind::Injection(label, tm, ty) => self.visit_injection(label, tm, ty),
-            Kind::Projection(term, idx) => self.visit_projection(term, idx),
-            Kind::Product(terms) => self.visit_product(terms),
-            Kind::Case(term, arms) => self.visit_case(term, arms),
+            Kind::Primitive(p) => self.visit_primitive(sp, p),
+            Kind::Injection(label, tm, ty) => self.visit_injection(sp, label, tm, ty),
+            Kind::Projection(term, idx) => self.visit_projection(sp, term, idx),
+            Kind::Product(terms) => self.visit_product(sp, terms),
+            Kind::Case(term, arms) => self.visit_case(sp, term, arms),
             Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
             Kind::TyAbs(term) => self.visit_tyabs(sp, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
-            Kind::Fold(ty, term) | Kind::Unfold(ty, term) => self.visit(term),
+            Kind::Fold(ty, term) | Kind::Unfold(ty, term) => self.visit_fold(sp, ty, term),
         }
     }
 }
@@ -228,7 +239,13 @@ impl MutVisitor for TyTermSubst {
         self.cutoff -= 1;
     }
 
-    fn visit_injection(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
+    fn visit_injection(
+        &mut self,
+        sp: &mut Span,
+        label: &mut String,
+        term: &mut Term,
+        ty: &mut Type,
+    ) {
         self.visit_ty(ty);
         self.visit(term);
     }

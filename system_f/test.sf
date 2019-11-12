@@ -34,8 +34,23 @@ let x =
 	in (fix x) (10, 0)
 
 ;
-let add = \f: Nat->Nat->Nat. \m: Nat. \n: Nat.
-	case m of 
-		| 0 => 0,
-		| x => succ (f (pred m) n)
-in (fix add) 5 3;
+
+let cdr = \list: NatList. 
+	case unfold NatList list of 
+		| Nil => Nil of NatList
+		| Cons (x, xs) => xs
+in cdr Cons (10, Cons (20, Nil of NatList) of NatList) of NatList
+;
+
+case unfold NatList Cons (10, Cons (20, Nil of NatList) of NatList) of NatList of 
+	| Nil => Nil of NatList 
+	| Cons (10, xs) => Cons (11, xs) of NatList
+	| Cons (x, xs) => xs
+
+;
+
+let nil = Nil of NatList in 
+let cons = (\val: Nat. \list: NatList. Cons (val, list) of NatList) in
+case unfold NatList (cons 1 nil) of 
+	| Nil => nil
+	| Cons (x, y) => y

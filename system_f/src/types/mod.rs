@@ -112,6 +112,8 @@ impl Context {
     }
 
     pub fn type_check(&mut self, term: &Term) -> Result<Type, TypeError> {
+        // dbg!(&self.stack);
+        // println!("{}", term);
         match term.kind() {
             Kind::Lit(Literal::Unit) => Ok(Type::Unit),
             Kind::Lit(Literal::Bool(_)) => Ok(Type::Bool),
@@ -231,41 +233,37 @@ impl Context {
             // of case expressions
             Kind::Case(expr, arms) => self.type_check_case(expr, arms),
 
-            Kind::Unfold(ty, tm) => match ty.as_ref() {
-                Type::Rec(t1) => {
-                    let mut x = ty.clone();
-                    let mut y = t1.clone();
-
-                    Shift::new(1).visit(&mut x);
-                    Subst::new(*x).visit(&mut y);
-                    Shift::new(-1).visit(&mut y);
-                    Ok(*y)
-                    // Ok(Type::Arrow(ty.clone(), y))
+            Kind::Unfold(rec, tm) => match rec.as_ref() {
+                Type::Rec(inner) => {
+                    let s = subst(*rec.clone(), *inner.clone());
+                    // Ok(Type::Arrow(rec.clone(), Box::new(s)))
+                    Ok(s)
                 }
                 _ => Context::error(term, TypeErrorKind::NotRec),
             },
 
-            Kind::Fold(ty, tm) => match ty.as_ref() {
-                Type::Rec(t1) => {
-                    let mut x = ty.clone();
-                    let mut y = t1.clone();
+            Kind::Fold(rec, tm) => match rec.as_ref() {
+                Type::Rec(inner) => {
+                    // let s = subst(*rec.clone(), *inner.clone());
 
-                    Shift::new(1).visit(&mut x);
-                    Subst::new(*x).visit(&mut y);
-                    Shift::new(-1).visit(&mut y);
+                    // Ok(Type::Arrow(Box::new(s), rec.clone()))
 
-                    dbg!(&y);
-                    println!("{:?} ?? {:?}", self.type_check(tm)?, ty);
-                    Ok(*ty.clone())
-                    // Ok(Type::Arrow(y, t1.clone()))
+                    Ok(*rec.clone())
                 }
                 _ => {
-                    dbg!(ty);
+                    dbg!(rec);
                     Context::error(term, TypeErrorKind::NotRec)
                 }
             },
         }
     }
+}
+
+pub fn subst(mut s: Type, mut t: Type) -> Type {
+    Shift::new(1).visit(&mut s);
+    Subst::new(s).visit(&mut t);
+    Shift::new(-1).visit(&mut t);
+    t
 }
 
 struct Aliaser<'ctx> {
@@ -303,19 +301,25 @@ impl crate::terms::visit::MutVisitor for Context {
         self.visit(term);
     }
 
-    fn visit_injection(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
+    fn visit_injection(
+        &mut self,
+        sp: &mut Span,
+        label: &mut String,
+        term: &mut Term,
+        ty: &mut Type,
+    ) {
         self.aliaser().visit(ty);
         self.visit(term);
     }
 
-    fn visit_fold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+    fn visit_fold(&mut self, sp: &mut Span, ty: &mut Type, tm: &mut Term) {
         self.aliaser().visit(ty);
-        self.visit(term);
+        self.visit(tm);
     }
 
-    fn visit_unfold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+    fn visit_unfold(&mut self, sp: &mut Span, ty: &mut Type, tm: &mut Term) {
         self.aliaser().visit(ty);
-        self.visit(term);
+        self.visit(tm);
     }
 }
 

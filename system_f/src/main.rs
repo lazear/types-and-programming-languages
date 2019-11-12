@@ -9,9 +9,10 @@ pub mod types;
 use std::env;
 use std::io::{Read, Write};
 use syntax::parser::{self, Parser};
-use terms::Term;
-use types::{Type, TypeError, TypeErrorKind, Variant};
-use util;
+use terms::visit::MutVisitor;
+use terms::*;
+use types::*;
+use util::span::Span;
 
 fn test_variant() -> Type {
     Type::Variant(vec![
@@ -51,6 +52,7 @@ pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
 
 fn eval(ctx: &mut types::Context, mut term: Term, verbose: bool) -> Result<Term, TypeError> {
     ctx.de_alias(&mut term);
+    InjRewriter.visit(&mut term);
     let ty = ctx.type_check(&term)?;
     println!("  -: {:?}", ty);
 
@@ -77,37 +79,42 @@ fn eval(ctx: &mut types::Context, mut term: Term, verbose: bool) -> Result<Term,
     Ok(fin)
 }
 
-fn walk(src: &str, term: &Term) {
-    use terms::Kind;
-    code_format(src, &[(format!("{}", term), term.span)]);
-    match &term.kind {
-        Kind::Abs(ty, tm) => {
-            walk(src, tm);
-        }
-        Kind::Fix(tm) => {
-            walk(src, tm);
-        }
-        Kind::Primitive(p) => {}
-        Kind::Injection(label, tm, ty) => {
-            walk(src, tm);
-        }
-        Kind::Case(term, arms) => {
-            walk(src, term);
-            for a in arms {
-                walk(src, &a.term);
+struct InjRewriter;
+
+impl MutVisitor for InjRewriter {
+    fn visit(&mut self, term: &mut Term) {
+        match &mut term.kind {
+            Kind::Injection(label, val, ty) => {
+                // dbg!(&ty);
+                match *ty.clone() {
+                    Type::Rec(inner) => {
+                        let ty_prime = subst(*ty.clone(), *inner.clone());
+                        let rewrite_ty = Term::new(
+                            Kind::Injection(label.clone(), val.clone(), Box::new(ty_prime)),
+                            term.span,
+                        );
+
+                        *term = Term::new(Kind::Fold(ty.clone(), Box::new(rewrite_ty)), term.span);
+
+                        // let s = subst(*ty.clone(), *inner.clone());
+                        // *term = Term::new(
+                        //     Kind::App(
+                        //         Box::new(tm),
+                        //         Box::new(Term::new(
+                        //             Kind::Injection(label.clone(),
+                        // val.clone(), Box::new(s)),
+                        //             term.span,
+                        //         )),
+                        //     ),
+                        //     term.span,
+                        // );
+                    }
+                    _ => {}
+                }
+                self.walk(term);
             }
+            _ => self.walk(term),
         }
-        Kind::Let(t1, t2) => {
-            walk(src, t1);
-            walk(src, t2);
-        }
-        Kind::App(t1, t2) => {
-            walk(src, t1);
-            walk(src, t2);
-        }
-        Kind::TyAbs(t) => walk(src, t),
-        Kind::TyApp(t, _) => walk(src, t),
-        _ => {}
     }
 }
 

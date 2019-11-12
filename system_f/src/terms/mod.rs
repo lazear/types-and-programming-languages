@@ -114,6 +114,22 @@ impl PatternVisitor for PatternStack {
     }
 }
 
+pub struct PatternCount(usize);
+
+impl PatternCount {
+    pub fn collect(pat: &mut Pattern) -> usize {
+        let mut p = PatternCount(0);
+        p.visit_pattern(pat);
+        p.0
+    }
+}
+
+impl PatternVisitor for PatternCount {
+    fn visit_variable(&mut self, var: &String) {
+        self.0 += 1;
+    }
+}
+
 impl Pattern {
     /// Does this pattern match the given [`Term`]?
     pub fn matches(&self, term: &Term) -> bool {
@@ -201,9 +217,17 @@ impl fmt::Display for Term {
             Kind::Abs(ty, term) => write!(f, "(λ_:{:?}. {})", ty, term),
             Kind::Fix(term) => write!(f, "Fix {:?}", term),
             Kind::Primitive(p) => write!(f, "{:?}", p),
-            Kind::Injection(label, tm, ty) => write!(f, "{:?}::{}({})", ty, label, tm),
+            Kind::Injection(label, tm, ty) => write!(f, "{}({})", label, tm),
             Kind::Projection(term, idx) => write!(f, "{}.{}", term, idx),
-            Kind::Product(terms) => write!(f, "{:?}", terms),
+            Kind::Product(terms) => write!(
+                f,
+                "({})",
+                terms
+                    .iter()
+                    .map(|t| format!("{}", t))
+                    .collect::<Vec<String>>()
+                    .join(",")
+            ),
             Kind::Case(term, arms) => {
                 writeln!(f, "case {} of", term)?;
                 for arm in arms {
@@ -223,7 +247,7 @@ impl fmt::Display for Term {
 
 impl fmt::Debug for Term {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{:?}", self.kind)
     }
 }
 

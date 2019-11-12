@@ -20,6 +20,7 @@ impl<'ctx> Eval<'ctx> {
             Kind::Primitive(_) => true,
             Kind::Injection(_, tm, _) => self.normal_form(tm),
             Kind::Product(fields) => fields.iter().all(|f| self.normal_form(f)),
+            Kind::Fold(_, tm) => self.normal_form(tm),
             _ => false,
         }
     }
@@ -158,6 +159,33 @@ impl<'ctx> Eval<'ctx> {
                 }
 
                 None
+            }
+            Kind::Fold(ty, tm) => {
+                if !self.normal_form(&tm) {
+                    let t_prime = self.small_step(*tm)?;
+                    Some(Term::new(Kind::Fold(ty, Box::new(t_prime)), term.span))
+                } else {
+                    None
+                }
+            }
+
+            Kind::Unfold(ty, tm) => {
+                if !self.normal_form(&tm) {
+                    let t_prime = self.small_step(*tm)?;
+                    return Some(Term::new(Kind::Unfold(ty, Box::new(t_prime)), term.span));
+                }
+
+                match tm.kind {
+                    Kind::Fold(ty2, inner) => {
+                        println!("DO UNFOLD, {} {}", self.normal_form(&inner), inner);
+                        if self.normal_form(&inner) {
+                            Some(*inner)
+                        } else {
+                            self.small_step(*inner)
+                        }
+                    }
+                    _ => None,
+                }
             }
             _ => None,
         }

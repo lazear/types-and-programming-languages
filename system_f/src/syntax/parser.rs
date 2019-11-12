@@ -234,7 +234,6 @@ impl<'s> Parser<'s> {
             self.expect(TokenKind::Equals)?;
             self.tyvar.push(name);
             let ty = self.ty()?;
-            dbg!(&ty);
             self.tyvar.pop();
             return Ok(Type::Rec(Box::new(ty)));
         }
@@ -282,7 +281,7 @@ impl<'s> Parser<'s> {
         self.expect(TokenKind::Fold)?;
         let sp = self.span;
         let ty = self.once(|p| p.ty(), "type annotation required after `fold`")?;
-        let tm = self.once(|p| p.parse(), "term required in `fold` expression")?;
+        let tm = self.once(|p| p.parse(), "term required after `fold`")?;
         Ok(Term::new(
             Kind::Fold(Box::new(ty), Box::new(tm)),
             sp + self.span,
@@ -293,7 +292,7 @@ impl<'s> Parser<'s> {
         self.expect(TokenKind::Unfold)?;
         let sp = self.span;
         let ty = self.once(|p| p.ty(), "type annotation required after `unfold`")?;
-        let tm = self.once(|p| p.parse(), "term required in `unfold` expression")?;
+        let tm = self.once(|p| p.parse(), "term required after `unfold`")?;
         Ok(Term::new(
             Kind::Unfold(Box::new(ty), Box::new(tm)),
             sp + self.span,

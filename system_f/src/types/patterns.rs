@@ -184,10 +184,6 @@ impl<'ty> PatTyStack<'ty> {
 }
 
 impl<'ty> PatternVisitor for PatTyStack<'_> {
-    fn visit_variable(&mut self, var: &String) {
-        self.inner.push(self.ty);
-    }
-
     fn visit_product(&mut self, pats: &Vec<Pattern>) {
         if let Type::Product(tys) = self.ty {
             let ty = self.ty;
@@ -205,6 +201,15 @@ impl<'ty> PatternVisitor for PatTyStack<'_> {
             self.ty = variant_field(&vs, label, Span::zero()).unwrap();
             self.visit_pattern(pat);
             self.ty = ty;
+        }
+    }
+
+    fn visit_pattern(&mut self, pattern: &Pattern) {
+        match pattern {
+            Pattern::Any | Pattern::Literal(_) => {}
+            Pattern::Variable(_) => self.inner.push(self.ty),
+            Pattern::Constructor(label, pat) => self.visit_constructor(label, pat),
+            Pattern::Product(pats) => self.visit_product(pats),
         }
     }
 }
