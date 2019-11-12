@@ -295,7 +295,7 @@ impl<'s> Parser<'s> {
         let ty = self.once(|p| p.ty(), "type annotation required after `unfold`")?;
         let tm = self.once(|p| p.parse(), "term required in `unfold` expression")?;
         Ok(Term::new(
-            Kind::Fold(Box::new(ty), Box::new(tm)),
+            Kind::Unfold(Box::new(ty), Box::new(tm)),
             sp + self.span,
         ))
     }

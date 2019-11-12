@@ -227,6 +227,20 @@ impl Context {
             // of case expressions
             Kind::Case(expr, arms) => self.type_check_case(expr, arms),
 
+            Kind::Unfold(ty, tm) => match ty.as_ref() {
+                Type::Rec(t1) => {
+                    let mut x = ty.clone();
+                    let mut y = t1.clone();
+
+                    Shift::new(1).visit(&mut x);
+                    Subst::new(*x).visit(&mut y);
+                    Shift::new(-1).visit(&mut y);
+                    Ok(*y)
+                    // Ok(Type::Arrow(ty.clone(), y))
+                }
+                _ => Context::error(term, TypeErrorKind::NotRec),
+            },
+
             Kind::Fold(ty, tm) => match ty.as_ref() {
                 Type::Rec(t1) => {
                     let mut x = ty.clone();
@@ -237,15 +251,15 @@ impl Context {
                     Shift::new(-1).visit(&mut y);
 
                     dbg!(&y);
-
-                    Ok(Type::Arrow(y, t1.clone()))
+                    println!("{:?} ?? {:?}", self.type_check(tm)?, ty);
+                    Ok(*ty.clone())
+                    // Ok(Type::Arrow(y, t1.clone()))
                 }
                 _ => {
                     dbg!(ty);
                     Context::error(term, TypeErrorKind::NotRec)
                 }
             },
-            Kind::Unfold(ty, tm) => unimplemented!(),
         }
     }
 }

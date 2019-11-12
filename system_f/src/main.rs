@@ -159,11 +159,19 @@ fn nat_list() -> Type {
     ])))
 }
 
+fn nat_list2() -> Type {
+    Type::Variant(vec![
+        variant!("Nil", Type::Unit),
+        variant!("Cons", Type::Product(vec![Type::Nat, Type::Var(0)])),
+    ])
+}
+
 fn main() {
     let mut ctx = types::Context::default();
 
     ctx.alias("Var".into(), test_variant());
     ctx.alias("NatList".into(), nat_list());
+    ctx.alias("NB".into(), nat_list2());
 
     let args = env::args();
     if args.len() > 1 {
