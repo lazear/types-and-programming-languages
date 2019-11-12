@@ -86,10 +86,14 @@ impl Context {
 }
 
 /// Helper function for extracting type from a variant
-fn variant_field(var: &[Variant], label: &str, span: Span) -> Result<Type, TypeError> {
+fn variant_field<'vs>(
+    var: &'vs [Variant],
+    label: &str,
+    span: Span,
+) -> Result<&'vs Type, TypeError> {
     for f in var {
         if label == f.label {
-            return Ok(f.ty.clone());
+            return Ok(&f.ty);
         }
     }
     Err(TypeError {

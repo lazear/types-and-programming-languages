@@ -71,6 +71,49 @@ pub enum Pattern {
     Constructor(String, Box<Pattern>),
 }
 
+pub trait PatternVisitor: Sized {
+    fn visit_literal(&mut self, lit: &Literal) {}
+    fn visit_variable(&mut self, var: &String) {}
+    fn visit_product(&mut self, pats: &Vec<Pattern>) {
+        for p in pats {
+            self.visit_pattern(p);
+        }
+    }
+
+    fn visit_constructor(&mut self, label: &String, pat: &Pattern) {
+        self.visit_pattern(pat);
+    }
+
+    fn visit_pattern(&mut self, pattern: &Pattern) {
+        match pattern {
+            Pattern::Any => {}
+            Pattern::Constructor(label, pat) => self.visit_constructor(label, pat),
+            Pattern::Product(pat) => self.visit_product(pat),
+            Pattern::Literal(lit) => self.visit_literal(lit),
+            Pattern::Variable(var) => self.visit_variable(var),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct PatternStack {
+    pub inner: Vec<String>,
+}
+
+impl PatternStack {
+    pub fn collect(pat: &mut Pattern) -> Vec<String> {
+        let mut p = Self::default();
+        p.visit_pattern(pat);
+        p.inner
+    }
+}
+
+impl PatternVisitor for PatternStack {
+    fn visit_variable(&mut self, var: &String) {
+        self.inner.push(var.clone());
+    }
+}
+
 impl Pattern {
     /// Does this pattern match the given [`Term`]?
     pub fn matches(&self, term: &Term) -> bool {

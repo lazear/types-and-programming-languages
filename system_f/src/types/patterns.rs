@@ -14,7 +14,7 @@
 //!
 
 use super::*;
-use crate::terms::{Arm, Literal, Pattern, Term};
+use crate::terms::*;
 use std::collections::HashSet;
 
 /// Return true if `existing` covers `new`, i.e. if new is a useful pattern
@@ -161,35 +161,55 @@ impl<'pat> Matrix<'pat> {
         }
     }
 }
-impl Context {
-    /// Helper function to traverse a [`Pattern`] and bind variables
-    /// to the typing context as needed.
-    ///
-    /// It is the caller's responsibiliy to track stack growth and pop off
-    /// types after calling this function
-    fn walk_pattern_and_bind(&mut self, ty: &Type, pat: &Pattern) {
-        use Pattern::*;
-        match pat {
-            Any => {}
-            Literal(_) => {}
-            Variable(_) => self.push(ty.clone()),
-            Product(v) => {
-                if let Type::Product(types) = ty {
-                    for (idx, pat) in v.iter().enumerate() {
-                        self.walk_pattern_and_bind(&types[idx], &pat);
-                    }
-                }
+
+/// Helper struct to traverse a [`Pattern`] and bind variables
+/// to the typing context as needed.
+///
+/// It is the caller's responsibiliy to track stack growth and pop off
+/// types after calling this function
+pub struct PatTyStack<'ty> {
+    pub ty: &'ty Type,
+    pub inner: Vec<&'ty Type>,
+}
+
+impl<'ty> PatTyStack<'ty> {
+    pub fn collect(ty: &'ty Type, pat: &Pattern) -> Vec<&'ty Type> {
+        let mut p = PatTyStack {
+            ty,
+            inner: Vec::with_capacity(16),
+        };
+        p.visit_pattern(pat);
+        p.inner
+    }
+}
+
+impl<'ty> PatternVisitor for PatTyStack<'_> {
+    fn visit_variable(&mut self, var: &String) {
+        self.inner.push(self.ty);
+    }
+
+    fn visit_product(&mut self, pats: &Vec<Pattern>) {
+        if let Type::Product(tys) = self.ty {
+            let ty = self.ty;
+            for (ty, pat) in tys.iter().zip(pats.iter()) {
+                self.ty = ty;
+                self.visit_pattern(pat);
             }
-            Constructor(label, v) => {
-                if let Type::Variant(variant) = ty {
-                    let t_prime = variant_field(&variant, label, Span::zero()).unwrap();
-                    // self.push(t_prime.clone());
-                    self.walk_pattern_and_bind(&t_prime, &v);
-                }
-            }
+            self.ty = ty;
         }
     }
 
+    fn visit_constructor(&mut self, label: &String, pat: &Pattern) {
+        if let Type::Variant(vs) = self.ty {
+            let ty = self.ty;
+            self.ty = variant_field(&vs, label, Span::zero()).unwrap();
+            self.visit_pattern(pat);
+            self.ty = ty;
+        }
+    }
+}
+
+impl Context {
     /// Type check a case expression, returning the Type of the arms, assuming
     /// that the case expression is exhaustive and well-typed
     ///
@@ -222,7 +242,13 @@ impl Context {
         for arm in arms {
             if self.pattern_type_eq(&arm.pat, &matrix.expr_ty) {
                 let height = self.stack.len();
-                self.walk_pattern_and_bind(&matrix.expr_ty, &arm.pat);
+                // self.walk_pattern_and_bind(&matrix.expr_ty, &arm.pat);
+
+                let binds = PatTyStack::collect(&matrix.expr_ty, &arm.pat);
+                for b in binds.into_iter().rev() {
+                    self.push(b.clone());
+                }
+
                 let arm_ty = self.type_check(&arm.term)?;
 
                 while self.stack.len() > height {

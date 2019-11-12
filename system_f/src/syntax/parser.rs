@@ -5,8 +5,8 @@ use std::collections::VecDeque;
 use util::diagnostic::Diagnostic;
 use util::span::*;
 
-use crate::terms::{Arm, Kind, Literal, Pattern, Primitive, Term};
-use crate::types::{Type, Variant};
+use crate::terms::*;
+use crate::types::*;
 
 #[derive(Clone, Debug, Default)]
 pub struct DeBruijnIndexer {
@@ -464,19 +464,6 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn pat_stack(pat: &Pattern, stack: &mut Vec<String>) {
-        match pat {
-            Pattern::Variable(s) => stack.push(s.clone()),
-            Pattern::Constructor(_, inner) => Parser::pat_stack(inner, stack),
-            Pattern::Product(v) => {
-                for x in v {
-                    Parser::pat_stack(x, stack);
-                }
-            }
-            _ => {}
-        }
-    }
-
     fn case_arm(&mut self) -> Result<Arm, Error> {
         // match self.kind() {
         //     TokenKind::Bar => self.bump(),
@@ -490,13 +477,10 @@ impl<'s> Parser<'s> {
         let len = self.tmvar.len();
         let mut span = self.span;
 
-        let pat = self.once(|p| p.pattern(), "missing pattern")?;
+        let mut pat = self.once(|p| p.pattern(), "missing pattern")?;
 
-        let mut vars = Vec::new();
-        Parser::pat_stack(&pat, &mut vars);
-        // dbg!(vars);
-        for v in vars.into_iter().rev() {
-            self.tmvar.push(v);
+        for var in PatternStack::collect(&mut pat).into_iter().rev() {
+            self.tmvar.push(var);
         }
 
         self.expect(TokenKind::Equals)?;
