@@ -30,5 +30,12 @@ let x =
 		\y: (Nat, Nat).
 			case y of
 				| (0, x) => x,
-				| x => z (pred x.0, succ (succ x.1))
+				| x => z (pred y.0, succ (succ x.1))
 	in (fix x) (10, 0)
+
+;
+let add = \f: Nat->Nat->Nat. \m: Nat. \n: Nat.
+	case m of 
+		| 0 => 0,
+		| x => succ (f (pred m) n)
+in (fix add) 5 3;

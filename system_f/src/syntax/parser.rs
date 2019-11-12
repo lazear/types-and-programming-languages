@@ -215,7 +215,7 @@ impl<'s> Parser<'s> {
 
     fn ty_tuple(&mut self) -> Result<Type, Error> {
         if self.bump_if(&TokenKind::LParen) {
-            let mut v = self.once_or_more(|p| p.ty_atom(), TokenKind::Comma)?;
+            let mut v = self.once_or_more(|p| p.ty(), TokenKind::Comma)?;
             self.expect(TokenKind::RParen)?;
 
             if v.len() > 1 {
@@ -242,7 +242,7 @@ impl<'s> Parser<'s> {
         let mut lhs = self.ty_tuple()?;
         if let TokenKind::TyArrow = self.kind() {
             self.bump();
-            while let Ok(rhs) = self.ty_tuple() {
+            while let Ok(rhs) = self.ty() {
                 lhs = Type::Arrow(Box::new(lhs), Box::new(rhs));
                 if let TokenKind::TyArrow = self.kind() {
                     self.bump();
