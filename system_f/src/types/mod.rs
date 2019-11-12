@@ -19,6 +19,7 @@ pub enum Type {
     Product(Vec<Type>),
     Arrow(Box<Type>, Box<Type>),
     Universal(Box<Type>),
+    Rec(Box<Type>),
 }
 
 #[derive(Clone, PartialEq, PartialOrd, Eq, Hash)]
@@ -248,6 +249,7 @@ impl<'ctx> MutVisitor for Aliaser<'ctx> {
 
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
+            Type::Rec(ty) => self.visit_rec(ty),
         }
     }
 }
@@ -295,6 +297,7 @@ impl fmt::Debug for Type {
             Type::Alias(s) => write!(f, "{}", s),
             Type::Arrow(t1, t2) => write!(f, "({:?}->{:?})", t1, t2),
             Type::Universal(ty) => write!(f, "forall X.{:?}", ty),
+            Type::Rec(ty) => write!(f, "rec {:?}", ty),
         }
     }
 }

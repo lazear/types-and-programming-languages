@@ -229,6 +229,16 @@ impl<'s> Parser<'s> {
     }
 
     pub fn ty(&mut self) -> Result<Type, Error> {
+        if self.bump_if(&TokenKind::Rec) {
+            let name = self.uppercase_id()?;
+            self.expect(TokenKind::Equals)?;
+            self.tyvar.push(name);
+            let ty = self.ty()?;
+            dbg!(&ty);
+            self.tyvar.pop();
+            return Ok(Type::Rec(Box::new(ty)));
+        }
+
         let mut lhs = self.ty_tuple()?;
         if let TokenKind::TyArrow = self.kind() {
             self.bump();

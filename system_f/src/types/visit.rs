@@ -25,6 +25,10 @@ pub trait MutVisitor: Sized {
         }
     }
 
+    fn visit_rec(&mut self, ty: &mut Type) {
+        self.visit(ty);
+    }
+
     fn visit(&mut self, ty: &mut Type) {
         match ty {
             Type::Unit | Type::Bool | Type::Nat => {}
@@ -34,6 +38,7 @@ pub trait MutVisitor: Sized {
             Type::Alias(s) => self.visit_alias(s),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
+            Type::Rec(ty) => self.visit_rec(ty),
         }
     }
 }
@@ -93,6 +98,7 @@ impl MutVisitor for Subst {
             Type::Alias(v) => self.visit_alias(v),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
+            Type::Rec(ty) => self.visit_rec(ty),
         }
     }
 }
