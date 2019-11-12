@@ -51,6 +51,9 @@ pub enum Kind {
     TyAbs(Box<Term>),
     /// Type application
     TyApp(Box<Term>, Box<Type>),
+
+    Fold(Box<Type>, Box<Term>),
+    Unfold(Box<Type>, Box<Term>),
 }
 
 /// Patterns for case and let expressions
@@ -169,6 +172,8 @@ impl fmt::Display for Term {
             Kind::App(t1, t2) => write!(f, "({} {})", t1, t2),
             Kind::TyAbs(term) => write!(f, "(λTy {})", term),
             Kind::TyApp(term, ty) => write!(f, "({} [{:?}])", term, ty),
+            Kind::Fold(ty, term) => write!(f, "fold [{:?}] {}", ty, term),
+            Kind::Unfold(ty, term) => write!(f, "unfold [{:?}] {}", ty, term),
         }
     }
 }

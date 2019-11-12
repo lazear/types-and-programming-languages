@@ -278,6 +278,28 @@ impl<'s> Parser<'s> {
         ))
     }
 
+    fn fold(&mut self) -> Result<Term, Error> {
+        self.expect(TokenKind::Fold)?;
+        let sp = self.span;
+        let ty = self.once(|p| p.ty(), "type annotation required after `fold`")?;
+        let tm = self.once(|p| p.parse(), "term required in `fold` expression")?;
+        Ok(Term::new(
+            Kind::Fold(Box::new(ty), Box::new(tm)),
+            sp + self.span,
+        ))
+    }
+
+    fn unfold(&mut self) -> Result<Term, Error> {
+        self.expect(TokenKind::Unfold)?;
+        let sp = self.span;
+        let ty = self.once(|p| p.ty(), "type annotation required after `unfold`")?;
+        let tm = self.once(|p| p.parse(), "term required in `unfold` expression")?;
+        Ok(Term::new(
+            Kind::Fold(Box::new(ty), Box::new(tm)),
+            sp + self.span,
+        ))
+    }
+
     fn fix(&mut self) -> Result<Term, Error> {
         let sp = self.span;
         self.expect(TokenKind::Fix)?;
@@ -529,6 +551,8 @@ impl<'s> Parser<'s> {
         match self.kind() {
             TokenKind::LParen => self.paren(),
             TokenKind::Fix => self.fix(),
+            TokenKind::Fold => self.fold(),
+            TokenKind::Unfold => self.unfold(),
             TokenKind::IsZero | TokenKind::Succ | TokenKind::Pred => self.primitive(),
             TokenKind::Uppercase(_) => self.injection(),
             TokenKind::Lowercase(s) => {

@@ -43,7 +43,7 @@ pub enum TypeErrorKind {
     NotUniversal,
     NotVariant,
     NotProduct,
-
+    NotRec,
     IncompatibleArms,
     InvalidPattern,
     NotExhaustive,
@@ -226,6 +226,26 @@ impl Context {
             // See src/types/patterns.rs for exhaustiveness and typechecking
             // of case expressions
             Kind::Case(expr, arms) => self.type_check_case(expr, arms),
+
+            Kind::Fold(ty, tm) => match ty.as_ref() {
+                Type::Rec(t1) => {
+                    let mut x = ty.clone();
+                    let mut y = t1.clone();
+
+                    Shift::new(1).visit(&mut x);
+                    Subst::new(*x).visit(&mut y);
+                    Shift::new(-1).visit(&mut y);
+
+                    dbg!(&y);
+
+                    Ok(Type::Arrow(y, t1.clone()))
+                }
+                _ => {
+                    dbg!(ty);
+                    Context::error(term, TypeErrorKind::NotRec)
+                }
+            },
+            Kind::Unfold(ty, tm) => unimplemented!(),
         }
     }
 }
@@ -266,6 +286,16 @@ impl crate::terms::visit::MutVisitor for Context {
     }
 
     fn visit_injection(&mut self, label: &mut String, term: &mut Term, ty: &mut Type) {
+        self.aliaser().visit(ty);
+        self.visit(term);
+    }
+
+    fn visit_fold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+        self.aliaser().visit(ty);
+        self.visit(term);
+    }
+
+    fn visit_unfold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
         self.aliaser().visit(ty);
         self.visit(term);
     }

@@ -152,10 +152,18 @@ fn parse_and_eval(ctx: &mut types::Context, input: &str, verbose: bool) -> bool 
     }
 }
 
+fn nat_list() -> Type {
+    Type::Rec(Box::new(Type::Variant(vec![
+        variant!("Nil", Type::Unit),
+        variant!("Cons", Type::Product(vec![Type::Nat, Type::Var(0)])),
+    ])))
+}
+
 fn main() {
     let mut ctx = types::Context::default();
 
     ctx.alias("Var".into(), test_variant());
+    ctx.alias("NatList".into(), nat_list());
 
     let args = env::args();
     if args.len() > 1 {

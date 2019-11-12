@@ -48,6 +48,14 @@ pub trait MutVisitor: Sized {
         self.visit(term);
     }
 
+    fn visit_fold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+        self.visit(term);
+    }
+
+    fn visit_unfold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+        self.visit(term);
+    }
+
     fn visit(&mut self, term: &mut Term) {
         let sp = &mut term.span;
         match &mut term.kind {
@@ -65,6 +73,8 @@ pub trait MutVisitor: Sized {
             Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
             Kind::TyAbs(term) => self.visit_tyabs(sp, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
+            Kind::Fold(ty, term) => self.visit_fold(sp, ty, term),
+            Kind::Unfold(ty, term) => self.visit_unfold(sp, ty, term),
         }
     }
 }
@@ -173,6 +183,7 @@ impl MutVisitor for Subst {
             Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
             Kind::TyAbs(term) => self.visit_tyabs(sp, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
+            Kind::Fold(ty, term) | Kind::Unfold(ty, term) => self.visit(term),
         }
     }
 }

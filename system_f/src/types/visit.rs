@@ -66,6 +66,12 @@ impl MutVisitor for Shift {
         self.visit(inner);
         self.cutoff -= 1;
     }
+
+    fn visit_rec(&mut self, ty: &mut Type) {
+        self.cutoff += 1;
+        self.visit(ty);
+        self.cutoff -= 1;
+    }
 }
 
 pub struct Subst {
@@ -83,6 +89,12 @@ impl MutVisitor for Subst {
     fn visit_universal(&mut self, inner: &mut Type) {
         self.cutoff += 1;
         self.visit(inner);
+        self.cutoff -= 1;
+    }
+
+    fn visit_rec(&mut self, ty: &mut Type) {
+        self.cutoff += 1;
+        self.visit(ty);
         self.cutoff -= 1;
     }
 
