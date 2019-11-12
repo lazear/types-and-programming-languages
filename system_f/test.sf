@@ -45,5 +45,5 @@ in let mul = fix \f: Nat->Nat->Nat. \m: Nat. \n: Nat.
 in let fact = fix \f: Nat->Nat. \m: Nat. 
 	case m of 
 		| 0 => 1 
-		| x => mul m (f (pred m))
-in fact 6
+		| _ => mul m (f (pred m))
+in fact 3

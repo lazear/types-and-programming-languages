@@ -206,7 +206,8 @@ impl<'ty> PatternVisitor for PatTyStack<'_> {
 
     fn visit_pattern(&mut self, pattern: &Pattern) {
         match pattern {
-            Pattern::Any | Pattern::Variable(_) | Pattern::Literal(_) => self.inner.push(self.ty),
+            Pattern::Any | Pattern::Literal(_) => {}
+            Pattern::Variable(_) => self.inner.push(self.ty),
             Pattern::Constructor(label, pat) => self.visit_constructor(label, pat),
             Pattern::Product(pats) => self.visit_product(pats),
         }
