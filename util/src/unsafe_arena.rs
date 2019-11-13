@@ -1,5 +1,5 @@
 use std::alloc::{alloc, dealloc, Layout};
-use std::cell::{RefCell, Cell};
+use std::cell::{Cell, RefCell};
 use std::marker;
 use std::mem;
 use std::ptr;
@@ -42,7 +42,7 @@ fn extend(a: Layout, b: Layout) -> Layout {
 }
 
 impl<T> Chunk<T> {
-    unsafe fn new(next: Option<*mut Chunk<T>>, capacity: usize) -> *mut Chunk<T> {
+    fn layout(capacity: usize) -> Layout {
         let chunk_layout =
             Layout::from_size_align(mem::size_of::<Chunk<T>>(), mem::min_align_of::<Chunk<T>>())
                 .unwrap();
@@ -50,10 +50,12 @@ impl<T> Chunk<T> {
         let size = mem::size_of::<T>().checked_mul(capacity).unwrap();
         let elem_layout = Layout::from_size_align(size, mem::min_align_of::<T>()).unwrap();
 
-        let layout = extend(chunk_layout, elem_layout);
+        extend(chunk_layout, elem_layout)
+    }
+
+    unsafe fn new(next: Option<*mut Chunk<T>>, capacity: usize) -> *mut Chunk<T> {
+        let layout = Self::layout(capacity);
         let chunk = alloc(layout) as *mut Chunk<T>;
-        
-        println!("{:0x} {:0x} \t {:0x} ({:0x}) {}", chunk as usize, chunk as usize + layout.size(), layout.size(), size, layout.align()); 
 
         if chunk.is_null() {
             panic!("oom");
@@ -65,10 +67,30 @@ impl<T> Chunk<T> {
     }
 
     #[inline]
+    unsafe fn destroy(&mut self, len: usize) {
+        for i in 0..len {
+            // copy to stack, destructor will run
+            ptr::read(self.start().offset(i as isize));
+        }
+
+        let next = self.next;
+        let layout = Self::layout(self.capacity);
+        let ptr: *mut Chunk<T> = self;
+        dealloc(ptr as *mut u8, layout);
+
+        if let Some(next) = next {
+            let cap = (*next).capacity;
+            (*next).destroy(cap);
+        }
+    }
+
+    #[inline]
     fn start(&self) -> *const T {
-        let ptr: *const Chunk<T> = self; 
-        let layout = Layout::from_size_align(mem::size_of::<Chunk<T>>(), mem::min_align_of::<Chunk<T>>()).unwrap();
-        
+        let ptr: *const Chunk<T> = self;
+        let layout =
+            Layout::from_size_align(mem::size_of::<Chunk<T>>(), mem::min_align_of::<Chunk<T>>())
+                .unwrap();
+
         let r = round(&layout, mem::min_align_of::<T>());
 
         unsafe {
@@ -82,14 +104,15 @@ impl<T> Chunk<T> {
     fn end(&self) -> *const T {
         unsafe { self.start().offset(self.capacity as isize) }
     }
-
 }
-
 
 #[cfg(test)]
 mod test {
     use super::*;
 
+    struct DropGuard {
+        ptr: *mut usize,
+    }
 
     struct Test {
         data_a: usize,
@@ -102,15 +125,36 @@ mod test {
     #[test]
     fn new_chunk() {
         unsafe {
-            let ptr: *mut Chunk<u32>  = Chunk::new(None, 256);
-            
+            let ptr: *mut Chunk<u32> = Chunk::new(None, 256);
+
             let mut start = ptr as usize;
             start += std::mem::size_of::<Chunk<u32>>();
-            
 
-            assert!(start <= (*ptr).start() as usize);
+            assert_eq!(start, (*ptr).start() as usize);
             assert_eq!((*ptr).start().offset(256 as isize), (*ptr).end());
         }
     }
 
+    impl std::ops::Drop for DropGuard {
+        fn drop(&mut self) {
+            unsafe { *self.ptr += 1 }
+        }
+    }
+
+    #[test]
+    fn drop_test() {
+        unsafe {
+            let mut flag: usize = 0;
+            let chunk: *mut Chunk<DropGuard> = Chunk::new(None, 16);
+
+            for i in 0..16 {
+                let g: *mut DropGuard = (*chunk).start().offset(i as isize) as *mut _;
+                (*g).ptr = &mut flag as *mut usize;
+            }
+
+            assert_eq!(flag, 0);
+            (*chunk).destroy(16);
+            assert_eq!(flag, 16);
+        }
+    }
 }
