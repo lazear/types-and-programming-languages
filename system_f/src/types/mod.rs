@@ -235,18 +235,20 @@ impl Context {
 
             Kind::Unfold(rec, tm) => match rec.as_ref() {
                 Type::Rec(inner) => {
-                    let s = subst(*rec.clone(), *inner.clone());
-                    // Ok(Type::Arrow(rec.clone(), Box::new(s)))
-                    Ok(s)
+                    if self.type_check(&tm)? == *rec.clone() {
+                        let s = subst(*rec.clone(), *inner.clone());
+                        Ok(s)
+                    } else {
+                        Context::error(term, TypeErrorKind::NotRec)
+                    }
                 }
                 _ => Context::error(term, TypeErrorKind::NotRec),
             },
 
             Kind::Fold(rec, tm) => match rec.as_ref() {
                 Type::Rec(inner) => {
-                    // let s = subst(*rec.clone(), *inner.clone());
-
-                    // Ok(Type::Arrow(Box::new(s), rec.clone()))
+                    let s = subst(*rec.clone(), *inner.clone());
+                    assert_eq!(self.type_check(&tm), Ok(s));
 
                     Ok(*rec.clone())
                 }

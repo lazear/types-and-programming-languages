@@ -176,14 +176,7 @@ impl<'ctx> Eval<'ctx> {
                 }
 
                 match tm.kind {
-                    Kind::Fold(ty2, inner) => {
-                        println!("DO UNFOLD, {} {}", self.normal_form(&inner), inner);
-                        if self.normal_form(&inner) {
-                            Some(*inner)
-                        } else {
-                            self.small_step(*inner)
-                        }
-                    }
+                    Kind::Fold(ty2, inner) => Some(*inner),
                     _ => None,
                 }
             }

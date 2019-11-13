@@ -1,6 +1,7 @@
 #![allow(unused_variables, unused_macros)]
 #[macro_use]
 pub mod macros;
+pub mod diagnostics;
 pub mod eval;
 pub mod syntax;
 pub mod terms;
