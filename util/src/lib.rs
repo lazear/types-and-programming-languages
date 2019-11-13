@@ -3,3 +3,4 @@
 pub mod arena;
 pub mod diagnostic;
 pub mod span;
+pub mod unsafe_arena;
