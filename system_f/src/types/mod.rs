@@ -9,6 +9,31 @@ use std::fmt;
 use util::span::Span;
 use visit::{MutVisitor, Shift, Subst};
 
+use util::unsafe_arena::Arena;
+
+pub enum Ty2<'tcx> {
+    Unit,
+    Nat,
+    Bool,
+    Alias(String),
+    Var(usize),
+    Variant(Vec<Variant>),
+    Product(Vec<&'tcx Ty2<'tcx>>),
+    Arrow(&'tcx Ty2<'tcx>, &'tcx Ty2<'tcx>),
+    Universal(&'tcx Ty2<'tcx>),
+    Rec(&'tcx Ty2<'tcx>),
+}
+
+pub struct TyCtx<'tcx> {
+    arena: Arena<Ty2<'tcx>>,
+}
+
+impl<'tcx> TyCtx<'tcx> {
+    pub fn mk_ty(&self, ty: Ty2<'tcx>) -> &mut Ty2<'tcx> {
+        self.arena.alloc(ty)
+    }
+}
+
 #[derive(Clone, PartialEq, PartialOrd, Eq, Hash)]
 pub enum Type {
     Unit,

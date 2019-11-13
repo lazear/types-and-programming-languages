@@ -210,6 +210,7 @@ impl<T> Arena<T> {
         }
     }
 
+    #[inline]
     /// Get a reference to the item stored at `index`, if it exists
     pub fn get(&self, index: Index) -> Option<&T> {
         match self.data.get(index.0.get() as usize) {
@@ -218,6 +219,7 @@ impl<T> Arena<T> {
         }
     }
 
+    #[inline]
     /// Return a mutable reference to the data stored at `index`, if it exists
     pub fn get_mut(&mut self, index: Index) -> Option<&mut T> {
         match self.data.get_mut(index.0.get() as usize) {
