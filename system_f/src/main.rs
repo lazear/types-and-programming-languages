@@ -33,22 +33,30 @@ fn test_variant() -> Type {
     ])
 }
 
-pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
-    let lines = msgs
-        .iter()
-        .map(|(_, sp)| sp.start.line)
-        .collect::<std::collections::HashSet<_>>();
+pub fn code_format(src: &str, diag: Diagnostic) {
+    // let lines = diag.ot
+    //     .iter()
+    //     .map(|(_, sp)| sp.start.line)
+    //     .collect::<std::collections::HashSet<_>>();
     let srcl = src.lines().collect::<Vec<&str>>();
-    for line in lines {
-        println!("{} {}", line, &srcl[line as usize]);
-    }
 
-    for (msg, span) in msgs {
-        let empty = (0..span.start.col + 2).map(|_| ' ').collect::<String>();
-        let tilde = (1..span.end.col.saturating_sub(span.start.col))
-            .map(|_| '~')
-            .collect::<String>();
-        println!("{}^{}^ --- {}", empty, tilde, msg);
+    let mut msgs = diag.other.clone();
+    msgs.insert(0, diag.primary.clone());
+
+    for line in diag.lines() {
+        println!("| {} {}", line + 1, &srcl[line as usize]);
+        for anno in &msgs {
+            if anno.span.start.line != line {
+                continue;
+            }
+            let empty = (0..anno.span.start.col + 3)
+                .map(|_| ' ')
+                .collect::<String>();
+            let tilde = (1..anno.span.end.col.saturating_sub(anno.span.start.col))
+                .map(|_| '~')
+                .collect::<String>();
+            println!("{}^{}^ --- {}", empty, tilde, anno.info);
+        }
     }
 }
 
@@ -135,14 +143,7 @@ fn parse_and_eval(ctx: &mut types::Context, input: &str, verbose: bool) -> bool 
             }
         };
         if let Err(diag) = eval(ctx, term, verbose) {
-            let mut msgs = vec![(diag.message, diag.span)];
-            msgs.extend(
-                diag.addl_msg
-                    .iter()
-                    .zip(&diag.addl_spans)
-                    .map(|(a, b)| (a.clone(), *b)),
-            );
-            code_format(input, msgs.as_slice());
+            code_format(input, diag);
             return false;
         }
     }

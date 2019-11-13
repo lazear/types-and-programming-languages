@@ -270,7 +270,17 @@ impl Context {
                     return Err(Diagnostic::error(arm.span, "unreachable pattern!"));
                 }
             } else {
-                return Err(Diagnostic::error(arm.span, "unreachable pattern!"));
+                return Err(Diagnostic::error(
+                    expr.span,
+                    format!("case binding has a type {:?}", &matrix.expr_ty),
+                )
+                .message(
+                    arm.span,
+                    format!(
+                        "but this pattern cannot bind a value of type {:?}",
+                        &matrix.expr_ty
+                    ),
+                ));
             }
         }
 
