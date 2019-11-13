@@ -14,6 +14,7 @@
 //!
 
 use super::*;
+use crate::diagnostics::*;
 use crate::terms::*;
 use std::collections::HashSet;
 
@@ -239,7 +240,11 @@ impl Context {
     /// the shared type of all of the case arms - the term associated with each
     /// arm should have one type, and that type should be the same for all of
     /// the arms.
-    pub(crate) fn type_check_case(&mut self, expr: &Term, arms: &[Arm]) -> Result<Type, TypeError> {
+    pub(crate) fn type_check_case(
+        &mut self,
+        expr: &Term,
+        arms: &[Arm],
+    ) -> Result<Type, Diagnostic> {
         let ty = self.type_check(expr)?;
         let mut matrix = patterns::Matrix::new(ty);
 
@@ -262,32 +267,30 @@ impl Context {
 
                 set.insert(arm_ty);
                 if !matrix.add_pattern(&arm.pat) {
-                    return Err(TypeError {
-                        kind: TypeErrorKind::UnreachablePattern,
-                        span: arm.span,
-                    });
+                    return Err(Diagnostic::error(arm.span, "unreachable pattern!"));
                 }
             } else {
-                return Err(TypeError {
-                    kind: TypeErrorKind::InvalidPattern,
-                    span: arm.span,
-                });
+                return Err(Diagnostic::error(arm.span, "unreachable pattern!"));
             }
         }
 
         if set.len() != 1 {
-            return Err(TypeError {
-                kind: TypeErrorKind::IncompatibleArms,
-                span: expr.span,
-            });
+            return Err(Diagnostic::error(
+                expr.span,
+                format!("incompatible arms! {:?}", set),
+            ));
         }
+
         if matrix.exhaustive() {
             match set.into_iter().next() {
                 Some(s) => Ok(s),
-                None => Context::error(expr, TypeErrorKind::NotVariant),
+                None => Err(Diagnostic::error(
+                    expr.span,
+                    "probably unreachable - expected variant type!",
+                )),
             }
         } else {
-            Context::error(expr, TypeErrorKind::NotExhaustive)
+            Err(Diagnostic::error(expr.span, "patterns are not exhaustive!"))
         }
     }
 

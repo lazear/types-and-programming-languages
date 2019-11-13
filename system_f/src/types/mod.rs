@@ -2,6 +2,7 @@
 //! polymorphism
 pub mod patterns;
 pub mod visit;
+use crate::diagnostics::*;
 use crate::terms::{Kind, Literal, Pattern, Primitive, Term};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -90,38 +91,35 @@ fn variant_field<'vs>(
     var: &'vs [Variant],
     label: &str,
     span: Span,
-) -> Result<&'vs Type, TypeError> {
+) -> Result<&'vs Type, Diagnostic> {
     for f in var {
         if label == f.label {
             return Ok(&f.ty);
         }
     }
-    Err(TypeError {
+    Err(Diagnostic::error(
         span,
-        kind: TypeErrorKind::NotVariant,
-    })
+        format!("constructor {} doesn't appear in variant fields", label),
+    ))
+
+    // Err(TypeError {
+    //     span,
+    //     kind: TypeErrorKind::NotVariant,
+    // })
 }
 
 impl Context {
-    /// Return an error with a span derived from `term` and `kind`
-    pub const fn error(term: &Term, kind: TypeErrorKind) -> Result<Type, TypeError> {
-        Err(TypeError {
-            span: term.span,
-            kind,
-        })
-    }
-
-    pub fn type_check(&mut self, term: &Term) -> Result<Type, TypeError> {
+    pub fn type_check(&mut self, term: &Term) -> Result<Type, Diagnostic> {
         // dbg!(&self.stack);
         // println!("{}", term);
         match term.kind() {
             Kind::Lit(Literal::Unit) => Ok(Type::Unit),
             Kind::Lit(Literal::Bool(_)) => Ok(Type::Bool),
             Kind::Lit(Literal::Nat(_)) => Ok(Type::Nat),
-            Kind::Var(idx) => self.find(*idx).cloned().ok_or_else(|| TypeError {
-                span: term.span,
-                kind: TypeErrorKind::UnboundVariable(*idx),
-            }),
+            Kind::Var(idx) => self
+                .find(*idx)
+                .cloned()
+                .ok_or_else(|| Diagnostic::error(term.span, "unbound variable")),
             Kind::Abs(ty, t2) => {
                 self.push(*ty.clone());
                 let ty2 = self.type_check(t2)?;
@@ -137,13 +135,14 @@ impl Context {
                         if *ty11 == ty2 {
                             Ok(*ty12)
                         } else {
-                            Context::error(
-                                t1,
-                                TypeErrorKind::ParameterMismatch(ty11, Box::new(ty2), t2.span),
-                            )
+                            let d = Diagnostic::error(term.span, "Type mismatch in application")
+                                .message(t1.span, format!("Abstraction requires type {:?}", ty11))
+                                .message(t2.span, format!("Value has a type of {:?}", ty2));
+                            Err(d)
                         }
                     }
-                    _ => Context::error(term, TypeErrorKind::NotArrow),
+                    _ => Err(Diagnostic::error(term.span, "Expected arrow type!")
+                        .message(t1.span, format!("operator has type {:?}", ty1))),
                 }
             }
             Kind::Fix(inner) => {
@@ -153,13 +152,16 @@ impl Context {
                         if ty1 == ty2 {
                             Ok(*ty1)
                         } else {
-                            Context::error(
-                                term,
-                                TypeErrorKind::ParameterMismatch(ty1, ty2, inner.span),
-                            )
+                            let d = Diagnostic::error(term.span, "Type mismatch in fix term")
+                                .message(
+                                    inner.span,
+                                    format!("Abstraction requires type {:?}->{:?}", ty1, ty1),
+                                );
+                            Err(d)
                         }
                     }
-                    _ => Context::error(term, TypeErrorKind::NotArrow),
+                    _ => Err(Diagnostic::error(term.span, "Expected arrow type!")
+                        .message(inner.span, format!("operator has type {:?}", ty))),
                 }
             }
             Kind::Primitive(prim) => match prim {
@@ -174,27 +176,55 @@ impl Context {
                             if ty_ == f.ty {
                                 return Ok(*ty.clone());
                             } else {
-                                return Context::error(
-                                    term,
-                                    TypeErrorKind::ParameterMismatch(
-                                        Box::new(ty_),
-                                        Box::new(f.ty.clone()),
-                                        tm.span,
+                                let d = Diagnostic::error(
+                                    term.span,
+                                    "Invalid associated type in variant",
+                                )
+                                .message(
+                                    tm.span,
+                                    format!(
+                                        "variant {} requires type {:?}, but this is {:?}",
+                                        label, f.ty, ty_
                                     ),
                                 );
+                                return Err(d);
                             }
                         }
                     }
-                    Context::error(term, TypeErrorKind::NotVariant)
+                    Err(Diagnostic::error(
+                        term.span,
+                        format!(
+                            "constructor {} does not belong to the variant {:?}",
+                            label,
+                            fields
+                                .iter()
+                                .map(|f| f.label.clone())
+                                .collect::<Vec<String>>()
+                                .join(" | ")
+                        ),
+                    ))
                 }
-                _ => Context::error(term, TypeErrorKind::NotVariant),
+                _ => Err(Diagnostic::error(
+                    term.span,
+                    format!("Cannot injection {} into non-variant type {:?}", label, ty),
+                )),
             },
             Kind::Projection(term, idx) => match self.type_check(term)? {
                 Type::Product(types) => match types.get(*idx) {
                     Some(ty) => Ok(ty.clone()),
-                    None => Context::error(term, TypeErrorKind::InvalidProjection),
+                    None => Err(Diagnostic::error(
+                        term.span,
+                        format!(
+                            "{} is out of range for product of length {}",
+                            idx,
+                            types.len()
+                        ),
+                    )),
                 },
-                _ => Context::error(term, TypeErrorKind::NotProduct),
+                ty => Err(Diagnostic::error(
+                    term.span,
+                    format!("Cannot project on non-product type {:?}", ty),
+                )),
             },
             Kind::Product(terms) => Ok(Type::Product(
                 terms
@@ -223,10 +253,10 @@ impl Context {
                         Shift::new(-1).visit(&mut ty12);
                         Ok(*ty12)
                     }
-                    _ => {
-                        dbg!(ty1);
-                        Context::error(term, TypeErrorKind::NotUniversal)
-                    }
+                    _ => Err(Diagnostic::error(
+                        term.span,
+                        format!("Expected a universal type, not {:?}", ty1),
+                    )),
                 }
             }
             // See src/types/patterns.rs for exhaustiveness and typechecking
@@ -235,27 +265,40 @@ impl Context {
 
             Kind::Unfold(rec, tm) => match rec.as_ref() {
                 Type::Rec(inner) => {
-                    if self.type_check(&tm)? == *rec.clone() {
+                    let ty_ = self.type_check(&tm)?;
+                    if ty_ == *rec.clone() {
                         let s = subst(*rec.clone(), *inner.clone());
                         Ok(s)
                     } else {
-                        Context::error(term, TypeErrorKind::NotRec)
+                        let d = Diagnostic::error(term.span, "Type mismatch in unfold")
+                            .message(term.span, format!("unfold requires type {:?}", rec))
+                            .message(tm.span, format!("term has a type of {:?}", ty_));
+                        Err(d)
                     }
                 }
-                _ => Context::error(term, TypeErrorKind::NotRec),
+                _ => Err(Diagnostic::error(
+                    term.span,
+                    format!("Expected a recursive type, not {:?}", rec),
+                )),
             },
 
             Kind::Fold(rec, tm) => match rec.as_ref() {
                 Type::Rec(inner) => {
+                    let ty_ = self.type_check(&tm)?;
                     let s = subst(*rec.clone(), *inner.clone());
-                    assert_eq!(self.type_check(&tm), Ok(s));
-
-                    Ok(*rec.clone())
+                    if ty_ == s {
+                        Ok(*rec.clone())
+                    } else {
+                        let d = Diagnostic::error(term.span, "Type mismatch in fold")
+                            .message(term.span, format!("unfold requires type {:?}", s))
+                            .message(tm.span, format!("term has a type of {:?}", ty_));
+                        Err(d)
+                    }
                 }
-                _ => {
-                    dbg!(rec);
-                    Context::error(term, TypeErrorKind::NotRec)
-                }
+                _ => Err(Diagnostic::error(
+                    term.span,
+                    format!("Expected a recursive type, not {:?}", rec),
+                )),
             },
         }
     }

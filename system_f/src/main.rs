@@ -7,6 +7,7 @@ pub mod syntax;
 pub mod terms;
 pub mod types;
 
+use diagnostics::*;
 use std::env;
 use std::io::{Read, Write};
 use syntax::parser::{self, Parser};
@@ -51,7 +52,7 @@ pub fn code_format(src: &str, msgs: &[(String, util::span::Span)]) {
     }
 }
 
-fn eval(ctx: &mut types::Context, mut term: Term, verbose: bool) -> Result<Term, TypeError> {
+fn eval(ctx: &mut types::Context, mut term: Term, verbose: bool) -> Result<Term, Diagnostic> {
     ctx.de_alias(&mut term);
     InjRewriter.visit(&mut term);
     let ty = ctx.type_check(&term)?;
@@ -133,21 +134,15 @@ fn parse_and_eval(ctx: &mut types::Context, input: &str, verbose: bool) -> bool 
                 break;
             }
         };
-        if let Err(tyerr) = eval(ctx, term, verbose) {
-            match tyerr.kind {
-                TypeErrorKind::ParameterMismatch(t1, t2, sp) => code_format(
-                    input,
-                    &[
-                        (format!("abstraction requires type {:?}", t1), tyerr.span),
-                        (format!("but it is applied to type {:?}", t2), sp),
-                    ],
-                ),
-                _ => {
-                    let mut diag = util::diagnostic::Diagnostic::new(input);
-                    diag.push(format!("{:?}", tyerr.kind), tyerr.span);
-                    println!("Type {}", diag.emit())
-                }
-            }
+        if let Err(diag) = eval(ctx, term, verbose) {
+            let mut msgs = vec![(diag.message, diag.span)];
+            msgs.extend(
+                diag.addl_msg
+                    .iter()
+                    .zip(&diag.addl_spans)
+                    .map(|(a, b)| (a.clone(), *b)),
+            );
+            code_format(input, msgs.as_slice());
             return false;
         }
     }
