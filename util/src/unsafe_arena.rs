@@ -4,61 +4,165 @@
 //!
 //! https://doc.rust-lang.org/1.1.0/src/arena/lib.rs.html
 use std::alloc::{alloc, dealloc, Layout};
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
+use std::cmp;
 use std::marker;
 use std::mem;
 use std::ptr;
 
 pub struct Arena<T> {
-    next_free: Cell<*const T>,
-    end: Cell<*const T>,
-    chunk: RefCell<*mut Chunk<T>>,
+    ptr: Cell<*mut T>,
+    end: Cell<*mut T>,
+    chunk: Cell<*mut Chunk<T>>,
     marker: marker::PhantomData<T>,
 }
 
 struct Chunk<T> {
     capacity: usize,
-    prev: Option<*mut Chunk<T>>,
+    entries: usize,
+    prev: *mut Chunk<T>,
     marker: marker::PhantomData<T>,
+    // data stored here
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+struct Info {
+    capacity: usize,
+    used: usize,
+}
+
+impl<T> Default for Arena<T> {
+    fn default() -> Arena<T> {
+        Arena {
+            ptr: Cell::new(ptr::null_mut()),
+            end: Cell::new(ptr::null_mut()),
+            chunk: Cell::new(ptr::null_mut()),
+            marker: marker::PhantomData,
+        }
+    }
 }
 
 impl<T> Arena<T> {
     pub fn with_capacity(capacity: usize) -> Arena<T> {
         unsafe {
-            let chunk: *mut Chunk<T> = Chunk::new(None, capacity);
+            let chunk: *mut Chunk<T> = Chunk::new(ptr::null_mut(), capacity);
             Arena {
-                next_free: Cell::new((*chunk).start()),
+                ptr: Cell::new((*chunk).start()),
                 end: Cell::new((*chunk).end()),
-                chunk: RefCell::new(chunk),
+                chunk: Cell::new(chunk),
                 marker: marker::PhantomData,
             }
         }
     }
 
     #[inline]
-    fn grow(&self) {
-        assert_eq!(self.next_free, self.end);
+    fn can_alloc(&self, n: usize) -> bool {
+        let remaining = self.end.get() as usize - self.ptr.get() as usize;
+        let required = mem::size_of::<T>().checked_mul(n).unwrap();
+        remaining >= required
+    }
+
+    #[inline]
+    fn ensure_capacity(&self, n: usize) {
+        if !self.can_alloc(n) {
+            self.grow(n)
+        }
+    }
+
+    #[inline]
+    fn entries(&self) -> usize {
         unsafe {
-            let chunk = *self.chunk.borrow();
-            let cap = (*chunk).capacity.checked_mul(2).unwrap();
-            let chunk = Chunk::<T>::new(Some(chunk), cap);
-            self.next_free.set((*chunk).start());
+            let bytes = self.ptr.get() as usize - (*self.chunk.get()).start() as usize;
+            bytes / mem::size_of::<T>()
+        }
+    }
+
+    #[inline]
+    fn chunks(&self) -> Vec<Info> {
+        let mut count = Vec::new();
+        let mut ptr = self.chunk.get();
+
+        unsafe {
+            if !ptr.is_null() {
+                let cap = self.end.get() as usize - (*ptr).start() as usize;
+                count.push(Info {
+                    capacity: cap,
+                    used: self.entries(),
+                });
+                ptr = (*ptr).prev;
+            }
+            while !ptr.is_null() {
+                count.push(Info {
+                    capacity: (*ptr).capacity,
+                    used: (*ptr).entries,
+                });
+                ptr = (*ptr).prev;
+            }
+        }
+        count
+    }
+
+    #[inline]
+    fn grow(&self, n: usize) {
+        unsafe {
+            let mut chunk = self.chunk.get();
+            let mut new_cap;
+
+            if !chunk.is_null() {
+                (*chunk).entries = self.entries();
+
+                new_cap = (*chunk).capacity.checked_mul(2).unwrap();
+                while new_cap < (*chunk).capacity + n {
+                    new_cap = new_cap.checked_mul(2).unwrap();
+                }
+            } else {
+                new_cap = cmp::max(n, 0x1000 / mem::size_of::<T>());
+            }
+
+            // Allocate at least 1 page
+            new_cap = cmp::max(new_cap, 0x1000 / mem::size_of::<T>());
+
+            let chunk = Chunk::<T>::new(chunk, new_cap);
+            self.ptr.set((*chunk).start());
             self.end.set((*chunk).end());
-            *self.chunk.borrow_mut() = chunk;
+            self.chunk.set(chunk);
         }
     }
 
     #[inline]
     pub fn alloc(&self, value: T) -> &mut T {
-        if self.next_free == self.end {
-            self.grow();
+        if self.ptr == self.end {
+            self.grow(1);
         }
 
         unsafe {
-            let ptr: &mut T = mem::transmute(self.next_free.get());
+            let ptr: &mut T = mem::transmute(self.ptr.get());
             ptr::write(ptr, value);
-            self.next_free.set(self.next_free.get().offset(1 as isize));
+            self.ptr.set(self.ptr.get().offset(1 as isize));
             ptr
+        }
+    }
+
+    #[inline]
+    unsafe fn alloc_raw_slice(&self, n: usize) -> *mut T {
+        assert!(n != 0);
+        self.ensure_capacity(n);
+
+        let ptr = self.ptr.get();
+        self.ptr.set(ptr.offset(n as isize));
+        ptr
+    }
+
+    #[inline]
+    pub fn alloc_slice(&self, slice: &[T]) -> &mut [T]
+    where
+        T: Copy,
+    {
+        unsafe {
+            let len = slice.len();
+            let ptr = self.alloc_raw_slice(len);
+            slice.as_ptr().copy_to_nonoverlapping(ptr, len);
+            std::slice::from_raw_parts_mut(ptr, len)
         }
     }
 }
@@ -66,10 +170,7 @@ impl<T> Arena<T> {
 impl<T> std::ops::Drop for Arena<T> {
     fn drop(&mut self) {
         unsafe {
-            let start = self.chunk.borrow().as_ref().unwrap().start() as usize;
-            let end = self.next_free.get() as usize;
-            let len = (end - start) / mem::size_of::<T>();
-            (**self.chunk.borrow_mut()).destroy(len);
+            (*self.chunk.get()).destroy(self.entries());
         }
     }
 }
@@ -111,7 +212,7 @@ impl<T> Chunk<T> {
         extend(chunk_layout, elem_layout)
     }
 
-    unsafe fn new(prev: Option<*mut Chunk<T>>, capacity: usize) -> *mut Chunk<T> {
+    unsafe fn new(prev: *mut Chunk<T>, capacity: usize) -> *mut Chunk<T> {
         let layout = Self::layout(capacity);
         let chunk = alloc(layout) as *mut Chunk<T>;
 
@@ -136,14 +237,14 @@ impl<T> Chunk<T> {
         let ptr: *mut Chunk<T> = self;
         dealloc(ptr as *mut u8, layout);
 
-        if let Some(prev) = prev {
-            let cap = (*prev).capacity;
-            (*prev).destroy(cap);
+        if !prev.is_null() {
+            let entries = (*prev).entries;
+            (*prev).destroy(entries);
         }
     }
 
     #[inline]
-    pub fn start(&self) -> *const T {
+    pub fn start(&self) -> *mut T {
         let ptr: *const Chunk<T> = self;
         let layout =
             Layout::from_size_align(mem::size_of::<Chunk<T>>(), mem::align_of::<Chunk<T>>())
@@ -159,7 +260,7 @@ impl<T> Chunk<T> {
     }
 
     #[inline]
-    pub fn end(&self) -> *const T {
+    pub fn end(&self) -> *mut T {
         unsafe { self.start().offset(self.capacity as isize) }
     }
 }
@@ -190,7 +291,7 @@ mod test {
     #[test]
     fn new_chunk() {
         unsafe {
-            let ptr: *mut Chunk<Test> = Chunk::new(None, 256);
+            let ptr: *mut Chunk<Test> = Chunk::new(ptr::null_mut(), 256);
 
             let mut start = ptr as usize;
             start += std::mem::size_of::<Chunk<Test>>();
@@ -203,7 +304,7 @@ mod test {
     #[test]
     fn drop_test() {
         let mut flag: usize = 0;
-        let arena: Arena<DropGuard> = Arena::with_capacity(16);
+        let arena: Arena<DropGuard> = Arena::default();
 
         for _ in 0..32 {
             arena.alloc(DropGuard {
@@ -231,5 +332,43 @@ mod test {
 
         (*r1.0) = Val(10);
         assert_eq!(*r1.0, Val(10));
+    }
+
+    #[test]
+    fn slice() {
+        let c = 0x1000 / mem::size_of::<usize>();
+        let a = Arena::with_capacity(c);
+        assert!(a.can_alloc(c));
+
+        let v = (0..c - 1).map(|i| i as usize).collect::<Vec<usize>>();
+        // chunk 1 will have 2 elements only
+        a.alloc(1);
+        a.alloc(2);
+        assert!(a.can_alloc(c - 2));
+
+        // should be in chunk 2
+        a.alloc_slice(&v);
+        a.alloc(3);
+
+        let mut new_cap = c.checked_mul(2).unwrap();
+        while new_cap < c + v.len() {
+            new_cap = new_cap.checked_mul(2).unwrap();
+        }
+        new_cap = cmp::max(new_cap, 0x1000 / mem::size_of::<usize>());
+
+        // where is 0x2000 coming from??
+        assert_eq!(
+            a.chunks(),
+            vec![
+                Info {
+                    capacity: 0x2000,
+                    used: v.len() + 1
+                },
+                Info {
+                    capacity: c,
+                    used: 2
+                }
+            ]
+        );
     }
 }

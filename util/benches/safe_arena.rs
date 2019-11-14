@@ -11,7 +11,7 @@ struct Value {
 fn safe_arena() {
     let mut arena = Arena::<Value>::with_capacity(256);
     let mut refs = Vec::new();
-    for _ in 0..1025 {
+    for _ in 0..5000 {
         refs.push(arena.insert(Value::default()));
     }
 
