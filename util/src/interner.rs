@@ -5,7 +5,7 @@ use std::collections::HashMap;
 pub struct Symbol(u32);
 
 pub struct Interner {
-    arena: Arena<String>,
+    arena: Arena<u8>,
     symbols: HashMap<&'static str, Symbol>,
     strings: Vec<&'static str>,
 }
@@ -23,8 +23,11 @@ impl Interner {
         if let Some(sym) = self.symbols.get(s) {
             return *sym;
         }
-        let ptr: &'static String =
-            unsafe { std::mem::transmute(self.arena.alloc(String::from(s))) };
+
+        let slice = self.arena.alloc_slice(s.as_bytes());
+
+        let ptr: &'static str =
+            unsafe { std::mem::transmute(std::str::from_utf8_unchecked(slice)) };
 
         let sym = Symbol(self.strings.len() as u32);
         self.strings.push(ptr);
@@ -32,7 +35,7 @@ impl Interner {
         sym
     }
 
-    pub fn get(&self, symbol: Symbol) -> Option<&str> {
+    pub fn get<'s>(&'s self, symbol: Symbol) -> Option<&'s str> {
         self.strings.get(symbol.0 as usize).copied()
     }
 }
@@ -43,7 +46,7 @@ mod test {
 
     #[test]
     fn smoke() {
-        let mut interner = Interner::with_capacity(32);
+        let mut interner = Interner::with_capacity(10);
         let h = interner.intern("hello");
         let j = interner.intern("fn");
         let i = interner.intern("lambda");
