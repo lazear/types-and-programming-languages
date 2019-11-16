@@ -1,5 +1,4 @@
 //! Macros to make writing tests easier
-use super::*;
 
 /// Boolean term
 macro_rules! lit {
@@ -100,26 +99,26 @@ macro_rules! arrow {
 /// Boolean pattern
 macro_rules! boolean {
     ($ex:expr) => {
-        crate::terms::Pattern::Literal(crate::terms::Literal::Bool($ex))
+        crate::patterns::Pattern::Literal(crate::terms::Literal::Bool($ex))
     };
 }
 
 /// Numeric pattern
 macro_rules! num {
     ($ex:expr) => {
-        crate::terms::Pattern::Literal(crate::terms::Literal::Nat($ex))
+        crate::patterns::Pattern::Literal(crate::terms::Literal::Nat($ex))
     };
 }
 
 /// Product pattern
 macro_rules! prod {
-    ($($ex:expr),+) => { crate::terms::Pattern::Product(vec![$($ex),+]) }
+    ($($ex:expr),+) => { crate::patterns::Pattern::Product(vec![$($ex),+]) }
 }
 
 /// Constructor pattern
 macro_rules! con {
     ($label:expr, $ex:expr) => {
-        crate::terms::Pattern::Constructor($label.to_string(), Box::new($ex))
+        crate::patterns::Pattern::Constructor($label.to_string(), Box::new($ex))
     };
 }
 

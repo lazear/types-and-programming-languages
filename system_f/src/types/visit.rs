@@ -1,47 +1,5 @@
-use super::{Type, Variant};
-
-pub trait MutVisitor: Sized {
-    fn visit_var(&mut self, var: &mut usize) {}
-    fn visit_alias(&mut self, alias: &mut String) {}
-
-    fn visit_arrow(&mut self, ty1: &mut Type, ty2: &mut Type) {
-        self.visit(ty1);
-        self.visit(ty2);
-    }
-
-    fn visit_universal(&mut self, inner: &mut Type) {
-        self.visit(inner);
-    }
-
-    fn visit_variant(&mut self, variant: &mut Vec<Variant>) {
-        for v in variant {
-            self.visit(&mut v.ty);
-        }
-    }
-
-    fn visit_product(&mut self, product: &mut Vec<Type>) {
-        for v in product {
-            self.visit(v);
-        }
-    }
-
-    fn visit_rec(&mut self, ty: &mut Type) {
-        self.visit(ty);
-    }
-
-    fn visit(&mut self, ty: &mut Type) {
-        match ty {
-            Type::Unit | Type::Bool | Type::Nat => {}
-            Type::Var(v) => self.visit_var(v),
-            Type::Variant(v) => self.visit_variant(v),
-            Type::Product(v) => self.visit_product(v),
-            Type::Alias(s) => self.visit_alias(s),
-            Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
-            Type::Universal(ty) => self.visit_universal(ty),
-            Type::Rec(ty) => self.visit_rec(ty),
-        }
-    }
-}
+use super::Type;
+use crate::visit::MutTypeVisitor;
 
 pub struct Shift {
     cutoff: usize,
@@ -54,7 +12,7 @@ impl Shift {
     }
 }
 
-impl MutVisitor for Shift {
+impl MutTypeVisitor for Shift {
     fn visit_var(&mut self, var: &mut usize) {
         if *var >= self.cutoff {
             *var = (*var as isize + self.shift) as usize;
@@ -85,7 +43,7 @@ impl Subst {
     }
 }
 
-impl MutVisitor for Subst {
+impl MutTypeVisitor for Subst {
     fn visit_universal(&mut self, inner: &mut Type) {
         self.cutoff += 1;
         self.visit(inner);

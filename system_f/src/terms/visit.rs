@@ -1,92 +1,8 @@
-use super::*;
-
-pub trait MutVisitor: Sized {
-    fn visit_lit(&mut self, sp: &mut Span, lit: &mut Literal) {}
-    fn visit_var(&mut self, sp: &mut Span, var: &mut usize) {}
-
-    fn visit_abs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
-        self.visit(term);
-    }
-
-    fn visit_app(&mut self, sp: &mut Span, t1: &mut Term, t2: &mut Term) {
-        self.visit(t1);
-        self.visit(t2);
-    }
-
-    fn visit_let(&mut self, sp: &mut Span, t1: &mut Term, t2: &mut Term) {
-        self.visit(t1);
-        self.visit(t2);
-    }
-
-    fn visit_tyabs(&mut self, sp: &mut Span, term: &mut Term) {
-        self.visit(term);
-    }
-
-    fn visit_tyapp(&mut self, sp: &mut Span, term: &mut Term, ty: &mut Type) {
-        self.visit(term);
-    }
-
-    fn visit_primitive(&mut self, sp: &mut Span, prim: &mut Primitive) {}
-    fn visit_injection(
-        &mut self,
-        sp: &mut Span,
-        label: &mut String,
-        term: &mut Term,
-        ty: &mut Type,
-    ) {
-        self.visit(term);
-    }
-
-    fn visit_case(&mut self, sp: &mut Span, term: &mut Term, arms: &mut Vec<Arm>) {
-        self.visit(term);
-        for arm in arms {
-            self.visit(&mut arm.term);
-        }
-    }
-
-    fn visit_product(&mut self, sp: &mut Span, product: &mut Vec<Term>) {
-        for t in product {
-            self.visit(t);
-        }
-    }
-
-    fn visit_projection(&mut self, sp: &mut Span, term: &mut Term, index: &mut usize) {
-        self.visit(term);
-    }
-
-    fn visit_fold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
-        self.visit(term);
-    }
-    fn visit_unfold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
-        self.visit(term);
-    }
-
-    fn visit(&mut self, term: &mut Term) {
-        self.walk(term);
-    }
-
-    fn walk(&mut self, term: &mut Term) {
-        let sp = &mut term.span;
-        match &mut term.kind {
-            Kind::Lit(l) => self.visit_lit(sp, l),
-            Kind::Var(v) => self.visit_var(sp, v),
-            Kind::Abs(ty, term) => self.visit_abs(sp, ty, term),
-            Kind::App(t1, t2) => self.visit_app(sp, t1, t2),
-            // Do we need a separate branch?
-            Kind::Fix(term) => self.visit(term),
-            Kind::Primitive(p) => self.visit_primitive(sp, p),
-            Kind::Injection(label, tm, ty) => self.visit_injection(sp, label, tm, ty),
-            Kind::Projection(term, idx) => self.visit_projection(sp, term, idx),
-            Kind::Product(terms) => self.visit_product(sp, terms),
-            Kind::Case(term, arms) => self.visit_case(sp, term, arms),
-            Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
-            Kind::TyAbs(term) => self.visit_tyabs(sp, term),
-            Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
-            Kind::Fold(ty, term) => self.visit_fold(sp, ty, term),
-            Kind::Unfold(ty, term) => self.visit_unfold(sp, ty, term),
-        }
-    }
-}
+use crate::patterns::PatternCount;
+use crate::terms::{Arm, Kind, Primitive, Term};
+use crate::types::Type;
+use crate::visit::{MutTermVisitor, MutTypeVisitor};
+use util::span::Span;
 
 pub struct Shift {
     cutoff: usize,
@@ -99,7 +15,7 @@ impl Shift {
     }
 }
 
-impl MutVisitor for Shift {
+impl MutTermVisitor for Shift {
     fn visit_var(&mut self, sp: &mut Span, var: &mut usize) {
         if *var >= self.cutoff {
             *var = (*var as isize + self.shift) as usize;
@@ -147,7 +63,7 @@ impl Subst {
     }
 }
 
-impl MutVisitor for Subst {
+impl MutTermVisitor for Subst {
     fn visit_abs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
         self.cutoff += 1;
         self.visit(term);
@@ -180,21 +96,8 @@ impl MutVisitor for Subst {
     fn visit(&mut self, term: &mut Term) {
         let sp = &mut term.span;
         match &mut term.kind {
-            Kind::Lit(l) => self.visit_lit(sp, l),
             Kind::Var(v) if *v == self.cutoff => *term = self.term.clone(),
-            Kind::Var(_) => {}
-            Kind::Abs(ty, term) => self.visit_abs(sp, ty, term),
-            Kind::App(t1, t2) => self.visit_app(sp, t1, t2),
-            Kind::Fix(term) => self.visit(term),
-            Kind::Primitive(p) => self.visit_primitive(sp, p),
-            Kind::Injection(label, tm, ty) => self.visit_injection(sp, label, tm, ty),
-            Kind::Projection(term, idx) => self.visit_projection(sp, term, idx),
-            Kind::Product(terms) => self.visit_product(sp, terms),
-            Kind::Case(term, arms) => self.visit_case(sp, term, arms),
-            Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
-            Kind::TyAbs(term) => self.visit_tyabs(sp, term),
-            Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
-            Kind::Fold(ty, term) | Kind::Unfold(ty, term) => self.visit_fold(sp, ty, term),
+            _ => self.walk(term),
         }
     }
 }
@@ -222,7 +125,7 @@ impl TyTermSubst {
     }
 }
 
-impl MutVisitor for TyTermSubst {
+impl MutTermVisitor for TyTermSubst {
     fn visit_abs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
         self.visit_ty(ty);
         self.visit(term);
@@ -248,5 +151,35 @@ impl MutVisitor for TyTermSubst {
     ) {
         self.visit_ty(ty);
         self.visit(term);
+    }
+}
+
+/// Visitor for handling recursive variants automatically, by inserting a
+/// fold term
+///
+/// Transform an [`Injection`] term of form: `Label tm of Rec(u.T)` into
+/// `fold [u.T] Label tm of [X->u.T] T`
+pub struct InjRewriter;
+
+impl MutTermVisitor for InjRewriter {
+    fn visit(&mut self, term: &mut Term) {
+        match &mut term.kind {
+            Kind::Injection(label, val, ty) => {
+                match *ty.clone() {
+                    Type::Rec(inner) => {
+                        let ty_prime = crate::types::subst(*ty.clone(), *inner.clone());
+                        let rewrite_ty = Term::new(
+                            Kind::Injection(label.clone(), val.clone(), Box::new(ty_prime)),
+                            term.span,
+                        );
+
+                        *term = Term::new(Kind::Fold(ty.clone(), Box::new(rewrite_ty)), term.span);
+                    }
+                    _ => {}
+                }
+                self.walk(term);
+            }
+            _ => self.walk(term),
+        }
     }
 }

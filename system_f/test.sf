@@ -23,7 +23,7 @@ case Some (5, 2) of {None | Some (Nat, Nat)} of
 ;
 
 case (1, (2, 3)) of 
-	| (x, (y, z)) => (z, y, x)
+	| (x, (y, z)) => ((z, y), x)
 ;
 let x = 
 	\z: (Nat, Nat)->Nat. 

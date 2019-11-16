@@ -5,6 +5,7 @@ use std::collections::VecDeque;
 use util::diagnostic::Diagnostic;
 use util::span::*;
 
+use crate::patterns::{PatVarStack, Pattern};
 use crate::terms::*;
 use crate::types::*;
 
@@ -478,7 +479,7 @@ impl<'s> Parser<'s> {
 
         let mut pat = self.once(|p| p.pattern(), "missing pattern")?;
 
-        for var in PatternStack::collect(&mut pat).into_iter().rev() {
+        for var in PatVarStack::collect(&mut pat).into_iter().rev() {
             self.tmvar.push(var);
         }
 

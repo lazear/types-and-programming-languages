@@ -1,7 +1,8 @@
-use crate::terms::visit::{MutVisitor, Shift, Subst, TyTermSubst};
-use crate::terms::{self, Kind, Literal, Pattern, Primitive, Term};
-use crate::types::{self, Context, Type};
-use util::span::Span;
+use crate::patterns::Pattern;
+use crate::terms::visit::{Shift, Subst, TyTermSubst};
+use crate::terms::{Kind, Literal, Primitive, Term};
+use crate::types::{Context, Type};
+use crate::visit::MutTermVisitor;
 
 pub struct Eval<'ctx> {
     _context: &'ctx Context,

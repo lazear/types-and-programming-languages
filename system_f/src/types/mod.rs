@@ -3,11 +3,12 @@
 pub mod patterns;
 pub mod visit;
 use crate::diagnostics::*;
-use crate::terms::{Kind, Literal, Pattern, Primitive, Term};
+use crate::terms::{Kind, Literal, Primitive, Term};
+use crate::visit::{MutTermVisitor, MutTypeVisitor};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use util::span::Span;
-use visit::{MutVisitor, Shift, Subst};
+use visit::{Shift, Subst};
 
 #[derive(Clone, PartialEq, PartialOrd, Eq, Hash)]
 pub enum Type {
@@ -82,12 +83,12 @@ impl Context {
     }
 
     pub fn de_alias(&mut self, term: &mut Term) {
-        crate::terms::visit::MutVisitor::visit(self, term)
+        crate::visit::MutTermVisitor::visit(self, term)
     }
 }
 
 /// Helper function for extracting type from a variant
-fn variant_field<'vs>(
+pub fn variant_field<'vs>(
     var: &'vs [Variant],
     label: &str,
     span: Span,
@@ -315,7 +316,7 @@ struct Aliaser<'ctx> {
     map: &'ctx HashMap<String, Type>,
 }
 
-impl<'ctx> MutVisitor for Aliaser<'ctx> {
+impl<'ctx> MutTypeVisitor for Aliaser<'ctx> {
     fn visit(&mut self, ty: &mut Type) {
         match ty {
             Type::Unit | Type::Bool | Type::Nat => {}
@@ -335,7 +336,7 @@ impl<'ctx> MutVisitor for Aliaser<'ctx> {
     }
 }
 
-impl crate::terms::visit::MutVisitor for Context {
+impl MutTermVisitor for Context {
     fn visit_abs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
         self.aliaser().visit(ty);
         self.visit(term);

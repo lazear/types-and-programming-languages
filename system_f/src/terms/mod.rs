@@ -1,4 +1,5 @@
 //! Representation lambda calculus terms
+use crate::patterns::Pattern;
 use crate::types::Type;
 use std::fmt;
 use util::span::Span;
@@ -54,108 +55,6 @@ pub enum Kind {
 
     Fold(Box<Type>, Box<Term>),
     Unfold(Box<Type>, Box<Term>),
-}
-
-/// Patterns for case and let expressions
-#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
-pub enum Pattern {
-    /// Wildcard pattern, this always matches
-    Any,
-    /// Constant pattern
-    Literal(Literal),
-    /// Variable binding pattern, this always matches
-    Variable(String),
-    /// Tuple of pattern bindings
-    Product(Vec<Pattern>),
-    /// Algebraic datatype constructor, along with binding pattern
-    Constructor(String, Box<Pattern>),
-}
-
-pub trait PatternVisitor: Sized {
-    fn visit_literal(&mut self, lit: &Literal) {}
-    fn visit_variable(&mut self, var: &String) {}
-    fn visit_product(&mut self, pats: &Vec<Pattern>) {
-        for p in pats {
-            self.visit_pattern(p);
-        }
-    }
-
-    fn visit_constructor(&mut self, label: &String, pat: &Pattern) {
-        self.visit_pattern(pat);
-    }
-
-    fn visit_pattern(&mut self, pattern: &Pattern) {
-        match pattern {
-            Pattern::Any => {}
-            Pattern::Constructor(label, pat) => self.visit_constructor(label, pat),
-            Pattern::Product(pat) => self.visit_product(pat),
-            Pattern::Literal(lit) => self.visit_literal(lit),
-            Pattern::Variable(var) => self.visit_variable(var),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct PatternStack {
-    pub inner: Vec<String>,
-}
-
-impl PatternStack {
-    pub fn collect(pat: &mut Pattern) -> Vec<String> {
-        let mut p = Self::default();
-        p.visit_pattern(pat);
-        p.inner
-    }
-}
-
-impl PatternVisitor for PatternStack {
-    fn visit_variable(&mut self, var: &String) {
-        self.inner.push(var.clone());
-    }
-}
-
-pub struct PatternCount(usize);
-
-impl PatternCount {
-    pub fn collect(pat: &mut Pattern) -> usize {
-        let mut p = PatternCount(0);
-        p.visit_pattern(pat);
-        p.0
-    }
-}
-
-impl PatternVisitor for PatternCount {
-    fn visit_variable(&mut self, var: &String) {
-        self.0 += 1;
-    }
-}
-
-impl Pattern {
-    /// Does this pattern match the given [`Term`]?
-    pub fn matches(&self, term: &Term) -> bool {
-        match self {
-            Pattern::Any => return true,
-            Pattern::Variable(_) => return true,
-            Pattern::Literal(l) => {
-                if let Kind::Lit(l2) = &term.kind {
-                    return l == l2;
-                }
-            }
-            Pattern::Product(vec) => {
-                if let Kind::Product(terms) = &term.kind {
-                    return vec.iter().zip(terms).all(|(p, t)| p.matches(t));
-                }
-            }
-            Pattern::Constructor(label, inner) => {
-                if let Kind::Injection(label_, tm, _) = &term.kind {
-                    if label == label_ {
-                        return inner.matches(&tm);
-                    }
-                }
-            }
-        }
-        false
-    }
 }
 
 /// Arm of a case expression

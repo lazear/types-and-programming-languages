@@ -3,18 +3,19 @@
 pub mod macros;
 pub mod diagnostics;
 pub mod eval;
+pub mod patterns;
 pub mod syntax;
 pub mod terms;
 pub mod types;
+pub mod visit;
 
 use diagnostics::*;
 use std::env;
 use std::io::{Read, Write};
 use syntax::parser::{self, Parser};
-use terms::visit::MutVisitor;
-use terms::*;
-use types::*;
-use util::span::Span;
+use terms::{visit::InjRewriter, Term};
+use types::{Type, Variant};
+use visit::MutTermVisitor;
 
 fn test_variant() -> Type {
     Type::Variant(vec![
@@ -87,45 +88,6 @@ fn eval(ctx: &mut types::Context, mut term: Term, verbose: bool) -> Result<Term,
         );
     }
     Ok(fin)
-}
-
-struct InjRewriter;
-
-impl MutVisitor for InjRewriter {
-    fn visit(&mut self, term: &mut Term) {
-        match &mut term.kind {
-            Kind::Injection(label, val, ty) => {
-                // dbg!(&ty);
-                match *ty.clone() {
-                    Type::Rec(inner) => {
-                        let ty_prime = subst(*ty.clone(), *inner.clone());
-                        let rewrite_ty = Term::new(
-                            Kind::Injection(label.clone(), val.clone(), Box::new(ty_prime)),
-                            term.span,
-                        );
-
-                        *term = Term::new(Kind::Fold(ty.clone(), Box::new(rewrite_ty)), term.span);
-
-                        // let s = subst(*ty.clone(), *inner.clone());
-                        // *term = Term::new(
-                        //     Kind::App(
-                        //         Box::new(tm),
-                        //         Box::new(Term::new(
-                        //             Kind::Injection(label.clone(),
-                        // val.clone(), Box::new(s)),
-                        //             term.span,
-                        //         )),
-                        //     ),
-                        //     term.span,
-                        // );
-                    }
-                    _ => {}
-                }
-                self.walk(term);
-            }
-            _ => self.walk(term),
-        }
-    }
 }
 
 fn parse_and_eval(ctx: &mut types::Context, input: &str, verbose: bool) -> bool {

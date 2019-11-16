@@ -15,6 +15,7 @@
 
 use super::*;
 use crate::diagnostics::*;
+use crate::patterns::{PatTyStack, Pattern};
 use crate::terms::*;
 use std::collections::HashSet;
 
@@ -159,58 +160,6 @@ impl<'pat> Matrix<'pat> {
                 }
             }
             Pattern::Constructor(label, inner) => self.try_add_row(vec![pat]),
-        }
-    }
-}
-
-/// Helper struct to traverse a [`Pattern`] and bind variables
-/// to the typing context as needed.
-///
-/// It is the caller's responsibiliy to track stack growth and pop off
-/// types after calling this function
-pub struct PatTyStack<'ty> {
-    pub ty: &'ty Type,
-    pub inner: Vec<&'ty Type>,
-}
-
-impl<'ty> PatTyStack<'ty> {
-    pub fn collect(ty: &'ty Type, pat: &Pattern) -> Vec<&'ty Type> {
-        let mut p = PatTyStack {
-            ty,
-            inner: Vec::with_capacity(16),
-        };
-        p.visit_pattern(pat);
-        p.inner
-    }
-}
-
-impl<'ty> PatternVisitor for PatTyStack<'_> {
-    fn visit_product(&mut self, pats: &Vec<Pattern>) {
-        if let Type::Product(tys) = self.ty {
-            let ty = self.ty;
-            for (ty, pat) in tys.iter().zip(pats.iter()) {
-                self.ty = ty;
-                self.visit_pattern(pat);
-            }
-            self.ty = ty;
-        }
-    }
-
-    fn visit_constructor(&mut self, label: &String, pat: &Pattern) {
-        if let Type::Variant(vs) = self.ty {
-            let ty = self.ty;
-            self.ty = variant_field(&vs, label, Span::zero()).unwrap();
-            self.visit_pattern(pat);
-            self.ty = ty;
-        }
-    }
-
-    fn visit_pattern(&mut self, pattern: &Pattern) {
-        match pattern {
-            Pattern::Any | Pattern::Literal(_) => {}
-            Pattern::Variable(_) => self.inner.push(self.ty),
-            Pattern::Constructor(label, pat) => self.visit_constructor(label, pat),
-            Pattern::Product(pats) => self.visit_product(pats),
         }
     }
 }
