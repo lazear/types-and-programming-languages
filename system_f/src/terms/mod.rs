@@ -43,7 +43,7 @@ pub enum Kind {
     /// A case expr, with case arms
     Case(Box<Term>, Vec<Arm>),
 
-    Let(Box<Term>, Box<Term>),
+    Let(Box<Pattern>, Box<Term>, Box<Term>),
     /// A lambda abstraction
     Abs(Box<Type>, Box<Term>),
     /// Application of a term to another term
@@ -134,7 +134,7 @@ impl fmt::Display for Term {
                 }
                 write!(f, "")
             }
-            Kind::Let(t1, t2) => write!(f, "let _ = {} in {}", t1, t2),
+            Kind::Let(pat, t1, t2) => write!(f, "let {:?} = {} in {}", pat, t1, t2),
             Kind::App(t1, t2) => write!(f, "({} {})", t1, t2),
             Kind::TyAbs(term) => write!(f, "(λTy {})", term),
             Kind::TyApp(term, ty) => write!(f, "({} [{:?}])", term, ty),

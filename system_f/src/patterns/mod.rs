@@ -37,6 +37,8 @@ impl PatternVisitor for PatVarStack {
     }
 }
 
+/// Visitor that simply counts the number of binders (variables) within a
+/// pattern
 pub struct PatternCount(usize);
 
 impl PatternCount {

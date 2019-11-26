@@ -79,13 +79,14 @@ impl<'ctx> Eval<'ctx> {
                     Some(Term::new(Kind::App(Box::new(t), t2), term.span))
                 }
             }
-            Kind::Let(bind, mut body) => {
+            Kind::Let(pat, bind, mut body) => {
                 if self.normal_form(&bind) {
-                    term_subst(*bind, &mut body);
+                    // term_subst(*bind, &mut body);
+                    self.case_subst(&pat, &bind, body.as_mut());
                     Some(*body)
                 } else {
                     let t = self.small_step(*bind)?;
-                    Some(Term::new(Kind::Let(Box::new(t), body), term.span))
+                    Some(Term::new(Kind::Let(pat, Box::new(t), body), term.span))
                 }
             }
             Kind::TyApp(tm, ty) => match tm.kind {

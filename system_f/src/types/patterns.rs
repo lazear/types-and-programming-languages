@@ -276,10 +276,13 @@ impl Context {
                 _ => false,
             },
             Pattern::Product(patterns) => match ty {
-                Type::Product(types) => patterns
-                    .iter()
-                    .zip(types.iter())
-                    .all(|(pt, tt)| self.pattern_type_eq(pt, tt)),
+                Type::Product(types) => {
+                    patterns.len() == types.len()
+                        && patterns
+                            .iter()
+                            .zip(types.iter())
+                            .all(|(pt, tt)| self.pattern_type_eq(pt, tt))
+                }
                 _ => false,
             },
             Pattern::Constructor(label, inner) => match ty {

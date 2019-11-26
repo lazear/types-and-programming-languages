@@ -116,8 +116,7 @@ impl TyTermSubst {
     }
 
     fn visit_ty(&mut self, ty: &mut Type) {
-        use crate::types::visit::*;
-        let mut s = Subst {
+        let mut s = crate::types::visit::Subst {
             cutoff: self.cutoff,
             ty: self.ty.clone(),
         };

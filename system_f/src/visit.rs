@@ -126,7 +126,7 @@ pub trait MutTermVisitor: Sized {
             Kind::Projection(term, idx) => self.visit_projection(sp, term, idx),
             Kind::Product(terms) => self.visit_product(sp, terms),
             Kind::Case(term, arms) => self.visit_case(sp, term, arms),
-            Kind::Let(t1, t2) => self.visit_let(sp, t1, t2),
+            Kind::Let(pat, t1, t2) => self.visit_let(sp, t1, t2),
             Kind::TyAbs(term) => self.visit_tyabs(sp, term),
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
             Kind::Fold(ty, term) => self.visit_fold(sp, ty, term),

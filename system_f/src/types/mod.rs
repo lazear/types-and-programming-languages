@@ -233,11 +233,29 @@ impl Context {
                     .map(|t| self.type_check(t))
                     .collect::<Result<_, _>>()?,
             )),
-            Kind::Let(t1, t2) => {
+            Kind::Let(pat, t1, t2) => {
                 let ty = self.type_check(t1)?;
-                self.push(ty);
+                if !self.pattern_type_eq(&pat, &ty) {
+                    return Err(Diagnostic::error(
+                        t1.span,
+                        format!("pattern does not match type of binder"),
+                    ));
+                }
+
+                let height = self.stack.len();
+                // self.walk_pattern_and_bind(&matrix.expr_ty, &arm.pat);
+
+                let binds = crate::patterns::PatTyStack::collect(&ty, &pat);
+                for b in binds.into_iter().rev() {
+                    self.push(b.clone());
+                }
+
                 let y = self.type_check(t2);
-                self.pop();
+
+                while self.stack.len() > height {
+                    self.pop();
+                }
+
                 y
             }
             Kind::TyAbs(term) => {

@@ -310,18 +310,25 @@ impl<'s> Parser<'s> {
     fn letexpr(&mut self) -> Result<Term, Error> {
         let sp = self.span;
         self.expect(TokenKind::Let)?;
-        let id = self.lowercase_id()?;
+
+        let len = self.tmvar.len();
+        let mut pat = self.once(|p| p.pattern(), "missing pattern")?;
+
+        for var in PatVarStack::collect(&mut pat).into_iter().rev() {
+            self.tmvar.push(var);
+        }
 
         self.expect(TokenKind::Equals)?;
 
         let t1 = self.once(|p| p.parse(), "let binder required")?;
 
-        self.tmvar.push(id);
         self.expect(TokenKind::In)?;
         let t2 = self.once(|p| p.parse(), "let body required")?;
-        self.tmvar.pop();
+        while self.tmvar.len() > len {
+            self.tmvar.pop();
+        }
         Ok(Term::new(
-            Kind::Let(Box::new(t1), Box::new(t2)),
+            Kind::Let(Box::new(pat), Box::new(t1), Box::new(t2)),
             sp + self.span,
         ))
     }
