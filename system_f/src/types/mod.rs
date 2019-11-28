@@ -112,6 +112,7 @@ pub fn variant_field<'vs>(
 impl Context {
     pub fn type_check(&mut self, term: &Term) -> Result<Type, Diagnostic> {
         // dbg!(&self.stack);
+
         // println!("{}", term);
         match term.kind() {
             Kind::Lit(Literal::Unit) => Ok(Type::Unit),
@@ -121,6 +122,7 @@ impl Context {
                 .find(*idx)
                 .cloned()
                 .ok_or_else(|| Diagnostic::error(term.span, format!("unbound variable {}", idx))),
+
             Kind::Abs(ty, t2) => {
                 self.push(*ty.clone());
                 let ty2 = self.type_check(t2)?;
@@ -258,7 +260,15 @@ impl Context {
                 y
             }
             Kind::TyAbs(term) => {
+                self.stack.iter_mut().for_each(|ty| match ty {
+                    Type::Var(v) => *v += 1,
+                    _ => {}
+                });
                 let ty2 = self.type_check(term)?;
+                self.stack.iter_mut().for_each(|ty| match ty {
+                    Type::Var(v) => *v -= 1,
+                    _ => {}
+                });
                 Ok(Type::Universal(Box::new(ty2)))
             }
             Kind::TyApp(term, ty) => {
