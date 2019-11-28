@@ -1,9 +1,10 @@
 use super::Type;
 use crate::visit::MutTypeVisitor;
+use std::convert::TryFrom;
 
 pub struct Shift {
-    cutoff: usize,
-    shift: isize,
+    pub cutoff: usize,
+    pub shift: isize,
 }
 
 impl Shift {
@@ -15,7 +16,7 @@ impl Shift {
 impl MutTypeVisitor for Shift {
     fn visit_var(&mut self, var: &mut usize) {
         if *var >= self.cutoff {
-            *var = (*var as isize + self.shift) as usize;
+            *var = usize::try_from(*var as isize + self.shift).expect("Variable has been shifted below 0! Fatal bug");
         }
     }
 

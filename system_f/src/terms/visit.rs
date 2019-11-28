@@ -35,12 +35,6 @@ impl MutTermVisitor for Shift {
         self.cutoff -= 1;
     }
 
-    fn visit_tyabs(&mut self, sp: &mut Span, term: &mut Term) {
-        self.cutoff += 1;
-        self.visit(term);
-        self.cutoff -= 1;
-    }
-
     fn visit_case(&mut self, sp: &mut Span, term: &mut Term, arms: &mut Vec<Arm>) {
         self.visit(term);
         for arm in arms {
@@ -74,12 +68,6 @@ impl MutTermVisitor for Subst {
         self.visit(t1);
         self.cutoff += 1;
         self.visit(t2);
-        self.cutoff -= 1;
-    }
-
-    fn visit_tyabs(&mut self, sp: &mut Span, term: &mut Term) {
-        self.cutoff += 1;
-        self.visit(term);
         self.cutoff -= 1;
     }
 
@@ -139,6 +127,16 @@ impl MutTermVisitor for TyTermSubst {
         self.cutoff += 1;
         self.visit(term);
         self.cutoff -= 1;
+    }
+
+    fn visit_fold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+        self.visit_ty(ty);
+        self.visit(term);
+    }
+
+    fn visit_unfold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+        self.visit_ty(ty);
+        self.visit(term);
     }
 
     fn visit_injection(

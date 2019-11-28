@@ -226,7 +226,7 @@ fn term_subst(mut s: Term, t: &mut Term) {
 
 fn type_subst(s: Type, t: &mut Term) {
     TyTermSubst::new(s).visit(t);
-    Shift::new(-1).visit(t);
+    // Shift::new(-1).visit(t);
 }
 
 #[cfg(test)]
