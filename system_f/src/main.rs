@@ -148,6 +148,7 @@ fn main() {
                 panic!("test failed! {}", f);
             }
         }
+        return;
     }
 
     loop {
