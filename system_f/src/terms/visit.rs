@@ -116,8 +116,10 @@ impl TyTermSubst {
 
 impl MutTermVisitor for TyTermSubst {
     fn visit_abs(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
+        // self.cutoff += 1;
         self.visit_ty(ty);
         self.visit(term);
+        // self.cutoff -= 1;
     }
 
     fn visit_tyapp(&mut self, sp: &mut Span, term: &mut Term, ty: &mut Type) {
