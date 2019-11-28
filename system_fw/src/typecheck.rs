@@ -1,7 +1,7 @@
 use crate::diagnostics::Diagnostic;
 use crate::stack::Stack;
 use crate::terms::{Constant, Field, Kind, Record, Term};
-use crate::types::{TyField, TyKind, Type};
+use crate::types::{MutTypeVisitor, Shift, TyField, TyKind, Type};
 use util::span::Span;
 /// A typing context, Γ
 #[derive(Debug)]
@@ -19,6 +19,7 @@ impl Default for Context {
     }
 }
 
+#[derive(Debug, PartialEq)]
 enum KindError {
     Mismatch(TyKind, TyKind),
     NotArrow(TyKind),
@@ -60,7 +61,6 @@ impl KindError {
 
 impl Context {
     fn kinding(&mut self, ty: &Type) -> Result<TyKind, KindError> {
-        dbg!(&self.kstack, &ty);
         match ty {
             Type::Var(idx) => self
                 .kstack
@@ -130,10 +130,12 @@ impl Context {
                     .kinding(ty)
                     .map_err(|k| KindError::to_diag(k, term.span))?;
                 if kind != TyKind::Star {
-                    return Err(Diagnostic::error(term.span, format!("type bound in type abstraction must have a kind *, this type has a kind of {:?}", kind)));
+                    return Err(Diagnostic::error(term.span, format!("type bound in type abstraction must have a kind *, this type has a kind of {}", kind)));
                 }
                 self.stack.push(*ty.clone());
-                let ty2 = self.typecheck(&tm)?;
+                let mut ty2 = self.typecheck(&tm)?;
+
+                // Shift::new(-1).visit(&mut ty2);
                 self.stack.pop();
                 Ok(Type::Arrow(ty.clone(), Box::new(ty2)))
             }
@@ -144,14 +146,16 @@ impl Context {
                     if *ty11 == ty2 {
                         Ok(*ty12)
                     } else {
+                        dbg!(&self.stack);
+                        dbg!(&self.kstack);
                         let d = Diagnostic::error(term.span, "type mismatch in application")
-                            .message(m.span, format!("abstraction requires type {:?}", ty11))
-                            .message(n.span, format!("value has a type of {:?}", ty2));
+                            .message(m.span, format!("abstraction {} requires type {}", m, ty11))
+                            .message(n.span, format!("term {} has a type of {}", n, ty2));
                         return Err(d);
                     }
                 } else {
                     let d = Diagnostic::error(term.span, "type mismatch in application")
-                        .message(m.span, format!("this term has a type {:?}, not T->U", ty));
+                        .message(m.span, format!("this term has a type {}, not T->U", ty));
                     return Err(d);
                 }
             }
@@ -174,7 +178,7 @@ impl Context {
                             Ok(u)
                         } else {
                             let d = Diagnostic::error(term.span, "type kind mismatch in term-level type application")
-                            .message(tyabs.span, format!("universal type requires a type of kind {:?}, but a kind of {:?} is given", &k1, k2));
+                            .message(tyabs.span, format!("universal type requires a type of kind {}, but a kind of {} is given", &k1, k2));
                             Err(d)
                         }
                     }
@@ -185,7 +189,7 @@ impl Context {
                         )
                         .message(
                             tyabs.span,
-                            format!("this term has a type {:?}, not forall. X::K", ty),
+                            format!("this term has a type {}, not forall. X::K", ty),
                         );
                         Err(d)
                     }
@@ -224,7 +228,7 @@ impl Context {
                             .map_err(|k| KindError::to_diag(k, term.span))?;
 
                         if &witness_kind != kind.as_ref() {
-                            return diag!(term.span, "existential type requires a type of kind {:?}, but implementation type has a kind of {:?}", kind, kind_prime);
+                            return diag!(term.span, "existential type requires a type of kind {:?}, but implementation type has a kind of {:?}", kind, witness_kind);
                         }
 
                         let ty_packed = self.typecheck(packed)?;
@@ -333,5 +337,19 @@ mod test {
         let counter = pack!(Type::Nat, adt, interface_ty.clone());
         let mut ctx = Context::default();
         assert_eq!(ctx.typecheck(&counter), Ok(interface_ty));
+    }
+
+    #[test]
+    fn type_type_abs() {
+        let ty = tyop!(kind!(*), Type::Var(0));
+        let mut ctx = Context::default();
+        assert_eq!(ctx.kinding(&ty), Ok(kind!(* => *)));
+        assert_eq!(
+            ctx.kinding(&Type::App(Box::new(ty), Box::new(Type::Nat))),
+            Ok(kind!(*))
+        );
+
+        let pair = tyop!(kind!(*), tyop!(kind!(*), univ!(kind!(*), Type::Var(0))));
+        assert_eq!(ctx.kinding(&pair), Ok(kind!(kind!(*) => kind!(* => *))));
     }
 }

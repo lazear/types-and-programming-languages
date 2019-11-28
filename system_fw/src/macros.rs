@@ -100,6 +100,9 @@ macro_rules! exist {
 }
 
 macro_rules! univ {
+    ($ty:expr) => {
+        crate::types::Type::Universal(Box::new(kind!(*)), Box::new($ty))
+    };
     ($k:expr, $ty:expr) => {
         crate::types::Type::Universal(Box::new($k), Box::new($ty))
     };
@@ -124,6 +127,18 @@ macro_rules! record {
     ($($name:expr),+) => {
         crate::types::Type::Record(vec![$(field!($name.0, $name.1)),+])
     }
+}
+
+macro_rules! tyop {
+    ($k:expr, $ty:expr) => {
+        crate::types::Type::Abs(Box::new($k), Box::new($ty))
+    };
+}
+
+macro_rules! op_app {
+    ($ty1:expr, $ty2:expr) => {
+        crate::types::Type::App(Box::new($ty1), Box::new($ty2))
+    };
 }
 
 macro_rules! kind {

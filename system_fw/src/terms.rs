@@ -79,3 +79,31 @@ impl Record {
         None
     }
 }
+
+use std::fmt;
+
+impl fmt::Display for Term {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.kind {
+            Kind::Var(idx) => write!(f, "#{}", idx),
+            Kind::Const(Constant::Bool(b)) => write!(f, "{}", b),
+            Kind::Const(Constant::Nat(b)) => write!(f, "{}", b),
+            Kind::Const(Constant::Unit) => write!(f, "()"),
+            Kind::Abs(ty, body) => write!(f, "(λx:{}. {})", ty, body),
+            Kind::App(m, n) => write!(f, "{} {}", m, n),
+            Kind::TyAbs(kind, body) => write!(f, "ΛX::{}. {}", kind, body),
+            Kind::TyApp(body, ty) => write!(f, "{} [{}]", body, ty),
+            Kind::Pack(witness, body, sig) => write!(f, "{{*{}, {}}} as {}", witness, body, sig),
+            Kind::Unpack(m, n) => write!(f, "unpack {} as {}", m, n),
+            Kind::Record(rec) => write!(
+                f,
+                "{{{}}}",
+                rec.fields
+                    .iter()
+                    .map(|fi| format!("{}: {}", fi.label, fi.expr))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+        }
+    }
+}

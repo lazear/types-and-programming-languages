@@ -32,6 +32,42 @@ impl Type {
     }
 }
 
+use std::fmt;
+
+impl fmt::Display for Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self {
+            Type::Var(idx) => write!(f, "TyVar({})", idx),
+            Type::Unit => write!(f, "Unit"),
+            Type::Nat => write!(f, "Nat"),
+            Type::Bool => write!(f, "Bool"),
+            Type::Abs(kind, ty) => write!(f, "(ΛX::{}. {})", kind, ty),
+            Type::App(m, n) => write!(f, "{} {}", m, n),
+            Type::Arrow(m, n) => write!(f, "{}->{}", m, n),
+            Type::Universal(k, ty) => write!(f, "∀X::{}. {}", k, ty),
+            Type::Existential(k, ty) => write!(f, "{{∃X::{}, {}}}", k, ty),
+            Type::Record(fields) => write!(
+                f,
+                "{{{}}}",
+                fields
+                    .iter()
+                    .map(|fi| format!("{}: {}", fi.label, fi.ty))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+        }
+    }
+}
+
+impl fmt::Display for TyKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self {
+            TyKind::Star => write!(f, "*"),
+            TyKind::Arrow(k1, k2) => write!(f, "{}->{}", k1, k2),
+        }
+    }
+}
+
 pub trait MutTypeVisitor: Sized {
     fn visit_var(&mut self, var: &mut usize) {}
 
@@ -153,7 +189,14 @@ impl MutTypeVisitor for Subst {
             Type::Var(v) if *v >= self.cutoff => {
                 *ty = self.ty.clone();
             }
-            _ => self.walk(ty),
+
+            Type::Var(_) | Type::Unit | Type::Bool | Type::Nat => {}
+            Type::Record(fields) => self.visit_record(fields),
+            Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
+            Type::Universal(k, ty) => self.visit_universal(k, ty),
+            Type::Existential(k, ty) => self.visit_existential(k, ty),
+            Type::Abs(s, t) => self.visit_abs(s, t),
+            Type::App(k, t) => self.visit_app(k, t),
         }
     }
 }
