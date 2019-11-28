@@ -201,7 +201,6 @@ impl Context {
         for arm in arms {
             if self.pattern_type_eq(&arm.pat, &matrix.expr_ty) {
                 let height = self.stack.len();
-                // self.walk_pattern_and_bind(&matrix.expr_ty, &arm.pat);
 
                 let binds = PatTyStack::collect(&matrix.expr_ty, &arm.pat);
                 for b in binds.into_iter().rev() {

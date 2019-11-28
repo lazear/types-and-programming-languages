@@ -134,3 +134,26 @@ impl<'ty> PatternVisitor for PatTyStack<'_> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn pattern_count() {
+        let mut pat = Pattern::Variable(String::new());
+        assert_eq!(PatternCount::collect(&mut pat), 1);
+    }
+
+    #[test]
+    fn pattern_ty_stack() {
+        let mut pat = Pattern::Variable(String::new());
+        let ty = Type::Nat;
+        assert_eq!(PatTyStack::collect(&ty, &mut pat), vec![&ty]);
+    }
+
+    #[test]
+    fn pattern_var_stack() {
+        let mut pat = Pattern::Variable("x".into());
+        assert_eq!(PatVarStack::collect(&mut pat), vec![String::from("x")]);
+    }
+}

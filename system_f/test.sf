@@ -54,3 +54,13 @@ let cons = (\val: Nat. \list: NatList. Cons (val, list) of NatList) in
 case unfold NatList (cons 1 nil) of 
 	| Nil => nil
 	| Cons (x, y) => y
+
+;
+
+let x = 10 in let (y, _) = (x, 1) in y;
+
+let (x, y) = (0, 10) in let z = x in z ;
+
+(\x: Nat. \Y \y: Nat->Y. y x) 10 [Nat] succ
+
+;

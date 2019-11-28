@@ -120,7 +120,7 @@ impl Context {
             Kind::Var(idx) => self
                 .find(*idx)
                 .cloned()
-                .ok_or_else(|| Diagnostic::error(term.span, "unbound variable")),
+                .ok_or_else(|| Diagnostic::error(term.span, format!("unbound variable {}", idx))),
             Kind::Abs(ty, t2) => {
                 self.push(*ty.clone());
                 let ty2 = self.type_check(t2)?;
@@ -243,7 +243,6 @@ impl Context {
                 }
 
                 let height = self.stack.len();
-                // self.walk_pattern_and_bind(&matrix.expr_ty, &arm.pat);
 
                 let binds = crate::patterns::PatTyStack::collect(&ty, &pat);
                 for b in binds.into_iter().rev() {

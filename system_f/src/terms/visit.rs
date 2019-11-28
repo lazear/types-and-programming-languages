@@ -1,4 +1,4 @@
-use crate::patterns::PatternCount;
+use crate::patterns::{Pattern, PatternCount};
 use crate::terms::{Arm, Kind, Primitive, Term};
 use crate::types::Type;
 use crate::visit::{MutTermVisitor, MutTypeVisitor};
@@ -28,11 +28,12 @@ impl MutTermVisitor for Shift {
         self.cutoff -= 1;
     }
 
-    fn visit_let(&mut self, sp: &mut Span, t1: &mut Term, t2: &mut Term) {
+    fn visit_let(&mut self, sp: &mut Span, pat: &mut Pattern, t1: &mut Term, t2: &mut Term) {
         self.visit(t1);
-        self.cutoff += 1;
+        let c = PatternCount::collect(pat);
+        self.cutoff += c;
         self.visit(t2);
-        self.cutoff -= 1;
+        self.cutoff -= c;
     }
 
     fn visit_case(&mut self, sp: &mut Span, term: &mut Term, arms: &mut Vec<Arm>) {
@@ -64,11 +65,12 @@ impl MutTermVisitor for Subst {
         self.cutoff -= 1;
     }
 
-    fn visit_let(&mut self, sp: &mut Span, t1: &mut Term, t2: &mut Term) {
+    fn visit_let(&mut self, sp: &mut Span, pat: &mut Pattern, t1: &mut Term, t2: &mut Term) {
         self.visit(t1);
-        self.cutoff += 1;
+        let c = PatternCount::collect(pat);
+        self.cutoff += c;
         self.visit(t2);
-        self.cutoff -= 1;
+        self.cutoff -= c;
     }
 
     fn visit_case(&mut self, sp: &mut Span, term: &mut Term, arms: &mut Vec<Arm>) {
