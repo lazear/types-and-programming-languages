@@ -126,6 +126,15 @@ fn main() {
     //         )
     //     )
     // );
+
+    let t2 = abs!(
+        Type::Nat,
+        tyabs!(
+            kind!(*),
+            abs!(arrow!(Type::Nat, Type::Var(0)), app!(var!(0), var!(1)))
+        )
+    );
+    let t2 = tyapp!(app!(t2, nat!(10)), Type::Bool);
     println!("{}", &t2);
     // let t3 = tyapp!(t2, Type::Unit);
     // let t4 = tyapp!(t3, Type::Bool);

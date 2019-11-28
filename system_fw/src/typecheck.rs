@@ -113,6 +113,23 @@ impl Context {
         }
     }
 
+    fn is_star_kind(&mut self, ty: &Type, err_span: Span) -> Result<(), Diagnostic> {
+        let kind = self
+            .kinding(ty)
+            .map_err(|k| KindError::to_diag(k, err_span))?;
+        if kind == TyKind::Star {
+            Ok(())
+        } else {
+            return Err(Diagnostic::error(
+                err_span,
+                format!(
+                    "type bound in type abstraction must have a kind *, {} has a kind of {}",
+                    ty, kind
+                ),
+            ));
+        }
+    }
+
     pub fn typecheck(&mut self, term: &Term) -> Result<Type, Diagnostic> {
         match &term.kind {
             Kind::Const(c) => match c {
@@ -126,17 +143,15 @@ impl Context {
                 .cloned()
                 .ok_or(Diagnostic::error(term.span, "unbound variable")),
             Kind::Abs(ty, tm) => {
-                let kind = self
-                    .kinding(ty)
-                    .map_err(|k| KindError::to_diag(k, term.span))?;
-                if kind != TyKind::Star {
-                    return Err(Diagnostic::error(term.span, format!("type bound in type abstraction must have a kind *, this type has a kind of {}", kind)));
-                }
+                self.is_star_kind(ty, term.span)?;
                 self.stack.push(*ty.clone());
                 let mut ty2 = self.typecheck(&tm)?;
-
-                // Shift::new(-1).visit(&mut ty2);
                 self.stack.pop();
+
+                // dbg!(&ty2);
+                // Shift::new(-1).visit(&mut ty2);
+                // dbg!(&ty2);
+
                 Ok(Type::Arrow(ty.clone(), Box::new(ty2)))
             }
             Kind::App(m, n) => {
