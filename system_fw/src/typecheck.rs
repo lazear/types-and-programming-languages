@@ -227,7 +227,13 @@ impl Context {
                         dbg!(&self.stack);
                         dbg!(&self.kstack);
                         let d = Diagnostic::error(term.span, "type mismatch in application")
-                            .message(m.span, format!("abstraction {} requires type {}", m, ty11))
+                            .message(
+                                m.span,
+                                format!(
+                                    "abstraction {} requires type {} to return {}",
+                                    m, ty11, ty12
+                                ),
+                            )
                             .message(n.span, format!("term {} has a type of {}", n, ty2));
                         return Err(d);
                     }
@@ -257,7 +263,9 @@ impl Context {
                 Ok(Type::Universal(tk.clone(), Box::new(ty)))
             }
             Kind::TyApp(tyabs, applied) => {
-                match self.typecheck(&tyabs)? {
+                let mut ty = self.typecheck(&tyabs)?;
+                self.simplify_ty(&mut ty);
+                match ty {
                     Type::Universal(k1, u) => {
                         let k2 = self
                             .kinding(&applied)
