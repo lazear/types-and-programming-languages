@@ -16,6 +16,7 @@ pub enum TokenKind {
     True,
     False,
     Lambda,
+    Forall,
     Succ,
     Pred,
     If,

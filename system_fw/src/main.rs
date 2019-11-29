@@ -12,17 +12,55 @@ use util::span::Span;
 fn main() {
     println!("Hello, world!");
 
-    // pack {Nat, 10} as {∃X, X}
-    let tm = pack!(Type::Nat, nat!(10), exist!(kind!(*), Type::Var(0)));
-
     let ex_k = kind!(kind!(*) => kind!(* => *));
-    let pair = tyop!(kind!(*), tyop!(kind!(*), univ!(kind!(*), Type::Var(0))));
+    // let pair = tyop!(kind!(*), tyop!(kind!(*), univ!(kind!(*), Type::Var(0))));
+    let witness = tyop!(
+        kind!(*),
+        tyop!(
+            kind!(*),
+            univ!(
+                kind!(*),
+                arrow!(
+                    arrow!(Type::Var(2), arrow!(Type::Var(1), Type::Var(0))),
+                    Type::Var(0)
+                )
+            )
+        )
+    );
+
+    // PairSig = {Some Pair::*=>*=>*, {pair: All X. All Y. X->Y->(Pair X Y)}};
+    // pairadt = { *lambda X. lambda Y. All R. (X->Y->R)->R,
+    //              {pair = lambda X. lambda Y. lambda x:X. lambda y:Y. lambda R. lambda p: X->Y->R. p x y}} as PairSig;
+    //     (let {X,x} = pairadt as PairSig in x.pair)(lambda X.
+    //         lambda Y.
+    //           lambda x:X.
+    //             lambda y:Y.
+    //               lambda R.
+    //                 lambda p:
+    //                   X->
+    //                   Y->R.
+    //                   p x y)
+    // : All X. All Y. X -> Y -> X X Y
+    //
+    // with debruijn
+    // (let {X,x} = pairadt as 1 in x.pair)(lambda X.
+    //         lambda Y.
+    //         lambda x:1.
+    //           lambda y:1.
+    //             lambda R.
+    //               lambda p:4->3->0.
+    //                 p x y)
+    // : All X. All Y. 1 -> 0 -> 1 1 0
 
     let pair_adt = Term::new(
         terms::Kind::Record(terms::Record {
             fields: vec![Field {
                 span: Span::zero(),
                 label: "pair".to_string(),
+
+                // required type signature
+                // ∀X. ∀Y. X->Y->(Pair X Y)
+                //
                 expr: Box::new(tyabs!(
                     kind!(*),
                     tyabs!(
@@ -34,6 +72,8 @@ fn main() {
                                 tyabs!(
                                     kind!(*),
                                     abs!(
+                                        // op_app!(op_app!(witness.clone(), Type::Var(2)), Type::Var(1)),
+                                        // arrow!(Type::Var(2), Type::Var(1)),
                                         arrow!(Type::Var(2), arrow!(Type::Var(1), Type::Var(0))),
                                         app!(app!(var!(0), var!(2)), var!(1))
                                     )
@@ -47,96 +87,30 @@ fn main() {
         Span::zero(),
     );
 
-    let pair_sig = exist!(
+    let mut pair_sig = exist!(
         ex_k,
-        record!(
-            (
-                "pair",
-                univ!(univ!(arrow!(
-                    Type::Var(1),
-                    arrow!(
-                        Type::Var(0),
-                        op_app!(op_app!(Type::Var(2), Type::Var(1)), Type::Var(0))
-                    )
-                ))),
-                // Type::Universal(
-                //     Box::new(kind!(*)),
-                //     Box::new(Type::Universal(
-                //         Box::new(kind!(*)),
-                //         Box::new(arrow!(Type::Var(1), arrow!(Type::Var(2), pair_app.clone())))
-                //     ))
-                // )
-            ) // ("fst", univ!(kind::)
-              // ("snd", arrow!(pair_app.clone(), Type::Var(2)))
-        )
+        record!((
+            "pair",
+            // ∀X. ∀Y. X->Y->(Pair X Y)
+            // ∀X. ∀Y. 1->0->(2 1 0)
+            univ!(univ!(arrow!(
+                Type::Var(1),
+                arrow!(
+                    Type::Var(0),
+                    // witness.clone()
+                    op_app!(op_app!(Type::Var(2), Type::Var(1)), Type::Var(0))
+                )
+            ))),
+        ))
     );
 
-    let adt = pack!(pair, pair_adt, pair_sig);
-
-    // let pair_adt =
-    // pack!(Type::Abs(Box::new(Type::Abs(Box::new(Type::Univ(Box::new(
-    //     arrow!(Type::Var(2), arrow!(Type::Var(1), Type::Var(0)))
-    //         )))))),
-
-    // );
-
+    let adt = pack!(witness.clone(), pair_adt, pair_sig.clone());
     let mut ctx = typecheck::Context::default();
 
-    let t2 = tyabs!(
-        // X
-        kind!(*),
-        tyabs!(
-            // Y
-            kind!(*),
-            abs!(
-                // \x: X.
-                Type::Var(1),
-                abs!(
-                    // \y: Y.
-                    Type::Var(0),
-                    tyabs!(
-                        // R
-                        kind!(*),
-                        abs!(
-                            // \p: X->Y->R. p x y
-                            arrow!(Type::Var(2), arrow!(Type::Var(1), Type::Var(0))),
-                            app!(app!(var!(0), var!(2)), var!(1))
-                        )
-                    )
-                )
-            )
-        )
-    );
-    // let t2 =
-    // tyabs!( // X
-    //     kind!(*),
-    //     tyabs!( // Y
-    //         kind!(*),
-    //         abs!(   // \x: X.
-    //             Type::Var(1),
-    //             abs!(   // \y: Y.
-    //                 Type::Var(0),
+    let tt = op_app!(witness.clone(), Type::Nat);
+    let mut ts = op_app!(tt, Type::Bool);
 
-    //                     abs!(   // \p: X->Y->R. p x y
-    //                         arrow!(Type::Var(1), arrow!(Type::Var(0), Type::Nat)),
-    //                         app!(app!(var!(0), var!(2)), var!(1))
-    //                     )
-
-    //             )
-    //         )
-    //     )
-    // );
-
-    let t2 = abs!(
-        Type::Nat,
-        tyabs!(
-            kind!(*),
-            abs!(arrow!(Type::Nat, Type::Var(0)), app!(var!(0), var!(1)))
-        )
-    );
-    let t2 = tyapp!(app!(t2, nat!(10)), Type::Bool);
-    println!("{}", &t2);
-    // let t3 = tyapp!(t2, Type::Unit);
-    // let t4 = tyapp!(t3, Type::Bool);
-    dbg!(ctx.typecheck(&t2).unwrap());
+    ctx.simplify_ty(&mut ts);
+    println!("{}", ts);
+    dbg!(ctx.typecheck(&adt).unwrap());
 }

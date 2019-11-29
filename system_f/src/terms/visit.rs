@@ -86,7 +86,10 @@ impl MutTermVisitor for Subst {
     fn visit(&mut self, term: &mut Term) {
         let sp = &mut term.span;
         match &mut term.kind {
-            Kind::Var(v) if *v == self.cutoff => *term = self.term.clone(),
+            Kind::Var(v) if *v == self.cutoff => {
+                Shift::new(self.cutoff as isize).visit(&mut self.term);
+                *term = self.term.clone();
+            }
             _ => self.walk(term),
         }
     }

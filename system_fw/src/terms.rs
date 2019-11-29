@@ -97,12 +97,12 @@ impl fmt::Display for Term {
             Kind::Unpack(m, n) => write!(f, "unpack {} as {}", m, n),
             Kind::Record(rec) => write!(
                 f,
-                "{{{}}}",
+                "{{\n{}\n}}",
                 rec.fields
                     .iter()
-                    .map(|fi| format!("{}: {}", fi.label, fi.expr))
+                    .map(|fi| format!("\t{}: {}", fi.label, fi.expr))
                     .collect::<Vec<_>>()
-                    .join(",")
+                    .join(",\n")
             ),
         }
     }

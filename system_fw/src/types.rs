@@ -1,3 +1,6 @@
+use std::convert::TryFrom;
+use std::fmt;
+
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum Type {
     Unit,
@@ -32,8 +35,6 @@ impl Type {
     }
 }
 
-use std::fmt;
-
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
@@ -48,12 +49,12 @@ impl fmt::Display for Type {
             Type::Existential(k, ty) => write!(f, "{{∃X::{}, {}}}", k, ty),
             Type::Record(fields) => write!(
                 f,
-                "{{{}}}",
+                "{{\n{}\n}}",
                 fields
                     .iter()
-                    .map(|fi| format!("{}: {}", fi.label, fi.ty))
+                    .map(|fi| format!("\t{}: {}", fi.label, fi.ty))
                     .collect::<Vec<_>>()
-                    .join(",")
+                    .join(",\n")
             ),
         }
     }
@@ -131,7 +132,8 @@ impl Shift {
 impl MutTypeVisitor for Shift {
     fn visit_var(&mut self, var: &mut usize) {
         if *var >= self.cutoff {
-            *var = (*var as isize + self.shift) as usize;
+            *var = usize::try_from(*var as isize + self.shift)
+                .expect("Type variable has been shifted below 0! Fatal bug");
         }
     }
 
@@ -186,7 +188,8 @@ impl MutTypeVisitor for Subst {
 
     fn visit(&mut self, ty: &mut Type) {
         match ty {
-            Type::Var(v) if *v >= self.cutoff => {
+            Type::Var(v) if *v == self.cutoff => {
+                Shift::new(self.cutoff as isize).visit(&mut self.ty);
                 *ty = self.ty.clone();
             }
 
@@ -195,8 +198,8 @@ impl MutTypeVisitor for Subst {
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(k, ty) => self.visit_universal(k, ty),
             Type::Existential(k, ty) => self.visit_existential(k, ty),
-            Type::Abs(s, t) => self.visit_abs(s, t),
-            Type::App(k, t) => self.visit_app(k, t),
+            Type::Abs(k, ty) => self.visit_abs(k, ty),
+            Type::App(m, n) => self.visit_app(m, n),
         }
     }
 }

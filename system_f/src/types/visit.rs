@@ -62,6 +62,7 @@ impl MutTypeVisitor for Subst {
         match ty {
             Type::Unit | Type::Bool | Type::Nat => {}
             Type::Var(v) if *v >= self.cutoff => {
+                Shift::new(self.cutoff as isize).visit(&mut self.ty);
                 *ty = self.ty.clone();
             }
             Type::Var(v) => self.visit_var(v),

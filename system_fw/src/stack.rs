@@ -40,6 +40,19 @@ impl<T> Stack<T> {
     pub fn new() -> Self {
         Stack { inner: Vec::new() }
     }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<T> {
+        self.inner.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<T> {
+        self.inner.iter_mut()
+    }
 }
 
 impl<T> Extend<T> for Stack<T> {

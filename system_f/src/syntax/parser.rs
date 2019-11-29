@@ -197,6 +197,10 @@ impl<'s> Parser<'s> {
                 self.expect(TokenKind::RParen)?;
                 Ok(r)
             }
+            TokenKind::Forall => {
+                self.bump();
+                Ok(Type::Universal(Box::new(self.ty()?)))
+            }
             TokenKind::Uppercase(_) => {
                 let ty = self.uppercase_id()?;
                 match self.tyvar.lookup(&ty) {

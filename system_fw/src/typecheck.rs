@@ -20,11 +20,63 @@ impl Default for Context {
 }
 
 #[derive(Debug, PartialEq)]
-enum KindError {
+pub enum KindError {
     Mismatch(TyKind, TyKind),
     NotArrow(TyKind),
-    NotStar(TyKind),
     Unbound(usize),
+}
+
+struct TypeSimplifier<'a> {
+    ctx: &'a mut Context,
+}
+
+impl<'a> TypeSimplifier<'a> {}
+
+impl<'a> MutTypeVisitor for TypeSimplifier<'a> {
+    fn visit_universal(&mut self, kind: &mut TyKind, ty: &mut Type) {
+        self.ctx.kstack.push(kind.clone());
+        self.visit(ty);
+        self.ctx.kstack.pop();
+    }
+
+    fn visit_existential(&mut self, kind: &mut TyKind, ty: &mut Type) {
+        self.ctx.kstack.push(kind.clone());
+        self.visit(ty);
+        self.ctx.kstack.pop();
+    }
+
+    fn visit_abs(&mut self, kind: &mut TyKind, ty: &mut Type) {
+        self.ctx.kstack.push(kind.clone());
+        self.visit(ty);
+        self.ctx.kstack.pop();
+    }
+    fn visit(&mut self, ty: &mut Type) {
+        // println!("stack {:?}, ty: {}", self.ctx.kstack, ty);
+        match ty {
+            Type::Var(_) | Type::Unit | Type::Bool | Type::Nat => {}
+            Type::Record(fields) => self.visit_record(fields),
+            Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
+            Type::Universal(k, ty) => self.visit_universal(k, ty),
+            Type::Existential(k, ty) => self.visit_existential(k, ty),
+            Type::Abs(s, t) => self.visit_abs(s, t),
+            Type::App(m, n) => {
+                self.visit(m);
+                self.visit(n);
+                // println!("{:?}", self.ctx.kstack);
+                // print!("-- typesubst {} {}", m, n);
+                if let Type::Abs(k, t) = m.as_mut() {
+                    if let Ok(n_kind) = self.ctx.kinding(&n) {
+                        if k.as_ref() == &n_kind {
+                            t.subst(*n.clone());
+                            *ty = *t.clone();
+                        }
+                    } else {
+                        panic!("visiting failed {}", ty)
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl KindError {
@@ -44,13 +96,6 @@ impl KindError {
                     k
                 ),
             ),
-            KindError::NotStar(k) => Diagnostic::error(
-                span,
-                format!(
-                    "a type of kind * was required, but a type of kind {:?} was supplied",
-                    k
-                ),
-            ),
             KindError::Unbound(idx) => Diagnostic::error(
                 span,
                 format!("unbound type variable with de Bruijn index {}", idx),
@@ -60,7 +105,8 @@ impl KindError {
 }
 
 impl Context {
-    fn kinding(&mut self, ty: &Type) -> Result<TyKind, KindError> {
+    pub fn kinding(&mut self, ty: &Type) -> Result<TyKind, KindError> {
+        // println!("stack {:?}, ty: {}", self.kstack, ty);
         match ty {
             Type::Var(idx) => self
                 .kstack
@@ -109,7 +155,35 @@ impl Context {
                     k => Err(KindError::Mismatch(TyKind::Star, k)),
                 }
             }
+            Type::Record(fields) => {
+                for f in fields {
+                    let k = self.kinding(&f.ty)?;
+                    if k != TyKind::Star {
+                        return Err(KindError::Mismatch(TyKind::Star, k));
+                    }
+                }
+                Ok(TyKind::Star)
+            }
             _ => Ok(TyKind::Star),
+        }
+    }
+
+    pub fn simplify_ty(&mut self, ty: &mut Type) {
+        TypeSimplifier { ctx: self }.visit(ty);
+    }
+
+    pub fn equiv(&mut self, lhs: &Type, rhs: &Type) -> bool {
+        if lhs == rhs {
+            true
+        } else {
+            let mut lhs_ = lhs.clone();
+            let mut rhs_ = rhs.clone();
+            self.simplify_ty(&mut lhs_);
+            self.simplify_ty(&mut rhs_);
+            println!("simplied rhs: {}", &rhs_);
+            lhs_ == rhs_
+
+            // false
         }
     }
 
@@ -145,20 +219,16 @@ impl Context {
             Kind::Abs(ty, tm) => {
                 self.is_star_kind(ty, term.span)?;
                 self.stack.push(*ty.clone());
-                let mut ty2 = self.typecheck(&tm)?;
+                let ty2 = self.typecheck(&tm)?;
                 self.stack.pop();
-
-                // dbg!(&ty2);
-                // Shift::new(-1).visit(&mut ty2);
-                // dbg!(&ty2);
-
                 Ok(Type::Arrow(ty.clone(), Box::new(ty2)))
             }
             Kind::App(m, n) => {
-                let ty = self.typecheck(&m)?;
+                let mut ty = self.typecheck(&m)?;
+                self.simplify_ty(&mut ty);
                 if let Type::Arrow(ty11, ty12) = ty {
                     let ty2 = self.typecheck(&n)?;
-                    if *ty11 == ty2 {
+                    if self.equiv(&ty11, &ty2) {
                         Ok(*ty12)
                     } else {
                         dbg!(&self.stack);
@@ -169,14 +239,27 @@ impl Context {
                         return Err(d);
                     }
                 } else {
-                    let d = Diagnostic::error(term.span, "type mismatch in application")
-                        .message(m.span, format!("this term has a type {}, not T->U", ty));
+                    // dbg!(&self.stack);
+                    dbg!(&m);
+                    dbg!(&ty);
+                    let d = Diagnostic::error(term.span, "type mismatch in application").message(
+                        m.span,
+                        format!("this term {} has a type {}, not T->U", m, ty),
+                    );
                     return Err(d);
                 }
             }
             Kind::TyAbs(tk, polymorphic) => {
                 self.kstack.push(*tk.clone());
+                self.stack.iter_mut().for_each(|ty| match ty {
+                    Type::Var(v) => *v += 1,
+                    _ => {}
+                });
                 let ty = self.typecheck(&polymorphic)?;
+                self.stack.iter_mut().for_each(|ty| match ty {
+                    Type::Var(v) => *v -= 1,
+                    _ => {}
+                });
                 self.kstack.pop();
                 Ok(Type::Universal(tk.clone(), Box::new(ty)))
             }
@@ -236,51 +319,43 @@ impl Context {
                         "existential type definition does not have a kind of *"
                     );
                 }
-                match sig.as_ref() {
+
+                let mut sig = sig.clone();
+                // println!("pre: {}", sig);
+                // self.simplify_ty(&mut sig);
+                // println!("post: {}", sig);
+                match sig.as_mut() {
                     Type::Existential(kind, t2) => {
                         let witness_kind = self
                             .kinding(&witness)
                             .map_err(|k| KindError::to_diag(k, term.span))?;
 
                         if &witness_kind != kind.as_ref() {
-                            return diag!(term.span, "existential type requires a type of kind {:?}, but implementation type has a kind of {:?}", kind, witness_kind);
+                            return diag!(term.span, "existential type requires a type of kind {}, but implementation type has a kind of {}", kind, witness_kind);
                         }
 
                         let ty_packed = self.typecheck(packed)?;
                         let mut ty_packed_prime = *t2.clone();
+                        println!("ty_packed_prime {}, witness {}", ty_packed_prime, witness);
                         ty_packed_prime.subst(*witness.clone());
-
+                        println!("ty_packed_prime {}", ty_packed_prime);
+                        // self.simplify_ty(&mut ty_packed_prime);
                         // Pierce's code has kind checking before type-substitution,
                         // does this matter? He also directly kind-checks the
                         // witness type against kind
 
-                        if ty_packed == ty_packed_prime {
-                            // let kind_prime = self
-                            //     .kinding(&ty_packed_prime)
-                            //     .map_err(|k| KindError::to_diag(k, term.span))?;
-
-                            // if kind_prime != TyKind::Star {
-                            //     return diag!(
-                            //         term.span,
-                            //         "existential type definition does not have a kind of *!"
-                            //     );
-                            // }
-
-                            // if &kind_prime != kind.as_ref() {
-                            //      return diag!(term.span, "existential type requires a type of kind {:?}, but implementation type has a kind of {:?}", kind, kind_prime);
-                            // }
-
+                        if self.equiv(&ty_packed, &ty_packed_prime) {
                             Ok(*sig.clone())
                         } else {
                             Err(Diagnostic::error(
                                 term.span,
                                 "type mismatch in existential package",
                             )
-                            .message(packed.span, format!("term has a type of {:?}", ty_packed))
+                            .message(packed.span, format!("term has a type of {}", ty_packed))
                             .message(
                                 term.span,
                                 format!(
-                                    "but the existential package type is defined as {:?}",
+                                    "but the existential package type is defined as {}",
                                     ty_packed_prime,
                                 ),
                             ))
@@ -290,7 +365,7 @@ impl Context {
                 }
             }
 
-            Kind::Unpack(_, _) => diag!(term.span, "unknwon term {}", 10), // _ => Err(Diagnostic::error(term.span, "unknown term")),
+            Kind::Unpack(_, _) => diag!(term.span, "unknwon term {}", 10),
         }
     }
 }
@@ -306,6 +381,10 @@ mod test {
         // Instantiations of polymorphic identity function ∀X. X->X
         let inst1 = tyapp!(id.clone(), Type::Nat);
         let inst2 = tyapp!(id.clone(), arrow!(Type::Unit, Type::Nat));
+        let inst3 = tyapp!(
+            id.clone(),
+            univ!(kind!(*), arrow!(Type::Var(0), Type::Var(0)))
+        );
 
         let mut ctx = Context::default();
         // ΛX. λx: X. x  should typecheck to ∀X. X->X
@@ -320,7 +399,14 @@ mod test {
                 arrow!(Type::Unit, Type::Nat),
                 arrow!(Type::Unit, Type::Nat)
             ))
-        )
+        );
+        assert_eq!(
+            ctx.typecheck(&inst3),
+            Ok(arrow!(
+                univ!(kind!(*), arrow!(Type::Var(0), Type::Var(0))),
+                univ!(kind!(*), arrow!(Type::Var(0), Type::Var(0)))
+            ))
+        );
     }
 
     #[test]
@@ -366,5 +452,30 @@ mod test {
 
         let pair = tyop!(kind!(*), tyop!(kind!(*), univ!(kind!(*), Type::Var(0))));
         assert_eq!(ctx.kinding(&pair), Ok(kind!(kind!(*) => kind!(* => *))));
+    }
+
+    #[test]
+    fn ty_equivalence() {
+        let ty1 = op_app!(tyop!(kind!(*), Type::Var(0)), Type::Nat);
+        let ty2 = Type::Nat;
+        let mut ctx = Context::default();
+        assert!(ctx.equiv(&ty1, &ty2), "{:?}", ty1);
+    }
+
+    #[test]
+    fn ty_simplification() {
+        // ∀X. ∀Y. X->Y->(Pair X Y)
+        let ty = univ!(univ!(arrow!(
+            Type::Var(1),
+            arrow!(
+                Type::Var(0),
+                op_app!(op_app!(Type::Var(2), Type::Var(1)), Type::Var(0))
+            )
+        )));
+
+        let ty_ = univ!(univ!(arrow!(
+            Type::Var(1),
+            arrow!(Type::Var(0), Type::Var(0))
+        )));
     }
 }
