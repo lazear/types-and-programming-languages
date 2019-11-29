@@ -51,7 +51,6 @@ impl<'a> MutTypeVisitor for TypeSimplifier<'a> {
         self.ctx.kstack.pop();
     }
     fn visit(&mut self, ty: &mut Type) {
-        // println!("stack {:?}, ty: {}", self.ctx.kstack, ty);
         match ty {
             Type::Var(_) | Type::Unit | Type::Bool | Type::Nat => {}
             Type::Record(fields) => self.visit_record(fields),
@@ -62,8 +61,6 @@ impl<'a> MutTypeVisitor for TypeSimplifier<'a> {
             Type::App(m, n) => {
                 self.visit(m);
                 self.visit(n);
-                // println!("{:?}", self.ctx.kstack);
-                // print!("-- typesubst {} {}", m, n);
                 if let Type::Abs(k, t) = m.as_mut() {
                     if let Ok(n_kind) = self.ctx.kinding(&n) {
                         if k.as_ref() == &n_kind {
@@ -106,7 +103,6 @@ impl KindError {
 
 impl Context {
     pub fn kinding(&mut self, ty: &Type) -> Result<TyKind, KindError> {
-        // println!("stack {:?}, ty: {}", self.kstack, ty);
         match ty {
             Type::Var(idx) => self
                 .kstack
@@ -180,10 +176,7 @@ impl Context {
             let mut rhs_ = rhs.clone();
             self.simplify_ty(&mut lhs_);
             self.simplify_ty(&mut rhs_);
-            println!("simplied rhs: {}", &rhs_);
             lhs_ == rhs_
-
-            // false
         }
     }
 
@@ -321,9 +314,7 @@ impl Context {
                 }
 
                 let mut sig = sig.clone();
-                // println!("pre: {}", sig);
-                // self.simplify_ty(&mut sig);
-                // println!("post: {}", sig);
+                self.simplify_ty(&mut sig);
                 match sig.as_mut() {
                     Type::Existential(kind, t2) => {
                         let witness_kind = self
@@ -336,10 +327,8 @@ impl Context {
 
                         let ty_packed = self.typecheck(packed)?;
                         let mut ty_packed_prime = *t2.clone();
-                        println!("ty_packed_prime {}, witness {}", ty_packed_prime, witness);
                         ty_packed_prime.subst(*witness.clone());
-                        println!("ty_packed_prime {}", ty_packed_prime);
-                        // self.simplify_ty(&mut ty_packed_prime);
+
                         // Pierce's code has kind checking before type-substitution,
                         // does this matter? He also directly kind-checks the
                         // witness type against kind
