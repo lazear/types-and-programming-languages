@@ -9,6 +9,29 @@ use terms::{Field, Kind, Record, Term};
 use types::{TyKind, Type};
 use util::span::Span;
 
+fn object_type() -> Type {
+    tyop!(
+        kind!(* => *),
+        exist!(
+            kind!(*),
+            record!(
+                ("state", Type::Var(0)),
+                ("methods", op_app!(Type::Var(1), Type::Var(0)))
+            )
+        )
+    )
+}
+
+fn counter_interface() -> Type {
+    tyop!(
+        kind!(*),
+        record!(
+            ("get", arrow!(Type::Var(0), Type::Nat)),
+            ("inc", arrow!(Type::Var(0), Type::Var(0)))
+        )
+    )
+}
+
 fn main() {
     let ex_k = kind!(kind!(*) => kind!(* => *));
     let witness = tyop!(
@@ -61,7 +84,6 @@ fn main() {
                     label: "pair".to_string(),
                     // required type signature
                     // ∀X. ∀Y. X->Y->(Pair X Y)
-                    //
                     expr: Box::new(tyabs!(
                         kind!(*),
                         tyabs!(
@@ -137,4 +159,18 @@ fn main() {
     let adt = pack!(witness.clone(), pair_adt, pair_sig.clone());
     let mut ctx = typecheck::Context::default();
     println!("{}", ctx.typecheck(&adt).unwrap());
+
+    println!(
+        "object type operator :: {}",
+        ctx.kinding(&object_type()).unwrap()
+    );
+    println!(
+        "counter interface :: {}",
+        ctx.kinding(&counter_interface()).unwrap()
+    );
+
+    let mut counter = op_app!(object_type(), counter_interface());
+    ctx.simplify_ty(&mut counter).unwrap();
+    // ctx.simplify_ty(&mut counter);
+    println!("{}", counter);
 }

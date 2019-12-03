@@ -64,7 +64,13 @@ impl fmt::Display for TyKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self {
             TyKind::Star => write!(f, "*"),
-            TyKind::Arrow(k1, k2) => write!(f, "{}->{}", k1, k2),
+            TyKind::Arrow(k1, k2) => match k2.as_ref() {
+                TyKind::Star => match k1.as_ref() {
+                    TyKind::Star => write!(f, "{}->{}", k1, k2),
+                    TyKind::Arrow(k11, k12) => write!(f, "({}->{})->{}", k11, k12, k2),
+                },
+                TyKind::Arrow(_, _) => write!(f, "{}->({})", k1, k2),
+            },
         }
     }
 }

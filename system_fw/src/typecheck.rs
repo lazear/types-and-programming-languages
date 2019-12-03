@@ -28,6 +28,7 @@ pub enum KindError {
 
 struct TypeSimplifier<'a> {
     ctx: &'a mut Context,
+    res: Result<bool, KindError>,
 }
 
 impl<'a> TypeSimplifier<'a> {}
@@ -62,13 +63,17 @@ impl<'a> MutTypeVisitor for TypeSimplifier<'a> {
                 self.visit(m);
                 self.visit(n);
                 if let Type::Abs(k, t) = m.as_mut() {
-                    if let Ok(n_kind) = self.ctx.kinding(&n) {
-                        if k.as_ref() == &n_kind {
-                            t.subst(*n.clone());
-                            *ty = *t.clone();
+                    match self.ctx.kinding(&n) {
+                        Ok(n_kind) => {
+                            if k.as_ref() == &n_kind {
+                                t.subst(*n.clone());
+                                *ty = *t.clone();
+                                self.res = Ok(true);
+                            } else {
+                                self.res = Err(KindError::Mismatch(*k.clone(), n_kind))
+                            }
                         }
-                    } else {
-                        panic!("visiting failed {}", ty)
+                        Err(e) => self.res = Err(e),
                     }
                 }
             }
@@ -164,19 +169,32 @@ impl Context {
         }
     }
 
-    pub fn simplify_ty(&mut self, ty: &mut Type) {
-        TypeSimplifier { ctx: self }.visit(ty);
+    pub fn simplify_ty(&mut self, ty: &mut Type) -> Result<bool, KindError> {
+        let mut ts = TypeSimplifier {
+            ctx: self,
+            res: Ok(false),
+        };
+        let mut work = false;
+        loop {
+            ts.res = Ok(false);
+            ts.visit(ty);
+            match ts.res {
+                Ok(false) => return Ok(work),
+                Ok(true) => work = true,
+                Err(e) => return Err(e),
+            }
+        }
     }
 
-    pub fn equiv(&mut self, lhs: &Type, rhs: &Type) -> bool {
+    pub fn equiv(&mut self, lhs: &Type, rhs: &Type) -> Result<bool, KindError> {
         if lhs == rhs {
-            true
+            Ok(true)
         } else {
             let mut lhs_ = lhs.clone();
             let mut rhs_ = rhs.clone();
-            self.simplify_ty(&mut lhs_);
-            self.simplify_ty(&mut rhs_);
-            lhs_ == rhs_
+            self.simplify_ty(&mut lhs_)?;
+            self.simplify_ty(&mut rhs_)?;
+            Ok(lhs_ == rhs_)
         }
     }
 
@@ -218,10 +236,14 @@ impl Context {
             }
             Kind::App(m, n) => {
                 let mut ty = self.typecheck(&m)?;
-                self.simplify_ty(&mut ty);
+                self.simplify_ty(&mut ty)
+                    .map_err(|ke| ke.to_diag(term.span))?;
                 if let Type::Arrow(ty11, ty12) = ty {
                     let ty2 = self.typecheck(&n)?;
-                    if self.equiv(&ty11, &ty2) {
+                    if self
+                        .equiv(&ty11, &ty2)
+                        .map_err(|ke| ke.to_diag(term.span))?
+                    {
                         Ok(*ty12)
                     } else {
                         dbg!(&self.stack);
@@ -264,7 +286,8 @@ impl Context {
             }
             Kind::TyApp(tyabs, applied) => {
                 let mut ty = self.typecheck(&tyabs)?;
-                self.simplify_ty(&mut ty);
+                self.simplify_ty(&mut ty)
+                    .map_err(|ke| ke.to_diag(term.span))?;
                 match ty {
                     Type::Universal(k1, u) => {
                         let k2 = self
@@ -322,7 +345,8 @@ impl Context {
                 }
 
                 let mut sig = sig.clone();
-                self.simplify_ty(&mut sig);
+                self.simplify_ty(&mut sig)
+                    .map_err(|ke| ke.to_diag(term.span))?;
                 match sig.as_mut() {
                     Type::Existential(kind, t2) => {
                         let witness_kind = self
@@ -341,7 +365,10 @@ impl Context {
                         // does this matter? He also directly kind-checks the
                         // witness type against kind
 
-                        if self.equiv(&ty_packed, &ty_packed_prime) {
+                        if self
+                            .equiv(&ty_packed, &ty_packed_prime)
+                            .map_err(|ke| ke.to_diag(term.span))?
+                        {
                             Ok(*sig.clone())
                         } else {
                             Err(Diagnostic::error(
@@ -456,23 +483,6 @@ mod test {
         let ty1 = op_app!(tyop!(kind!(*), Type::Var(0)), Type::Nat);
         let ty2 = Type::Nat;
         let mut ctx = Context::default();
-        assert!(ctx.equiv(&ty1, &ty2), "{:?}", ty1);
-    }
-
-    #[test]
-    fn ty_simplification() {
-        // ∀X. ∀Y. X->Y->(Pair X Y)
-        let ty = univ!(univ!(arrow!(
-            Type::Var(1),
-            arrow!(
-                Type::Var(0),
-                op_app!(op_app!(Type::Var(2), Type::Var(1)), Type::Var(0))
-            )
-        )));
-
-        let ty_ = univ!(univ!(arrow!(
-            Type::Var(1),
-            arrow!(Type::Var(0), Type::Var(0))
-        )));
+        assert_eq!(ctx.equiv(&ty1, &ty2), Ok(true), "{:?}", ty1);
     }
 }
