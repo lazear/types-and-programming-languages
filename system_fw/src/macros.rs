@@ -93,6 +93,15 @@ macro_rules! unpack {
     };
 }
 
+macro_rules! access {
+    ($t1:expr, $t2:expr) => {
+        crate::terms::Term::new(
+            crate::terms::Kind::Index(Box::new($t1), $t2.into()),
+            util::span::Span::dummy(),
+        )
+    };
+}
+
 macro_rules! exist {
     ($k:expr, $ty:expr) => {
         crate::types::Type::Existential(Box::new($k), Box::new($ty))

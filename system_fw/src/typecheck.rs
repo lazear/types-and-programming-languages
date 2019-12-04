@@ -329,6 +329,27 @@ impl Context {
                 Ok(Type::Record(tys))
             }
 
+            Kind::Index(tm, field) => {
+                let ty = self.typecheck(tm)?;
+                match ty {
+                    Type::Record(fields) => {
+                        for f in fields {
+                            if &f.label == field {
+                                return Ok(*f.ty);
+                            }
+                        }
+                        Err(
+                            Diagnostic::error(term.span, "invalid field access").message(
+                                tm.span,
+                                format!("term does not have a label named {}", field),
+                            ),
+                        )
+                    }
+                    _ => Err(Diagnostic::error(term.span, "invalid field access")
+                        .message(tm.span, format!("term has a type of {}, not Record", ty))),
+                }
+            }
+
             Kind::Pack(witness, packed, sig) => {
                 // where sig =  {∃X, T2}
                 // Γ⊢ packed : [ X -> witness ] T2 and Γ⊢  {∃X, T2} :: *
@@ -389,7 +410,25 @@ impl Context {
                 }
             }
 
-            Kind::Unpack(_, _) => diag!(term.span, "unknwon term {}", 10),
+            Kind::Unpack(packed, body) => {
+                let ty = self.typecheck(packed)?;
+                match ty {
+                    Type::Existential(kind, sig) => {
+                        self.kstack.push(*kind);
+                        self.stack.push(*sig);
+                        let body_ty = self.typecheck(body)?;
+                        self.stack.pop();
+                        self.kstack.pop();
+                        Ok(body_ty)
+                    }
+                    _ => Err(
+                        Diagnostic::error(term.span, "type mismatch during unpack").message(
+                            packed.span,
+                            format!("term has a type of {}, not {{∃X::K, T}}", ty),
+                        ),
+                    ),
+                }
+            }
         }
     }
 }
@@ -462,10 +501,16 @@ mod test {
         let counter = pack!(Type::Nat, adt, interface_ty.clone());
         let mut ctx = Context::default();
         assert_eq!(ctx.typecheck(&counter), Ok(interface_ty));
+
+        let unpacked = unpack!(
+            counter,
+            app!(access!(var!(0), "get"), access!(var!(0), "new"))
+        );
+        assert_eq!(ctx.typecheck(&unpacked), Ok(Type::Nat));
     }
 
     #[test]
-    fn type_type_abs() {
+    fn ty_abs() {
         let ty = tyop!(kind!(*), Type::Var(0));
         let mut ctx = Context::default();
         assert_eq!(ctx.kinding(&ty), Ok(kind!(* => *)));
@@ -484,5 +529,35 @@ mod test {
         let ty2 = Type::Nat;
         let mut ctx = Context::default();
         assert_eq!(ctx.equiv(&ty1, &ty2), Ok(true), "{:?}", ty1);
+    }
+
+    #[test]
+    fn ty_record() {
+        let adt = Term::new(
+            Kind::Record(Record {
+                fields: vec![
+                    Field {
+                        span: Span::zero(),
+                        label: "new".to_string(),
+                        expr: Box::new(nat!(0)),
+                    },
+                    Field {
+                        span: Span::zero(),
+                        label: "get".to_string(),
+                        expr: Box::new(abs!(Type::Nat, var!(0))),
+                    },
+                ],
+            }),
+            Span::zero(),
+        );
+
+        let mut ctx = Context::default();
+        let rty = record!(("new", Type::Nat), ("get", arrow!(Type::Nat, Type::Nat)));
+        assert_eq!(ctx.typecheck(&adt), Ok(rty));
+
+        let t1 = access!(adt.clone(), "new");
+        let t2 = access!(adt.clone(), "get");
+        assert_eq!(ctx.typecheck(&t1), Ok(Type::Nat));
+        assert_eq!(ctx.typecheck(&t2), Ok(arrow!(Type::Nat, Type::Nat)));
     }
 }

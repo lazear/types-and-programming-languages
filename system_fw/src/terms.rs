@@ -35,6 +35,9 @@ pub enum Kind {
     /// {label1 = Tm1, label2 = Tm2, etc}
     /// Invariant that all fields have unique labels
     Record(Record),
+
+    Index(Box<Term>, String),
+
     /// Introduce an existential type
     /// { *Ty1, Term } as {∃X.Ty}
     /// essentially, concrete representation as interface
@@ -104,6 +107,7 @@ impl fmt::Display for Term {
                     .collect::<Vec<_>>()
                     .join(",\n")
             ),
+            Kind::Index(t1, t2) => write!(f, "{}.{}", t1, t2),
         }
     }
 }
