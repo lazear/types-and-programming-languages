@@ -53,12 +53,6 @@ impl<'a> MutTypeVisitor for TypeSimplifier<'a> {
     }
     fn visit(&mut self, ty: &mut Type) {
         match ty {
-            Type::Var(_) | Type::Unit | Type::Bool | Type::Nat => {}
-            Type::Record(fields) => self.visit_record(fields),
-            Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
-            Type::Universal(k, ty) => self.visit_universal(k, ty),
-            Type::Existential(k, ty) => self.visit_existential(k, ty),
-            Type::Abs(s, t) => self.visit_abs(s, t),
             Type::App(m, n) => {
                 self.visit(m);
                 self.visit(n);
@@ -77,6 +71,7 @@ impl<'a> MutTypeVisitor for TypeSimplifier<'a> {
                     }
                 }
             }
+            _ => self.walk(ty),
         }
     }
 }
@@ -156,7 +151,7 @@ impl Context {
                     k => Err(KindError::Mismatch(TyKind::Star, k)),
                 }
             }
-            Type::Record(fields) => {
+            Type::Record(fields) | Type::Sum(fields) => {
                 for f in fields {
                     let k = self.kinding(&f.ty)?;
                     if k != TyKind::Star {
@@ -164,6 +159,28 @@ impl Context {
                     }
                 }
                 Ok(TyKind::Star)
+            }
+            Type::Product(tys) => {
+                for ty in tys {
+                    let k = self.kinding(&ty)?;
+                    if k != TyKind::Star {
+                        return Err(KindError::Mismatch(TyKind::Star, k));
+                    }
+                }
+                Ok(TyKind::Star)
+            }
+            Type::Recursive(inner) => {
+                let k = self.kinding(inner)?;
+                match k {
+                    TyKind::Arrow(k1, k2) => {
+                        if &k1 == &k2 {
+                            Ok(*k1)
+                        } else {
+                            Err(KindError::Mismatch(*k1, *k2))
+                        }
+                    }
+                    _ => Err(KindError::NotArrow(k)),
+                }
             }
             _ => Ok(TyKind::Star),
         }

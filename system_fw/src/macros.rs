@@ -138,6 +138,18 @@ macro_rules! record {
     }
 }
 
+macro_rules! sum {
+    ($($name:expr),+) => {
+        crate::types::Type::Sum(vec![$(field!($name.0, $name.1)),+])
+    }
+}
+
+macro_rules! product {
+    ($($name:expr),+) => {
+        crate::types::Type::Product(vec![$($name),+])
+    }
+}
+
 macro_rules! tyop {
     ($k:expr, $ty:expr) => {
         crate::types::Type::Abs(Box::new($k), Box::new($ty))

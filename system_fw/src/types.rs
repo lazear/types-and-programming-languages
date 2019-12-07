@@ -8,11 +8,14 @@ pub enum Type {
     Bool,
     Var(usize),
     Record(Vec<TyField>),
+    Product(Vec<Type>),
     Arrow(Box<Type>, Box<Type>),
     Universal(Box<TyKind>, Box<Type>),
     Existential(Box<TyKind>, Box<Type>),
     Abs(Box<TyKind>, Box<Type>),
     App(Box<Type>, Box<Type>),
+    Recursive(Box<Type>),
+    Sum(Vec<TyField>),
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -56,6 +59,24 @@ impl fmt::Display for Type {
                     .collect::<Vec<_>>()
                     .join(",\n")
             ),
+            Type::Product(tys) => write!(
+                f,
+                "({})",
+                tys.iter()
+                    .map(|ty| ty.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+            Type::Sum(fields) => write!(
+                f,
+                "{}",
+                fields
+                    .iter()
+                    .map(|fi| format!("{} {}", fi.label, fi.ty))
+                    .collect::<Vec<_>>()
+                    .join("|")
+            ),
+            Type::Recursive(inner) => write!(f, "rec {}", inner),
         }
     }
 }
@@ -106,6 +127,16 @@ pub trait MutTypeVisitor: Sized {
         }
     }
 
+    fn visit_product(&mut self, tys: &mut [Type]) {
+        for ty in tys {
+            self.visit(ty);
+        }
+    }
+
+    fn visit_recursive(&mut self, ty: &mut Type) {
+        self.visit(ty);
+    }
+
     fn visit(&mut self, ty: &mut Type) {
         self.walk(ty);
     }
@@ -115,6 +146,9 @@ pub trait MutTypeVisitor: Sized {
             Type::Unit | Type::Bool | Type::Nat => {}
             Type::Var(v) => self.visit_var(v),
             Type::Record(fields) => self.visit_record(fields),
+            Type::Product(tys) => self.visit_product(tys),
+            Type::Sum(variants) => self.visit_record(variants),
+            Type::Recursive(ty1) => self.visit_recursive(ty1),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(k, ty) => self.visit_universal(k, ty),
             Type::Existential(k, ty) => self.visit_existential(k, ty),
@@ -160,6 +194,12 @@ impl MutTypeVisitor for Shift {
         self.visit(ty);
         self.cutoff -= 1;
     }
+
+    // fn visit_recursive(&mut self, ty: &mut Type) {
+    //     self.cutoff += 1;
+    //     self.visit(ty);
+    //     self.cutoff -= 1;
+    // }
 }
 
 pub struct Subst {
@@ -192,20 +232,19 @@ impl MutTypeVisitor for Subst {
         self.cutoff -= 1;
     }
 
+    // fn visit_recursive(&mut self, ty: &mut Type) {
+    //     self.cutoff += 1;
+    //     self.visit(ty);
+    //     self.cutoff -= 1;
+    // }
+
     fn visit(&mut self, ty: &mut Type) {
         match ty {
             Type::Var(v) if *v == self.cutoff => {
                 Shift::new(self.cutoff as isize).visit(&mut self.ty);
                 *ty = self.ty.clone();
             }
-
-            Type::Var(_) | Type::Unit | Type::Bool | Type::Nat => {}
-            Type::Record(fields) => self.visit_record(fields),
-            Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
-            Type::Universal(k, ty) => self.visit_universal(k, ty),
-            Type::Existential(k, ty) => self.visit_existential(k, ty),
-            Type::Abs(k, ty) => self.visit_abs(k, ty),
-            Type::App(m, n) => self.visit_app(m, n),
+            _ => self.walk(ty),
         }
     }
 }
