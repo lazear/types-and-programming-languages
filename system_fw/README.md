@@ -22,3 +22,7 @@ Recursion Schemes and Term-indexed Types" (2014). Dissertations and Theses. Pape
 - Yufei Cai, Paolo G. Giarrusso, and Klaus Ostermann. 2016. System f-omega with equirecursive types for datatype-generic programming. SIGPLAN Not. 51, 1 (January 2016), 30-43. DOI: https://doi.org/10.1145/2914770.2837660
 
    - Interesting, but I found it to be of not too much practical use
+
+- A Polymorphic Lambda-Calculus with Sized Higher-Order Types, Andreas Abel, PhD thesis
+
+   -  Page 76 seems to give some good hints on how to type Fold/Unfold operators (but for equirecursive, isorecursive on pp 85). It also seems that the kinding rules/type-equivalence can treat a type constructor abstraction (* => *) and a recursive type of kind (* => *) as the same. Iso-coinductive construtors are also discussed, pp 157.
