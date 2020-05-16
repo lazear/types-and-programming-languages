@@ -239,11 +239,13 @@ impl Context {
                 Constant::Nat(_) => Ok(Type::Nat),
                 Constant::Bool(_) => Ok(Type::Bool),
             },
-            Kind::Var(idx) => self
-                .stack
-                .get(*idx)
-                .cloned()
-                .ok_or(Diagnostic::error(term.span, "unbound variable")),
+            Kind::Var(idx) => {
+                dbg!(&self.stack);
+                self.stack
+                    .get(*idx)
+                    .cloned()
+                    .ok_or(Diagnostic::error(term.span, "unbound variable"))
+            }
             Kind::Abs(ty, tm) => {
                 self.is_star_kind(ty, term.span)?;
                 self.stack.push(*ty.clone());
@@ -288,6 +290,9 @@ impl Context {
                 }
             }
             Kind::TyAbs(tk, polymorphic) => {
+                // Reference commit log eda3417 for explanation of below code
+                // TODO: Do we need to the same thing for the kinding stack?
+
                 self.kstack.push(*tk.clone());
                 self.stack.iter_mut().for_each(|ty| match ty {
                     Type::Var(v) => *v += 1,

@@ -20,9 +20,9 @@ macro_rules! nat {
 }
 
 macro_rules! unit {
-    ($x:expr) => {
+    () => {
         crate::terms::Term::new(
-            crate::terms::Kind::Const(crate::terms::Constant::Nat($x)),
+            crate::terms::Kind::Const(crate::terms::Constant::Unit),
             util::span::Span::dummy(),
         )
     };
