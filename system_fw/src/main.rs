@@ -9,6 +9,8 @@ use terms::{Field, Kind, Record, Term};
 use types::{TyKind, Type};
 use util::span::Span;
 
+pub mod functor;
+
 fn object_type() -> Type {
     tyop!(
         kind!(* => *),
@@ -60,14 +62,11 @@ fn set() {
     // performs substition on the value *inside* the universal wrapper,
     // not on the outside, which bypasses incrementing the cutoff value
     // for both Shift and Subst MutTypeVisitors
-    let mut functor_ty = arrow!(
-        // record!(
-        //     (
-        //         "eq",
-        //         arrow!(product!(Type::Var(0), Type::Var(0)), Type::Bool)
-        //     )
-        // ),
-        eq_sig,
+    let mut functor_ty = univ!(arrow!(
+        record!((
+            "eq",
+            arrow!(product!(Type::Var(0), Type::Var(0)), Type::Bool)
+        )),
         exist!(
             kind!(*),
             record!(
@@ -82,8 +81,10 @@ fn set() {
                 )
             )
         )
-    );
+    ));
+
     functor_ty.subst(Type::Nat);
+
     let mut ctx = typecheck::Context::default();
     ctx.simplify_ty(&mut functor_ty).unwrap();
     println!("{}", functor_ty);
@@ -125,13 +126,14 @@ fn set() {
             })
         )
     );
-    let ff = tyapp!(ff, Type::Nat);
+    // let ff = tyapp!(ff, Type::Nat);
     println!("\n\n ff[Nat]\n\n{}", ff);
     println!("\nty: {}", ctx.typecheck(&ff).unwrap());
     assert_eq!(ctx.typecheck(&ff).unwrap(), functor_ty);
 }
 
 fn main() {
+    let mut ctx = typecheck::Context::default();
     // let mut ty = op_app!(list_type(), Type::Nat);
     // println!("{}", ty);
 
@@ -140,7 +142,95 @@ fn main() {
     // ctx.simplify_ty(&mut ty);
     // println!("{}", ty);
 
-    set();
+    // set();
+    // let sig = functor::set_sig().to_existential();
+    let rec = record!(
+        ("empty", Type::Projection(Box::new(Type::Var(0)), 0)),
+        (
+            "mem",
+            arrow!(
+                Type::Projection(Box::new(Type::Var(0)), 1),
+                arrow!(Type::Projection(Box::new(Type::Var(0)), 0), Type::Bool)
+            )
+        )
+    );
+    let kinds = TyKind::Product(vec![kind!(*), kind!(*)]);
+    let sig = exist!(kinds, rec);
+
+    println!("{}", sig);
+    println!("{}", ctx.kinding(&sig).unwrap());
+
+    let functor_body = Term::new(
+        terms::Kind::Record(terms::Record {
+            fields: vec![
+                Field {
+                    expr: Box::new(unit!()),
+                    label: "empty".into(),
+                    span: Span::default(),
+                },
+                Field {
+                    expr: Box::new(abs!(Type::Var(0), abs!(Type::Unit, bool!(true)))),
+                    label: "mem".into(),
+                    span: Span::default(),
+                },
+            ],
+        }),
+        Span::default(),
+    );
+
+    let adt = tyabs!(
+        kind!(*),
+        pack!(product!(Type::Unit, Type::Var(0)), functor_body, sig)
+    );
+
+    println!("{}", adt);
+    println!("{}", ctx.typecheck(&adt).unwrap());
+
+    // let v = vec![Type::Unit, Type::Nat];
+    // let tys = v
+    //     .iter()
+    //     .enumerate()
+    //     // .rev()
+    //     .map(|(i, ty)| {
+    //         let mut t = rec.clone();
+    //         t.subst_with_cutoff(i, ty.clone());
+    //         exist!(kind!(*), t)
+    //     })
+    //     .collect::<Vec<_>>();
+
+    // let adt = v
+    //     .into_iter()
+    //     .rev()
+    //     .zip(tys.into_iter())
+    //     .fold(functor_body, |tm, (witness, sig)| pack!(witness, tm, sig));
+    // // .for_each(|(v, t)| println!("{} {}", v, t));
+
+    // // let adt =  pack!(Type::Unit, functor_body, sig.clone());
+
+    // println!("{}", adt);
+    // // println!("{}", ctx.typecheck(&adt).unwrap());
+
+    // let ks = vec![kind!(* => *), kind!(*)];
+    // let tys = vec![Type::Var(576), Type::Var(30)];
+    // let body = arrow!(Type::Var(0), Type::Var(1));
+    // let term = nat!(2);
+
+    // let v = tys
+    //     .iter()
+    //     .enumerate()
+    //     .rev()
+    //     .map(|(i, ty)| {
+    //         let mut ret = body.clone();
+    //         ret.subst_with_cutoff(i, ty.clone());
+    //         exist!(kind!(*), ret)
+    //     })
+    //     .collect::<Vec<_>>();
+
+    // let adt = tys
+    //     .into_iter()
+    //     .zip(v.into_iter())
+    //     .fold(term, |t, (wit, ty)| pack!(wit, t, ty));
+    // println!("{}", adt);
 }
 
 fn list_type() -> Type {

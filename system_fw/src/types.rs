@@ -9,6 +9,7 @@ pub enum Type {
     Var(usize),
     Record(Vec<TyField>),
     Product(Vec<Type>),
+    Projection(Box<Type>, usize),
     Arrow(Box<Type>, Box<Type>),
     Universal(Box<TyKind>, Box<Type>),
     Existential(Box<TyKind>, Box<Type>),
@@ -28,6 +29,7 @@ pub struct TyField {
 pub enum TyKind {
     Star,
     Arrow(Box<TyKind>, Box<TyKind>),
+    Product(Vec<TyKind>),
 }
 
 impl Type {
@@ -35,6 +37,12 @@ impl Type {
         Shift::new(1).visit(&mut s);
         Subst::new(s).visit(self);
         Shift::new(-1).visit(self);
+    }
+
+    pub fn subst_with_cutoff(&mut self, cutoff: usize, mut s: Type) {
+        Shift::with_cutoff(cutoff, 1).visit(&mut s);
+        Subst::with_cutoff(cutoff, s).visit(self);
+        Shift::with_cutoff(cutoff, -1).visit(self);
     }
 }
 
@@ -67,6 +75,7 @@ impl fmt::Display for Type {
                     .collect::<Vec<_>>()
                     .join(",")
             ),
+            Type::Projection(ty, idx) => write!(f, "{}.{}", ty, idx),
             Type::Sum(fields) => write!(
                 f,
                 "{}",
@@ -89,9 +98,19 @@ impl fmt::Display for TyKind {
                 TyKind::Star => match k1.as_ref() {
                     TyKind::Star => write!(f, "{}->{}", k1, k2),
                     TyKind::Arrow(k11, k12) => write!(f, "({}->{})->{}", k11, k12, k2),
+                    _ => write!(f, "{}->{}", k1, k2),
                 },
                 TyKind::Arrow(_, _) => write!(f, "{}->({})", k1, k2),
+                k => write!(f, "{}->{}", k1, k),
             },
+            TyKind::Product(v) => {
+                let s = v
+                    .iter()
+                    .map(|k| format!("{}", k))
+                    .collect::<Vec<String>>()
+                    .join(",");
+                write!(f, "({})", s)
+            }
         }
     }
 }
@@ -133,6 +152,10 @@ pub trait MutTypeVisitor: Sized {
         }
     }
 
+    fn visit_projection(&mut self, ty: &mut Type, index: usize) {
+        self.visit(ty);
+    }
+
     fn visit_recursive(&mut self, ty: &mut Type) {
         self.visit(ty);
     }
@@ -147,6 +170,7 @@ pub trait MutTypeVisitor: Sized {
             Type::Var(v) => self.visit_var(v),
             Type::Record(fields) => self.visit_record(fields),
             Type::Product(tys) => self.visit_product(tys),
+            Type::Projection(ty, idx) => self.visit(ty),
             Type::Sum(variants) => self.visit_record(variants),
             Type::Recursive(ty1) => self.visit_recursive(ty1),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
@@ -159,13 +183,17 @@ pub trait MutTypeVisitor: Sized {
 }
 
 pub struct Shift {
-    cutoff: usize,
-    shift: isize,
+    pub cutoff: usize,
+    pub shift: isize,
 }
 
 impl Shift {
     pub const fn new(shift: isize) -> Shift {
         Shift { cutoff: 0, shift }
+    }
+
+    pub const fn with_cutoff(cutoff: usize, shift: isize) -> Shift {
+        Shift { cutoff, shift }
     }
 }
 
@@ -210,6 +238,10 @@ pub struct Subst {
 impl Subst {
     pub fn new(ty: Type) -> Subst {
         Subst { cutoff: 0, ty }
+    }
+
+    pub fn with_cutoff(cutoff: usize, ty: Type) -> Subst {
+        Subst { cutoff, ty }
     }
 }
 

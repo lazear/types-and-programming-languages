@@ -23,6 +23,7 @@ impl Default for Context {
 pub enum KindError {
     Mismatch(TyKind, TyKind),
     NotArrow(TyKind),
+    NotProduct,
     Unbound(usize),
 }
 
@@ -51,6 +52,7 @@ impl<'a> MutTypeVisitor for TypeSimplifier<'a> {
         self.visit(ty);
         self.ctx.kstack.pop();
     }
+
     fn visit(&mut self, ty: &mut Type) {
         match ty {
             Type::App(m, n) => {
@@ -69,6 +71,22 @@ impl<'a> MutTypeVisitor for TypeSimplifier<'a> {
                         }
                         Err(e) => self.res = Err(e),
                     }
+                }
+            }
+            Type::Projection(inner, idx) => {
+                self.visit(inner);
+                match inner.as_ref() {
+                    Type::Product(v) => match v.get(*idx) {
+                        Some(t) => {
+                            *ty = t.clone();
+                            self.res = Ok(true);
+                        }
+                        None => {
+                            self.res = Err(KindError::Unbound(*idx));
+                        }
+                    },
+                    Type::Var(_) => {}
+                    _ => self.res = Err(KindError::NotProduct),
                 }
             }
             _ => self.walk(ty),
@@ -97,6 +115,7 @@ impl KindError {
                 span,
                 format!("unbound type variable with de Bruijn index {}", idx),
             ),
+            KindError::NotProduct => Diagnostic::error(span, format!("a product kind is required")),
         }
     }
 }
@@ -161,13 +180,27 @@ impl Context {
                 Ok(TyKind::Star)
             }
             Type::Product(tys) => {
-                for ty in tys {
-                    let k = self.kinding(&ty)?;
-                    if k != TyKind::Star {
-                        return Err(KindError::Mismatch(TyKind::Star, k));
-                    }
+                // for ty in tys {
+                //     let k = self.kinding(&ty)?;
+                //     if k != TyKind::Star {
+                //         return Err(KindError::Mismatch(TyKind::Star, k));
+                //     }
+                // }
+                // Ok(TyKind::Star)
+                tys.iter()
+                    .map(|t| self.kinding(t))
+                    .collect::<Result<Vec<TyKind>, _>>()
+                    .map(TyKind::Product)
+            }
+            Type::Projection(ty, idx) => {
+                match self.kinding(ty)? {
+                    TyKind::Product(v) => v.get(*idx).cloned().ok_or(KindError::Unbound(*idx)),
+                    k => Err(KindError::Mismatch(TyKind::Product(vec![]), k)),
                 }
-                Ok(TyKind::Star)
+                // match ty.as_ref() {
+                //     Type::Product(v) => v.get(idx).ok_or(KindError::Unbound(idx)),
+                //     _ => Err(KindError::Mismatch())
+                // }
             }
             Type::Recursive(inner) => {
                 let k = self.kinding(inner)?;
@@ -390,6 +423,7 @@ impl Context {
                 let mut sig = sig.clone();
                 self.simplify_ty(&mut sig)
                     .map_err(|ke| ke.to_diag(term.span))?;
+
                 match sig.as_mut() {
                     Type::Existential(kind, t2) => {
                         let witness_kind = self
@@ -403,7 +437,6 @@ impl Context {
                         let ty_packed = self.typecheck(packed)?;
                         let mut ty_packed_prime = *t2.clone();
                         ty_packed_prime.subst(*witness.clone());
-
                         // Pierce's code has kind checking before type-substitution,
                         // does this matter? He also directly kind-checks the
                         // witness type against kind
