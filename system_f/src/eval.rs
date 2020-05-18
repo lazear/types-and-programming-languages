@@ -22,6 +22,8 @@ impl<'ctx> Eval<'ctx> {
             Kind::Injection(_, tm, _) => self.normal_form(tm),
             Kind::Product(fields) => fields.iter().all(|f| self.normal_form(f)),
             Kind::Fold(_, tm) => self.normal_form(tm),
+            Kind::Pack(_, tm, _) => self.normal_form(tm),
+            // Kind::Unpack(pack, tm) => self.normal_form(tm),
             _ => false,
         }
     }
@@ -183,7 +185,6 @@ impl<'ctx> Eval<'ctx> {
                 }
             }
             Kind::Pack(wit, evidence, sig) => {
-                println!("pack {}", evidence);
                 if !self.normal_form(&evidence) {
                     let t_prime = self.small_step(*evidence)?;
                     return Some(Term::new(

@@ -76,4 +76,16 @@ let x = \A \B \C \tuple: (A, B, (C, C)).
 
 ;
 
-unpack (pack Nat, ((\x: Nat. succ x), 0) as exists X. (X->Nat, X)) as T, mod in mod.0 ((\x: T. x) mod.1)
+let package = (pack Nat, ((\x: Nat. succ (succ x)), 0) as exists X. (X->Nat, X)) in
+	unpack package as T, mod in mod.0 ((\x: T. x) mod.1)
+;;
+
+let package = (pack Bool, ((\x: Bool. case x of | true => 10 | false => 0), true) as exists REPR. (REPR->Nat, REPR)) in
+let x = (\x: exists T. (T->Nat, T). unpack x as T, mod in succ (mod.0 mod.1)) in
+	x package 
+;
+
+
+let package = (pack Bool, ((\x: Bool. case x of | true => 10 | false => 0), true) as exists REPR. (REPR->Nat, REPR)) in
+let functor = (\x: exists T. (T->Nat, T). unpack x as T, mod in pack T, (\x: T. x) as exists R. R->R) in 
+	functor package
