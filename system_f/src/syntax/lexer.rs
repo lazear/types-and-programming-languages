@@ -105,6 +105,10 @@ impl<'s> Lexer<'s> {
             "rec" => TokenKind::Rec,
             "lambda" => TokenKind::Lambda,
             "forall" => TokenKind::Forall,
+            "exists" => TokenKind::Exists,
+            "pack" => TokenKind::Pack,
+            "unpack" => TokenKind::Unpack,
+            "as" => TokenKind::As,
 
             _ => {
                 if data.starts_with(|ch: char| ch.is_ascii_uppercase()) {
@@ -151,6 +155,7 @@ impl<'s> Lexer<'s> {
             '\\' => self.eat('\\', TokenKind::Lambda),
             'λ' => self.eat('λ', TokenKind::Lambda),
             '∀' => self.eat('∀', TokenKind::Forall),
+            '∃' => self.eat('∃', TokenKind::Exists),
             '.' => self.eat('.', TokenKind::Proj),
             '=' => self.eat('=', TokenKind::Equals),
             '|' => self.eat('|', TokenKind::Bar),

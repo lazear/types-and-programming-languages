@@ -27,6 +27,12 @@ impl MutTypeVisitor for Shift {
         self.cutoff -= 1;
     }
 
+    fn visit_existential(&mut self, inner: &mut Type) {
+        self.cutoff += 1;
+        self.visit(inner);
+        self.cutoff -= 1;
+    }
+
     fn visit_rec(&mut self, ty: &mut Type) {
         self.cutoff += 1;
         self.visit(ty);
@@ -52,6 +58,12 @@ impl MutTypeVisitor for Subst {
         self.cutoff -= 1;
     }
 
+    fn visit_existential(&mut self, inner: &mut Type) {
+        self.cutoff += 1;
+        self.visit(inner);
+        self.cutoff -= 1;
+    }
+
     fn visit_rec(&mut self, ty: &mut Type) {
         self.cutoff += 1;
         self.visit(ty);
@@ -71,6 +83,7 @@ impl MutTypeVisitor for Subst {
             Type::Alias(v) => self.visit_alias(v),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
+            Type::Existential(ty) => self.visit_existential(ty),
             Type::Rec(ty) => self.visit_rec(ty),
         }
     }

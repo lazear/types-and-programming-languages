@@ -45,6 +45,13 @@ impl MutTermVisitor for Shift {
             self.cutoff -= c;
         }
     }
+
+    fn visit_unpack(&mut self, _: &mut Span, package: &mut Term, term: &mut Term) {
+        self.visit(package);
+        self.cutoff += 1;
+        self.visit(term);
+        self.cutoff -= 1;
+    }
 }
 
 pub struct Subst {
@@ -81,6 +88,13 @@ impl MutTermVisitor for Subst {
             self.visit(&mut arm.term);
             self.cutoff -= c;
         }
+    }
+
+    fn visit_unpack(&mut self, _: &mut Span, package: &mut Term, term: &mut Term) {
+        self.visit(package);
+        self.cutoff += 1;
+        self.visit(term);
+        self.cutoff -= 1;
     }
 
     fn visit(&mut self, term: &mut Term) {
@@ -144,6 +158,19 @@ impl MutTermVisitor for TyTermSubst {
     fn visit_unfold(&mut self, sp: &mut Span, ty: &mut Type, term: &mut Term) {
         self.visit_ty(ty);
         self.visit(term);
+    }
+
+    fn visit_unpack(&mut self, _: &mut Span, package: &mut Term, term: &mut Term) {
+        self.visit(package);
+        self.cutoff += 1;
+        self.visit(term);
+        self.cutoff -= 1;
+    }
+
+    fn visit_pack(&mut self, _: &mut Span, wit: &mut Type, body: &mut Term, sig: &mut Type) {
+        self.visit_ty(wit);
+        self.visit(body);
+        self.visit_ty(sig);
     }
 
     fn visit_injection(

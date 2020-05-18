@@ -17,6 +17,10 @@ pub trait MutTypeVisitor: Sized {
         self.visit(inner);
     }
 
+    fn visit_existential(&mut self, inner: &mut Type) {
+        self.visit(inner);
+    }
+
     fn visit_variant(&mut self, variant: &mut Vec<Variant>) {
         for v in variant {
             self.visit(&mut v.ty);
@@ -42,6 +46,7 @@ pub trait MutTypeVisitor: Sized {
             Type::Alias(s) => self.visit_alias(s),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
+            Type::Existential(ty) => self.visit_existential(ty),
             Type::Rec(ty) => self.visit_rec(ty),
         }
     }
@@ -108,6 +113,21 @@ pub trait MutTermVisitor: Sized {
         self.visit(term);
     }
 
+    fn visit_pack(
+        &mut self,
+        sp: &mut Span,
+        witness: &mut Type,
+        evidence: &mut Term,
+        signature: &mut Type,
+    ) {
+        self.visit(evidence);
+    }
+
+    fn visit_unpack(&mut self, sp: &mut Span, package: &mut Term, term: &mut Term) {
+        self.visit(package);
+        self.visit(term);
+    }
+
     fn visit(&mut self, term: &mut Term) {
         self.walk(term);
     }
@@ -131,6 +151,8 @@ pub trait MutTermVisitor: Sized {
             Kind::TyApp(term, ty) => self.visit_tyapp(sp, term, ty),
             Kind::Fold(ty, term) => self.visit_fold(sp, ty, term),
             Kind::Unfold(ty, term) => self.visit_unfold(sp, ty, term),
+            Kind::Pack(wit, term, sig) => self.visit_pack(sp, wit, term, sig),
+            Kind::Unpack(package, term) => self.visit_unpack(sp, package, term),
         }
     }
 }

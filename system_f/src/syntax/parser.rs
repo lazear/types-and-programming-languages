@@ -201,6 +201,15 @@ impl<'s> Parser<'s> {
                 self.bump();
                 Ok(Type::Universal(Box::new(self.ty()?)))
             }
+            TokenKind::Exists => {
+                self.bump();
+                let tvar = self.uppercase_id()?;
+                self.expect(TokenKind::Proj)?;
+                self.tyvar.push(tvar);
+                let xs = Type::Existential(Box::new(self.ty()?));
+                self.tyvar.pop();
+                Ok(xs)
+            }
             TokenKind::Uppercase(_) => {
                 let ty = self.uppercase_id()?;
                 match self.tyvar.lookup(&ty) {
@@ -539,12 +548,50 @@ impl<'s> Parser<'s> {
         ))
     }
 
+    fn pack(&mut self) -> Result<Term, Error> {
+        self.expect(TokenKind::Pack)?;
+        let sp = self.span;
+        let witness = self.ty()?;
+        self.expect(TokenKind::Comma)?;
+        let evidence = self.parse()?;
+        self.expect(TokenKind::As)?;
+        let signature = self.ty()?;
+
+        Ok(Term::new(
+            Kind::Pack(Box::new(witness), Box::new(evidence), Box::new(signature)),
+            sp + self.span,
+        ))
+    }
+
+    fn unpack(&mut self) -> Result<Term, Error> {
+        self.expect(TokenKind::Unpack)?;
+        let sp = self.span;
+        let package = self.parse()?;
+        self.expect(TokenKind::As)?;
+
+        let tyvar = self.uppercase_id()?;
+        self.expect(TokenKind::Comma)?;
+        let name = self.lowercase_id()?;
+        self.tyvar.push(tyvar);
+        self.tmvar.push(name);
+        self.expect(TokenKind::In)?;
+        let expr = self.parse()?;
+        self.tmvar.pop();
+        self.tyvar.pop();
+        Ok(Term::new(
+            Kind::Unpack(Box::new(package), Box::new(expr)),
+            sp + self.span,
+        ))
+    }
+
     fn atom(&mut self) -> Result<Term, Error> {
         match self.kind() {
             TokenKind::LParen => self.paren(),
             TokenKind::Fix => self.fix(),
             TokenKind::Fold => self.fold(),
             TokenKind::Unfold => self.unfold(),
+            TokenKind::Pack => self.pack(),
+            TokenKind::Unpack => self.unpack(),
             TokenKind::IsZero | TokenKind::Succ | TokenKind::Pred => self.primitive(),
             TokenKind::Uppercase(_) => self.injection(),
             TokenKind::Lowercase(s) => {

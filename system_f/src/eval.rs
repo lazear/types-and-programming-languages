@@ -182,6 +182,32 @@ impl<'ctx> Eval<'ctx> {
                     _ => None,
                 }
             }
+            Kind::Pack(wit, evidence, sig) => {
+                println!("pack {}", evidence);
+                if !self.normal_form(&evidence) {
+                    let t_prime = self.small_step(*evidence)?;
+                    return Some(Term::new(
+                        Kind::Pack(wit, Box::new(t_prime), sig),
+                        term.span,
+                    ));
+                }
+                None
+            }
+            Kind::Unpack(package, mut body) => match package.kind {
+                Kind::Pack(wit, evidence, sig) => {
+                    term_subst(*evidence, &mut body);
+                    type_subst(*wit, &mut body);
+                    Some(*body)
+                }
+                _ => {
+                    if !self.normal_form(&package) {
+                        let t_prime = self.small_step(*package)?;
+                        return Some(Term::new(Kind::Unpack(Box::new(t_prime), body), term.span));
+                    }
+                    None
+                }
+            },
+
             _ => None,
         }
     }

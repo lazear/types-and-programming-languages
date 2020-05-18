@@ -38,12 +38,6 @@ impl Type {
         Subst::new(s).visit(self);
         Shift::new(-1).visit(self);
     }
-
-    pub fn subst_with_cutoff(&mut self, cutoff: usize, mut s: Type) {
-        Shift::with_cutoff(cutoff, 1).visit(&mut s);
-        Subst::with_cutoff(cutoff, s).visit(self);
-        Shift::with_cutoff(cutoff, -1).visit(self);
-    }
 }
 
 impl fmt::Display for Type {
@@ -191,10 +185,6 @@ impl Shift {
     pub const fn new(shift: isize) -> Shift {
         Shift { cutoff: 0, shift }
     }
-
-    pub const fn with_cutoff(cutoff: usize, shift: isize) -> Shift {
-        Shift { cutoff, shift }
-    }
 }
 
 impl MutTypeVisitor for Shift {
@@ -238,10 +228,6 @@ pub struct Subst {
 impl Subst {
     pub fn new(ty: Type) -> Subst {
         Subst { cutoff: 0, ty }
-    }
-
-    pub fn with_cutoff(cutoff: usize, ty: Type) -> Subst {
-        Subst { cutoff, ty }
     }
 }
 

@@ -85,8 +85,9 @@ impl<'a> MutTypeVisitor for TypeSimplifier<'a> {
                             self.res = Err(KindError::Unbound(*idx));
                         }
                     },
-                    Type::Var(_) => {}
-                    _ => self.res = Err(KindError::NotProduct),
+                    // Type::Var(_) => {}
+                    // _ => self.res = Err(KindError::NotProduct),
+                    _ => {}
                 }
             }
             _ => self.walk(ty),
@@ -272,13 +273,11 @@ impl Context {
                 Constant::Nat(_) => Ok(Type::Nat),
                 Constant::Bool(_) => Ok(Type::Bool),
             },
-            Kind::Var(idx) => {
-                dbg!(&self.stack);
-                self.stack
-                    .get(*idx)
-                    .cloned()
-                    .ok_or(Diagnostic::error(term.span, "unbound variable"))
-            }
+            Kind::Var(idx) => self
+                .stack
+                .get(*idx)
+                .cloned()
+                .ok_or(Diagnostic::error(term.span, "unbound variable")),
             Kind::Abs(ty, tm) => {
                 self.is_star_kind(ty, term.span)?;
                 self.stack.push(*ty.clone());

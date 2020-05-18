@@ -34,116 +34,26 @@ fn counter_interface() -> Type {
     )
 }
 
-fn set() {
-    let mut concrete = record!(
-        ("empty", Type::Var(1)),
-        (
-            "add",
-            arrow!(product!(Type::Var(0), Type::Var(1)), Type::Var(1))
-        ),
-        (
-            "mem",
-            arrow!(product!(Type::Var(0), Type::Var(1)), Type::Bool)
-        )
-    );
-
-    let eq_sig = exist!(
-        kind!(*),
-        record!((
-            "eq",
-            arrow!(product!(Type::Var(1), Type::Var(1)), Type::Bool)
-        ))
-    );
-
-    // We omit a universal type wrapper because we would have to manually
-    // write Type::Var(1) to actually refer to the 0th debruijn index, due
-    // to how the substition function currently works. This is probably
-    // something worth investigating. The Contxt::typecheck function
-    // performs substition on the value *inside* the universal wrapper,
-    // not on the outside, which bypasses incrementing the cutoff value
-    // for both Shift and Subst MutTypeVisitors
-    let mut functor_ty = univ!(arrow!(
-        record!((
-            "eq",
-            arrow!(product!(Type::Var(0), Type::Var(0)), Type::Bool)
-        )),
-        exist!(
-            kind!(*),
-            record!(
-                ("empty", Type::Var(0)),
-                (
-                    "add",
-                    arrow!(product!(Type::Var(1), Type::Var(0)), Type::Var(0))
-                ),
-                (
-                    "mem",
-                    arrow!(product!(Type::Var(1), Type::Var(0)), Type::Bool)
-                )
-            )
-        )
-    ));
-
-    functor_ty.subst(Type::Nat);
-
+fn main() {
     let mut ctx = typecheck::Context::default();
-    ctx.simplify_ty(&mut functor_ty).unwrap();
-    println!("{}", functor_ty);
 
-    let functor_body = Term::new(
+    let ord = exist!(
+        kind!(*),
+        record!(("lt", arrow!(Type::Var(0), arrow!(Type::Var(0), Type::Bool))))
+    );
+
+    let always_true_body = Term::new(
         terms::Kind::Record(terms::Record {
-            fields: vec![
-                Field {
-                    expr: Box::new(unit!()),
-                    label: "empty".into(),
-                    span: Span::default(),
-                },
-                Field {
-                    expr: Box::new(abs!(product!(Type::Var(0), Type::Unit), unit!())),
-                    label: "add".into(),
-                    span: Span::default(),
-                },
-                Field {
-                    expr: Box::new(abs!(product!(Type::Var(0), Type::Unit), bool!(true))),
-                    label: "mem".into(),
-                    span: Span::default(),
-                },
-            ],
+            fields: vec![Field {
+                expr: Box::new(abs!(Type::Nat, abs!(Type::Nat, bool!(true)))),
+                label: "lt".into(),
+                span: Span::default(),
+            }],
         }),
         Span::default(),
     );
+    let always_true = pack!(Type::Nat, always_true_body, ord.clone());
 
-    let ff = tyabs!(
-        kind!(*),
-        abs!(
-            record!((
-                "eq",
-                arrow!(product!(Type::Var(0), Type::Var(0)), Type::Bool)
-            )),
-            pack!(Type::Unit, functor_body, {
-                let mut c = concrete.clone();
-                c.subst(Type::Var(1));
-                exist!(kind!(*), c)
-            })
-        )
-    );
-    // let ff = tyapp!(ff, Type::Nat);
-    println!("\n\n ff[Nat]\n\n{}", ff);
-    println!("\nty: {}", ctx.typecheck(&ff).unwrap());
-    assert_eq!(ctx.typecheck(&ff).unwrap(), functor_ty);
-}
-
-fn main() {
-    let mut ctx = typecheck::Context::default();
-    // let mut ty = op_app!(list_type(), Type::Nat);
-    // println!("{}", ty);
-
-    // ty = unfold(ty);
-    // println!("{}", ty);
-    // ctx.simplify_ty(&mut ty);
-    // println!("{}", ty);
-
-    // set();
-    // let sig = functor::set_sig().to_existential();
     let rec = record!(
         ("empty", Type::Projection(Box::new(Type::Var(0)), 0)),
         (
@@ -156,9 +66,6 @@ fn main() {
     );
     let kinds = TyKind::Product(vec![kind!(*), kind!(*)]);
     let sig = exist!(kinds, rec);
-
-    println!("{}", sig);
-    println!("{}", ctx.kinding(&sig).unwrap());
 
     let functor_body = Term::new(
         terms::Kind::Record(terms::Record {
@@ -178,12 +85,21 @@ fn main() {
         Span::default(),
     );
 
-    let adt = tyabs!(
-        kind!(*),
-        pack!(product!(Type::Unit, Type::Var(0)), functor_body, sig)
-    );
+    // let adt = tyabs!(
+    //     kind!(*),
+    //     pack!(product!(Type::Unit, Type::Var(0)), functor_body, sig)
+    // );
 
-    println!("{}", adt);
+    let adt = abs!(
+        ord,
+        unpack!(
+            var!(0),
+            pack!(product!(Type::Unit, Type::Var(0)), functor_body, sig)
+        )
+    );
+    let adt = app!(adt, always_true.clone());
+
+    println!("\n\n{}", adt);
     println!("{}", ctx.typecheck(&adt).unwrap());
 
     // let v = vec![Type::Unit, Type::Nat];

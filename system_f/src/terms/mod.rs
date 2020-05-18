@@ -55,6 +55,15 @@ pub enum Kind {
 
     Fold(Box<Type>, Box<Term>),
     Unfold(Box<Type>, Box<Term>),
+
+    /// Introduce an existential type
+    /// { *Ty1, Term } as {∃X.Ty}
+    /// essentially, concrete representation as interface
+    Pack(Box<Type>, Box<Term>, Box<Type>),
+    /// Unpack an existential type
+    /// open {∃X, bind} in body -- X is bound as a TyVar, and bind as Var(0)
+    /// Eliminate an existential type
+    Unpack(Box<Term>, Box<Term>),
 }
 
 /// Arm of a case expression
@@ -140,6 +149,10 @@ impl fmt::Display for Term {
             Kind::TyApp(term, ty) => write!(f, "({} [{:?}])", term, ty),
             Kind::Fold(ty, term) => write!(f, "fold [{:?}] {}", ty, term),
             Kind::Unfold(ty, term) => write!(f, "unfold [{:?}] {}", ty, term),
+            Kind::Pack(witness, body, sig) => {
+                write!(f, "[|pack {{*{:?}, {}}} as {:?} |]", witness, body, sig)
+            }
+            Kind::Unpack(m, n) => write!(f, "unpack {} as {}", m, n),
         }
     }
 }

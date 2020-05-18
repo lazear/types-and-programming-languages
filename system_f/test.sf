@@ -73,3 +73,7 @@ let x = \A \B \C \tuple: (A, B, (C, C)).
 	let (_, mid, (n, s)) = tuple in 
 	(n, mid, s, mid) in
 	x [Nat] [Bool] [Nat] (10, true, (1, 11))
+
+;
+
+unpack (pack Nat, ((\x: Nat. succ x), 0) as exists X. (X->Nat, X)) as T, mod in mod.0 ((\x: T. x) mod.1)

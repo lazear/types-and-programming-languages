@@ -21,6 +21,7 @@ pub enum Type {
     Product(Vec<Type>),
     Arrow(Box<Type>, Box<Type>),
     Universal(Box<Type>),
+    Existential(Box<Type>),
     Rec(Box<Type>),
 }
 
@@ -328,6 +329,45 @@ impl Context {
                     format!("Expected a recursive type, not {:?}", rec),
                 )),
             },
+            Kind::Pack(witness, evidence, signature) => {
+                if let Type::Existential(exists) = signature.as_ref() {
+                    let sig_prime = subst(*witness.clone(), *exists.clone());
+                    let evidence_ty = self.type_check(evidence)?;
+                    if evidence_ty == sig_prime {
+                        Ok(*signature.clone())
+                    } else {
+                        let d = Diagnostic::error(term.span, "Type mismatch in pack")
+                            .message(term.span, format!("signature has type {:?}", sig_prime))
+                            .message(
+                                evidence.span,
+                                format!("but term has a type {:?}", evidence_ty),
+                            );
+                        Err(d)
+                    }
+                } else {
+                    Err(Diagnostic::error(
+                        term.span,
+                        format!(
+                            "Expected an existential type signature, not {:?}",
+                            signature
+                        ),
+                    ))
+                }
+            }
+            Kind::Unpack(package, body) => {
+                let p_ty = self.type_check(package)?;
+                if let Type::Existential(xst) = p_ty {
+                    self.push(*xst);
+                    let body_ty = self.type_check(body)?;
+                    self.pop();
+                    Ok(body_ty)
+                } else {
+                    Err(Diagnostic::error(
+                        package.span,
+                        format!("Expected an existential type signature, not {:?}", p_ty),
+                    ))
+                }
+            }
         }
     }
 }
@@ -358,6 +398,7 @@ impl<'ctx> MutTypeVisitor for Aliaser<'ctx> {
 
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
             Type::Universal(ty) => self.visit_universal(ty),
+            Type::Existential(ty) => self.visit_existential(ty),
             Type::Rec(ty) => self.visit_rec(ty),
         }
     }
@@ -422,6 +463,7 @@ impl fmt::Debug for Type {
             Type::Alias(s) => write!(f, "{}", s),
             Type::Arrow(t1, t2) => write!(f, "({:?}->{:?})", t1, t2),
             Type::Universal(ty) => write!(f, "forall X.{:?}", ty),
+            Type::Existential(ty) => write!(f, "exists X.{:?}", ty),
             Type::Rec(ty) => write!(f, "rec {:?}", ty),
         }
     }
