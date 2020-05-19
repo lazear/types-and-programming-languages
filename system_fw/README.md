@@ -1,3 +1,7 @@
+# System Fω
+
+This is an implementation (mostly of just the type system) of the higher-order polymorphic lambda calculus with explicit typing. This allows us to express functions with impredicative arguments, and we can emulate Haskell style typeclasses using functors over existential types (akin to 1ML) - something not expressible in Standard ML. 
+
 
 #### References
 I've included some selected references on implementing System Fw, particularly with respect to the addition of recursive types (System F omega-mu):
