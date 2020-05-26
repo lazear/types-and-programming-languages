@@ -1,7 +1,7 @@
 use crate::diagnostics::Diagnostic;
 use crate::stack::Stack;
 use crate::terms::{Constant, Field, Kind, Record, Term};
-use crate::types::{MutTypeVisitor, Shift, TyField, TyKind, Type};
+use crate::types::{MutTypeVisitor, Shift, Subst, TyField, TyKind, Type};
 use util::span::Span;
 /// A typing context, Γ
 #[derive(Debug)]
@@ -403,7 +403,135 @@ impl Context {
                         .message(tm.span, format!("term has a type of {}, not Record", ty))),
                 }
             }
+            Kind::Injection(label, tm, ty) => {
+                let mut ty = ty.clone();
+                self.simplify_ty(&mut ty)
+                    .map_err(|ke| ke.to_diag(term.span))?;
+                match ty.as_ref() {
+                    Type::Sum(fields) => {
+                        for f in fields {
+                            if label == &f.label {
+                                let mut ty_ = self.typecheck(tm)?;
+                                self.simplify_ty(&mut ty_)
+                                    .map_err(|ke| ke.to_diag(term.span))?;
+                                if &ty_ == f.ty.as_ref() {
+                                    return Ok(*ty.clone());
+                                } else {
+                                    let d = Diagnostic::error(
+                                        term.span,
+                                        "Invalid associated type in variant",
+                                    )
+                                    .message(
+                                        tm.span,
+                                        format!(
+                                            "variant {} requires type {}, but this is {}",
+                                            label, f.ty, ty_
+                                        ),
+                                    );
+                                    return Err(d);
+                                }
+                            }
+                        }
+                        Err(Diagnostic::error(
+                            term.span,
+                            format!(
+                                "constructor {} does not belong to the variant {}",
+                                label,
+                                fields
+                                    .iter()
+                                    .map(|f| f.label.clone())
+                                    .collect::<Vec<String>>()
+                                    .join(" | ")
+                            ),
+                        ))
+                    }
+                    _ => Err(Diagnostic::error(
+                        term.span,
+                        format!("Cannot inject {} into non-variant type {}", label, ty),
+                    )),
+                }
+            }
+            Kind::Unfold(rec, tm) => match rec.as_ref() {
+                Type::Recursive(inner) => {
+                    let ty_ = self.typecheck(&tm)?;
+                    if self.equiv(&ty_, &rec).map_err(|ke| ke.to_diag(term.span))? {
+                        let mut s = inner.clone();
+                        s.subst(*rec.clone());
+                        Ok(*s)
+                    } else {
+                        let d = Diagnostic::error(term.span, "Type mismatch in unfold")
+                            .message(term.span, format!("unfold requires type {}", rec))
+                            .message(tm.span, format!("term has a type of {}", ty_));
+                        Err(d)
+                    }
+                }
+                _ => Err(Diagnostic::error(
+                    term.span,
+                    format!("Expected a recursive type, not {}", rec),
+                )),
+            },
 
+            Kind::Fold(rec, tm) => {
+                // Fold takes an argument of type μF, term where term types to F(μF)
+                // and wraps the type into μF
+                // Alternatively, Fold can also take an argument of type μF A,
+                // term where term types to F(μF) A
+                let mut rec = rec.clone();
+                // self.simplify_ty(&mut rec)
+                //     .map_err(|ke| ke.to_diag(term.span))?;
+                match rec.as_ref() {
+                    Type::Recursive(inner) => {
+                        let ty_ = self.typecheck(&tm)?;
+                        let mut s = Type::App(inner.clone(), rec.clone());
+                        self.simplify_ty(&mut s)
+                            .map_err(|ke| ke.to_diag(term.span))?;
+                        if self.equiv(&ty_, &s).map_err(|ke| ke.to_diag(term.span))? {
+                            Ok(*rec)
+                        } else {
+                            let d = Diagnostic::error(term.span, "Type mismatch in fold")
+                                .message(term.span, format!("fold requires type {}", s))
+                                .message(tm.span, format!("term has a type of {}", ty_));
+                            Err(d)
+                        }
+                    }
+                    Type::App(ty1, ty2) => match ty1.as_ref() {
+                        Type::Recursive(rec_inner) => {
+                            let mut apped = Type::App(
+                                Box::new(Type::App(rec_inner.clone(), ty1.clone())),
+                                ty2.clone(),
+                            );
+                            self.simplify_ty(&mut apped)
+                                .map_err(|ke| ke.to_diag(term.span))?;
+                            let ty_ = self.typecheck(&tm)?;
+                            if self
+                                .equiv(&ty_, &apped)
+                                .map_err(|ke| ke.to_diag(term.span))?
+                            {
+                                Ok(*rec)
+                            } else {
+                                let d = Diagnostic::error(term.span, "Type mismatch in fold")
+                                    .message(term.span, format!("fold requires type {}", apped))
+                                    .message(tm.span, format!("term has a type of {}", ty_));
+                                Err(d)
+                            }
+                        }
+                        _ => {
+                            let d = Diagnostic::error(
+                                term.span,
+                                format!(
+                                    "Fold requires a recursive type in application of {} to {}",
+                                    ty1, ty2
+                                ),
+                            );
+                            Err(d)
+                        }
+                    },
+                    _ => Err(Diagnostic::error(
+                        term.span,
+                        format!("Expected a recursive type, not {}", rec),
+                    )),
+                }
+            }
             Kind::Pack(witness, packed, sig) => {
                 // where sig =  {∃X, T2}
                 // Γ⊢ packed : [ X -> witness ] T2 and Γ⊢  {∃X, T2} :: *
@@ -460,7 +588,7 @@ impl Context {
                             ))
                         }
                     }
-                    ty => diag!(term.span, "cannot pack an existential type into {:?}", ty),
+                    ty => diag!(term.span, "cannot pack an existential type into {}", ty),
                 }
             }
 

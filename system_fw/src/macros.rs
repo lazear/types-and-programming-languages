@@ -166,7 +166,6 @@ macro_rules! kind {
     (*) => { crate::types::TyKind::Star };
     (* => *) => { crate::types::TyKind::Arrow(Box::new(kind!(*)), Box::new(kind!(*))) };
     ($ex:expr => $ex2:expr) => { crate::types::TyKind::Arrow(Box::new($ex), Box::new($ex2)) };
-
 }
 
 macro_rules! diag {

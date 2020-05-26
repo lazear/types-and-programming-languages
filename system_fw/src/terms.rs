@@ -38,6 +38,13 @@ pub enum Kind {
 
     Index(Box<Term>, String),
 
+    /// Injection into a sum type
+    /// fields: type constructor tag, term, and sum type
+    Injection(String, Box<Term>, Box<Type>),
+
+    Fold(Box<Type>, Box<Term>),
+    Unfold(Box<Type>, Box<Term>),
+
     /// Introduce an existential type
     /// { *Ty1, Term } as {∃X.Ty}
     /// essentially, concrete representation as interface
@@ -108,6 +115,9 @@ impl fmt::Display for Term {
                     .join(",\n")
             ),
             Kind::Index(t1, t2) => write!(f, "{}.{}", t1, t2),
+            Kind::Injection(label, tm, ty) => write!(f, "{} of {} as {}", label, tm, ty),
+            Kind::Fold(ty, term) => write!(f, "fold [{}] {}", ty, term),
+            Kind::Unfold(ty, term) => write!(f, "unfold [{}] {}", ty, term),
         }
     }
 }
