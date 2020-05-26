@@ -17,6 +17,8 @@ use util::span::Span;
 fn main() {
     let mut ctx = typecheck::Context::default();
 
+    syntax::pmc::experiment();
+
     loop {
         let mut buffer = String::new();
         print!("repl: ");
