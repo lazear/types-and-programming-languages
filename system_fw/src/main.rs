@@ -39,7 +39,6 @@ fn main() {
         }
         // }
     }
-
 }
 
 fn unfold(ty: Type) -> Type {

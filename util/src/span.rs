@@ -96,11 +96,9 @@ impl<T> Spanned<T> {
     pub fn span(&self) -> Span {
         self.span
     }
-}
 
-impl<T: Copy> Spanned<T> {
     #[inline]
-    pub fn data(&self) -> T {
+    pub fn data(self) -> T {
         self.data
     }
 }
@@ -159,5 +157,11 @@ impl std::ops::Add<Span> for Span {
             start: self.start,
             end: rhs.end,
         }
+    }
+}
+
+impl std::ops::AddAssign<Span> for Span {
+    fn add_assign(&mut self, rhs: Self) {
+        self.end = rhs.end;
     }
 }

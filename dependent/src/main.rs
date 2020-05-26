@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum Term {
     Universe(usize),
     Nat,
@@ -114,8 +114,18 @@ impl Context {
     }
 
     fn equiv(&mut self, t1: &Term, t2: &Term) -> bool {
-        println!("equiv? {:?} {:?}", t1, t2);
-        true
+        let mut t1p = t1.clone();
+        let mut t2p = t2.clone();
+
+        while !t1p.normal() {
+            t1p = beta_reduce(t1p);
+        }
+
+        while !t2p.normal() {
+            t2p = beta_reduce(t2p);
+        }
+
+        t1p == t2p
     }
 
     fn type_of(&mut self, term: &Term) -> Result<Term, Error> {
@@ -137,7 +147,7 @@ impl Context {
                             T.subst(*t2.clone());
                             Ok(*T)
                         } else {
-                            Err(Error::Mismatch(Term::Pi(S, T), ty2))
+                            Err(Error::Mismatch(*S, ty2))
                         }
                     }
                     _ => Err(Error::NotPi(ty1)),
@@ -151,6 +161,31 @@ impl Context {
             Term::Nat => Ok(Term::Universe(0)),
             Term::Int(_) => Ok(Term::Nat),
         }
+    }
+}
+
+/// Small step beta reduction
+fn beta_reduce(mut term: Term) -> Term {
+    match term {
+        Term::App(mut abs, arg) => match (abs.normal(), arg.normal()) {
+            (false, _) => Term::App(Box::new(beta_reduce(*abs)), arg),
+            (_, false) => Term::App(abs, Box::new(beta_reduce(*arg))),
+            _ => match *abs {
+                Term::Abs(_, mut body) => {
+                    body.subst(*arg.clone());
+                    *body
+                }
+                x => Term::App(Box::new(x), arg),
+            },
+        },
+        Term::Abs(ty, body) => {
+            if body.normal() {
+                Term::Abs(ty, body)
+            } else {
+                Term::Abs(ty, Box::new(beta_reduce(*body)))
+            }
+        }
+        _ => term,
     }
 }
 
@@ -185,11 +220,12 @@ fn main() {
     // let tm = term!(App; tm, term!(Int; 10));
 
     // Πx: Nat -> x
-    let mut tm = term!(Abs; term!(Pi; Term::Nat, Term::Var(0)), Term::Var(0));
+    let mut tm = term!(Abs; Term::Nat, Term::Var(0));
     tm = term!(App; tm, Term::Int(10));
     // tm.subst(Term::Int(10));
 
-    dbg!(&tm);
-
     dbg!(ctx.type_of(&tm));
+    // dbg!(&tm);
+    tm = beta_reduce(tm);
+    dbg!(&tm);
 }
