@@ -49,7 +49,8 @@ pub fn parameterized_set_term() -> Term {
         Span::default(),
     );
 
-    // \X :: * => pack type 'a list = Nil | Cons 'a * 'a list with Nil as /\T::* {*X::*=>*, X T}
+    // \X :: * => pack type 'a list = Nil | Cons 'a * 'a list with Nil as /\T::*
+    // {*X::*=>*, X T}
     tyabs!(
         kind!(*),
         pack!(

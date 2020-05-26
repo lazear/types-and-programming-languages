@@ -199,7 +199,8 @@ impl Context {
                     k => Err(KindError::Mismatch(TyKind::Product(vec![]), k)),
                 }
                 // match ty.as_ref() {
-                //     Type::Product(v) => v.get(idx).ok_or(KindError::Unbound(idx)),
+                //     Type::Product(v) =>
+                // v.get(idx).ok_or(KindError::Unbound(idx)),
                 //     _ => Err(KindError::Mismatch())
                 // }
             }

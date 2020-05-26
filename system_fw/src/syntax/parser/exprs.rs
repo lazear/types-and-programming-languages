@@ -22,8 +22,8 @@ impl<'s> Parser<'s> {
     fn let_binding(&mut self) -> Result<Expr, Error> {
         let mut span = self.current.span;
         self.expect(Token::Let)?;
-        // let pat = self.once(|p| p.parse_pattern(), "missing pattern in let binding")?;
-        // self.expect(Token::Equals)?;
+        // let pat = self.once(|p| p.parse_pattern(), "missing pattern in let
+        // binding")?; self.expect(Token::Equals)?;
         // let t1 = self.once(|p| p.parse_expr(), "let binder required")?;
         let decls = self.parse_decl_seq()?;
         self.expect(Token::In)?;
@@ -58,11 +58,17 @@ impl<'s> Parser<'s> {
     fn lambda_expr(&mut self) -> Result<Expr, Error> {
         let mut span = self.current.span;
         self.expect(Token::Lambda)?;
-        let args = self.delimited(|p| p.parse_pattern(), Token::Bar)?;
+        let arg = self.once(
+            |p| p.parse_pattern(),
+            "expected pattern binding in lambda expression!",
+        )?;
         self.expect(Token::DoubleArrow)?;
         let body = self.parse_expr()?;
         span += self.prev;
-        Ok(Expr::new(ExprKind::Abs(args, Box::new(body)), span))
+        Ok(Expr::new(
+            ExprKind::Abs(Box::new(arg), Box::new(body)),
+            span,
+        ))
     }
 
     fn if_expr(&mut self) -> Result<Expr, Error> {

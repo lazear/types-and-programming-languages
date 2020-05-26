@@ -7,6 +7,7 @@ pub mod types;
 use super::ast::*;
 use super::lexer::Lexer;
 use super::tokens::*;
+// use super::stack::Stack;
 
 use infix::Infix;
 use util::span::{Span, Spanned};
@@ -16,6 +17,8 @@ pub struct Parser<'s> {
     current: Spanned<Token>,
     prev: Span,
     infix: Infix,
+
+    next_ast_id: AstId,
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
@@ -38,8 +41,6 @@ pub enum ErrorKind {
 #[derive(Default)]
 pub struct InfixState(Infix);
 
-struct State<'s>(Lexer<'s>, Spanned<Token>);
-
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Error {
     pub span: Span,
@@ -58,6 +59,7 @@ impl<'s> Parser<'s> {
             current: Spanned::new(Span::zero(), Token::Placeholder),
             infix: state.0,
             prev: Span::zero(),
+            next_ast_id: AstId(0),
         };
         p.bump();
         p
@@ -76,17 +78,10 @@ impl<'s> Parser<'s> {
         InfixState(self.infix.clone())
     }
 
-    fn save(&self) -> State<'s> {
-        State(self.tokens.clone(), self.current.clone())
-    }
-
-    fn restore(&mut self, state: State<'s>) {
-        self.tokens = state.0;
-        self.current = state.1;
-    }
-
-    pub fn empty() -> Parser<'s> {
-        Parser::new("")
+    fn allocate_ast_id(&mut self) -> AstId {
+        let id = self.next_ast_id;
+        self.next_ast_id = AstId(self.next_ast_id.0 + 1);
+        id
     }
 
     /// Generate a parsing error. These are not necessarily fatal
@@ -180,7 +175,8 @@ impl<'s> Parser<'s> {
     /// an `Ok(T)`. A call to `func` must succeed on the first try, or an error
     /// is immediately returned. Subsequent calls to `func` may fail, in which
     /// case the error is discarded, and the results are returned. If `delimit`
-    /// is supplied, the parser will discard matching tokens between each call to `func`
+    /// is supplied, the parser will discard matching tokens between each call
+    /// to `func`
     fn plus<T, E, F>(&mut self, func: F, delimit: Option<&Token>) -> Result<Vec<T>, E>
     where
         F: Fn(&mut Parser) -> Result<T, E>,

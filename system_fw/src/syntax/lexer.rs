@@ -114,6 +114,7 @@ impl<'s> Lexer<'s> {
             "forall" => Token::Forall,
             "type" => Token::Type,
             "datatype" => Token::Datatype,
+            "and" => Token::And,
             "int" => Token::TyInt,
             "unit" => Token::TyUnit,
             "bool" => Token::TyBool,

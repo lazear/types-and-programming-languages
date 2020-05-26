@@ -1,16 +1,25 @@
 use util::span::Span;
 
+#[derive(Copy, Clone, Debug, Default, PartialEq, PartialOrd, Eq, Hash)]
+pub struct AstId(pub(crate) u32);
+pub const AST_DUMMY: AstId = AstId(std::u32::MAX);
+
 macro_rules! container {
     ($id:ident, $id2:ident) => {
         #[derive(Clone, PartialEq, PartialOrd)]
         pub struct $id {
             pub kind: $id2,
             pub span: Span,
+            pub id: AstId,
         }
 
         impl $id {
             pub fn new(kind: $id2, span: Span) -> $id {
-                $id { kind, span }
+                $id {
+                    kind,
+                    span,
+                    id: AST_DUMMY,
+                }
             }
         }
 
@@ -70,7 +79,7 @@ pub enum ExprKind {
     Var(String),
     Constr(String),
     If(Box<Expr>, Box<Expr>, Box<Expr>),
-    Abs(Vec<Pattern>, Box<Expr>),
+    Abs(Box<Pattern>, Box<Expr>),
     App(Box<Expr>, Box<Expr>),
 
     /// Explicit type abstraction `fn 'x value (arg: 'x) = arg`
@@ -136,14 +145,14 @@ pub enum TypeKind {
     Recursive(Box<Type>),
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq, PartialOrd)]
 pub struct Variant {
     pub label: String,
     pub ty: Option<Type>,
     pub span: Span,
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq, PartialOrd)]
 pub struct Row {
     pub label: String,
     pub ty: Type,
@@ -163,5 +172,26 @@ impl TypeKind {
             TypeKind::Variable(s) => s.clone(),
             _ => panic!("Not a type var!"),
         }
+    }
+}
+
+impl Decl {
+    fn definition_name(&self) -> Option<&str> {
+        match &self.kind {
+            DeclKind::Type(_, name, _) | DeclKind::Datatype(_, name, _) => Some(name),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Debug for Variant {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{} of {:?}", self.label, self.ty)
+    }
+}
+
+impl std::fmt::Debug for Row {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}: {:?}", self.label, self.ty)
     }
 }

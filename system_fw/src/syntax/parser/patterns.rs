@@ -58,14 +58,15 @@ impl<'s> Parser<'s> {
     ///                 app_pat atpat
     fn application_pattern(&mut self) -> Result<Pattern, Error> {
         let mut span = self.current.span;
-        let mut pat = self.atomic_pattern()?;
+        let pat = self.atomic_pattern()?;
         if let PatKind::Constructor(_) = pat.kind {
             match self.atomic_pattern() {
                 Ok(arg) => {
+                    span += self.prev;
                     return Ok(Pattern::new(
                         Application(Box::new(pat), Box::new(arg)),
                         span,
-                    ))
+                    ));
                 }
                 _ => return Ok(pat),
             }

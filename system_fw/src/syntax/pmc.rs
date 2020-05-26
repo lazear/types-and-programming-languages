@@ -1,7 +1,8 @@
 /// Pattern Match Compiler
 /// See:    Wadler87        "Efficient Compilation of Pattern-Matching"
-///         Pettersson92    "A Term Pattern-Match Compiler Inspired by Finite Automata Theory"
-///         Maranget08      "Compiling Pattern Matching to good Decision Trees"
+///         Pettersson92    "A Term Pattern-Match Compiler Inspired by Finite
+/// Automata Theory"         Maranget08      "Compiling Pattern Matching to good
+/// Decision Trees"
 ///
 /// Wadler's 'demo' function:
 ///
@@ -12,7 +13,6 @@
 ///
 /// We follow the algorithm from Pettersson92, some comments below are
 /// directly taken from the paper
-///
 use super::*;
 use crate::stack::Stack;
 use ast::{Expr, ExprKind, PatKind, Pattern};

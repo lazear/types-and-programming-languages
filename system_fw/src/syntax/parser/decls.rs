@@ -75,19 +75,19 @@ impl<'s> Parser<'s> {
     ///             datatype
     ///             val
     ///             fun
-    ///             structure
-    ///             signature
-    ///             infix
     ///             exp
-    ///             open
     pub(crate) fn parse_decl(&mut self) -> Result<Decl, Error> {
-        match self.current() {
+        let d = match self.current() {
             Token::Type => self.decl_type(),
             Token::Datatype => self.decl_datatype(),
             Token::Val => self.decl_value(),
             Token::Function => self.decl_fun(),
             _ => self.decl_expr(),
-        }
+        };
+        let mut d = d?;
+        let id = self.allocate_ast_id();
+
+        Ok(d)
     }
 
     pub(crate) fn parse_decl_seq(&mut self) -> Result<Vec<Decl>, Error> {
