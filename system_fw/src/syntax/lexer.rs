@@ -96,6 +96,7 @@ impl<'s> Lexer<'s> {
     fn keyword(&mut self) -> Spanned<Token> {
         let (word, sp) = self.consume_while(Self::valid_id_char);
         let kind = match word.as_ref() {
+            "fun" => Token::Function,
             "fn" => Token::Lambda,
             "val" => Token::Val,
             "let" => Token::Let,

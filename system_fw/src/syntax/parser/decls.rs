@@ -36,6 +36,35 @@ impl<'s> Parser<'s> {
         Ok(Decl::new(DeclKind::Value(tyvars, pat, expr), span))
     }
 
+    fn decl_fun_arm(&mut self, ident: &str) -> Result<FnArm, Error> {
+        let mut span = self.current.span;
+        let id = self.expect_lower_id()?;
+        if id != ident {
+            return self.error(ErrorKind::FunctionIdMismatch);
+        }
+        let pats = self.plus(|p| p.atomic_pattern(), None)?;
+        self.expect(Token::Equals)?;
+        let expr = self.parse_expr()?;
+        span += self.prev;
+        Ok(FnArm { pats, expr, span })
+    }
+
+    fn decl_fun(&mut self) -> Result<Decl, Error> {
+        let mut span = self.current.span;
+        self.expect(Token::Function)?;
+        let tyvars = self.parse_tyvar_sequence()?;
+
+        // Peek the id and clone it, since decl_fun_arm will expect it to be there
+        let ident = match self.current() {
+            Token::LowerId(id) => id.clone(),
+            _ => return self.error(ErrorKind::ExpectedIdentifier),
+        };
+
+        let arms = self.delimited(|p| p.decl_fun_arm(&ident), Token::Bar)?;
+        span += self.prev;
+        Ok(Decl::new(DeclKind::Function(tyvars, ident, arms), span))
+    }
+
     fn decl_expr(&mut self) -> Result<Decl, Error> {
         let expr = self.parse_expr()?;
         let sp = expr.span;
@@ -56,6 +85,7 @@ impl<'s> Parser<'s> {
             Token::Type => self.decl_type(),
             Token::Datatype => self.decl_datatype(),
             Token::Val => self.decl_value(),
+            Token::Function => self.decl_fun(),
             _ => self.decl_expr(),
         }
     }

@@ -4,6 +4,8 @@ pub mod parser;
 pub mod tokens;
 pub mod visit;
 
+pub mod pmc;
+
 use ast::{Type, TypeKind, Variant};
 use visit::TypeVisitor;
 

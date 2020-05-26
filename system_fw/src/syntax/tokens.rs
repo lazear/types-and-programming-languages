@@ -19,6 +19,7 @@ pub enum Token {
     LBrace,
     RBrace,
 
+    Function,
     Lambda,
     Val,
     Let,

@@ -86,10 +86,18 @@ pub enum ExprKind {
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct FnArm {
+    pub span: Span,
+    pub pats: Vec<Pattern>,
+    pub expr: Expr,
+}
+
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub enum DeclKind {
     Type(Vec<Type>, String, Type),
     Datatype(Vec<Type>, String, Type),
     Value(Vec<Type>, Pattern, Expr),
+    Function(Vec<Type>, String, Vec<FnArm>),
     Expr(Expr),
 }
 
