@@ -38,6 +38,21 @@ impl Type {
         Subst::new(s).visit(self);
         Shift::new(-1).visit(self);
     }
+
+    /// Support function for quickly accessing labelled subtypes
+    pub fn label(&self, label: &str) -> Option<&Type> {
+        match self {
+            Type::Sum(fields) | Type::Record(fields) => {
+                for f in fields {
+                    if f.label == label {
+                        return Some(&f.ty);
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Type {

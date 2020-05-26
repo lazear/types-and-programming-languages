@@ -1,15 +1,18 @@
 #[macro_use]
 pub mod macros;
 pub mod diagnostics;
+pub mod functor;
 pub mod stack;
+pub mod syntax;
 pub mod terms;
 pub mod typecheck;
 pub mod types;
+
+use std::io::prelude::*;
+use syntax::parser::{Error, ErrorKind, Parser};
 use terms::{Field, Kind, Record, Term};
 use types::{TyKind, Type};
 use util::span::Span;
-
-pub mod functor;
 
 fn object_type() -> Type {
     tyop!(
@@ -37,119 +40,123 @@ fn counter_interface() -> Type {
 fn main() {
     let mut ctx = typecheck::Context::default();
 
-    let ord = exist!(
-        kind!(*),
-        record!(("lt", arrow!(Type::Var(0), arrow!(Type::Var(0), Type::Bool))))
-    );
+    loop {
+        let mut buffer = String::new();
+        print!("repl: ");
+        std::io::stdout().flush().unwrap();
+        std::io::stdin().read_to_string(&mut buffer).unwrap();
+        let mut p = syntax::parser::Parser::new(&buffer);
 
-    let always_true_body = Term::new(
-        terms::Kind::Record(terms::Record {
-            fields: vec![Field {
-                expr: Box::new(abs!(Type::Nat, abs!(Type::Nat, bool!(true)))),
-                label: "lt".into(),
-                span: Span::default(),
-            }],
-        }),
-        Span::default(),
-    );
-    let always_true = pack!(Type::Nat, always_true_body, ord.clone());
+        // loop {
+        match p.parse_decl() {
+            Ok(d) => {
+                println!("====> {:?}", d);
+            }
+            Err(Error {
+                kind: ErrorKind::EOF,
+                ..
+            }) => {}
+            Err(e) => {
+                println!("[err] {:?}", e);
+            }
+        }
+        // }
+    }
 
-    let rec = record!(
-        ("empty", Type::Projection(Box::new(Type::Var(0)), 0)),
-        (
-            "mem",
-            arrow!(
-                Type::Projection(Box::new(Type::Var(0)), 1),
-                arrow!(Type::Projection(Box::new(Type::Var(0)), 0), Type::Bool)
-            )
-        )
-    );
-    let kinds = TyKind::Product(vec![kind!(*), kind!(*)]);
-    let sig = exist!(kinds, rec);
-
-    let functor_body = Term::new(
-        terms::Kind::Record(terms::Record {
-            fields: vec![
-                Field {
-                    expr: Box::new(unit!()),
-                    label: "empty".into(),
-                    span: Span::default(),
-                },
-                Field {
-                    expr: Box::new(abs!(Type::Var(0), abs!(Type::Unit, bool!(true)))),
-                    label: "mem".into(),
-                    span: Span::default(),
-                },
-            ],
-        }),
-        Span::default(),
-    );
-
-    // let adt = tyabs!(
+    // let ord = exist!(
     //     kind!(*),
-    //     pack!(product!(Type::Unit, Type::Var(0)), functor_body, sig)
+    //     record!(("lt", arrow!(Type::Var(0), arrow!(Type::Var(0), Type::Bool))))
     // );
 
-    let adt = abs!(
-        ord,
-        unpack!(
-            var!(0),
-            pack!(product!(Type::Unit, Type::Var(0)), functor_body, sig)
-        )
-    );
-    let adt = app!(adt, always_true.clone());
+    // let always_true_body = Term::new(
+    //     terms::Kind::Record(terms::Record {
+    //         fields: vec![Field {
+    //             expr: Box::new(abs!(Type::Nat, abs!(Type::Nat, bool!(true)))),
+    //             label: "lt".into(),
+    //             span: Span::default(),
+    //         }],
+    //     }),
+    //     Span::default(),
+    // );
+    // let always_true = pack!(Type::Nat, always_true_body, ord.clone());
 
-    println!("\n\n{}", adt);
-    println!("{}", ctx.typecheck(&adt).unwrap());
+    // let rec = record!(
+    //     ("empty", Type::Projection(Box::new(Type::Var(0)), 0)),
+    //     (
+    //         "mem",
+    //         arrow!(
+    //             Type::Projection(Box::new(Type::Var(0)), 1),
+    //             arrow!(Type::Projection(Box::new(Type::Var(0)), 0), Type::Bool)
+    //         )
+    //     )
+    // );
+    // let kinds = TyKind::Product(vec![kind!(*), kind!(*)]);
+    // let sig = exist!(kinds, rec);
 
-    // let v = vec![Type::Unit, Type::Nat];
-    // let tys = v
-    //     .iter()
-    //     .enumerate()
-    //     // .rev()
-    //     .map(|(i, ty)| {
-    //         let mut t = rec.clone();
-    //         t.subst_with_cutoff(i, ty.clone());
-    //         exist!(kind!(*), t)
-    //     })
-    //     .collect::<Vec<_>>();
+    // let functor_body = Term::new(
+    //     terms::Kind::Record(terms::Record {
+    //         fields: vec![
+    //             Field {
+    //                 expr: Box::new(unit!()),
+    //                 label: "empty".into(),
+    //                 span: Span::default(),
+    //             },
+    //             Field {
+    //                 expr: Box::new(abs!(Type::Var(0), abs!(Type::Unit, bool!(true)))),
+    //                 label: "mem".into(),
+    //                 span: Span::default(),
+    //             },
+    //         ],
+    //     }),
+    //     Span::default(),
+    // );
 
-    // let adt = v
-    //     .into_iter()
-    //     .rev()
-    //     .zip(tys.into_iter())
-    //     .fold(functor_body, |tm, (witness, sig)| pack!(witness, tm, sig));
-    // // .for_each(|(v, t)| println!("{} {}", v, t));
+    // // let adt = tyabs!(
+    // //     kind!(*),
+    // //     pack!(product!(Type::Unit, Type::Var(0)), functor_body, sig)
+    // // );
 
-    // // let adt =  pack!(Type::Unit, functor_body, sig.clone());
+    // let adt = abs!(
+    //     ord,
+    //     unpack!(
+    //         var!(0),
+    //         pack!(product!(Type::Unit, Type::Var(0)), functor_body, sig)
+    //     )
+    // );
+    // let adt = app!(adt, always_true.clone());
 
-    // println!("{}", adt);
-    // // println!("{}", ctx.typecheck(&adt).unwrap());
+    // println!("\n\n{}", adt);
+    // println!("{}", ctx.typecheck(&adt).unwrap());
 
-    // let ks = vec![kind!(* => *), kind!(*)];
-    // let tys = vec![Type::Var(576), Type::Var(30)];
-    // let body = arrow!(Type::Var(0), Type::Var(1));
-    // let term = nat!(2);
+    // let mut list = list_type();
 
-    // let v = tys
-    //     .iter()
-    //     .enumerate()
-    //     .rev()
-    //     .map(|(i, ty)| {
-    //         let mut ret = body.clone();
-    //         ret.subst_with_cutoff(i, ty.clone());
-    //         exist!(kind!(*), ret)
-    //     })
-    //     .collect::<Vec<_>>();
+    // println!("\n\n{}", list);
+    // println!("{}", ctx.kinding(&list).unwrap());
+    // // list = unfold(op_app!(list, Type::Nat));
+    // list = op_app!(unfold(list), Type::Nat);
 
-    // let adt = tys
-    //     .into_iter()
-    //     .zip(v.into_iter())
-    //     .fold(term, |t, (wit, ty)| pack!(wit, t, ty));
-    // println!("{}", adt);
+    // ctx.simplify_ty(&mut list);
+    // // list = unfold(list);
+    // // ctx.simplify_ty(&mut list);
+    // println!("\n\n{}", list);
+    // println!("k {}", ctx.kinding(&list).unwrap());
+
+    // let mut ty = list.label("Cons").unwrap().label("tail").unwrap().clone();
+    // println!("{}", ty);
+    // ty = unfold(ty);
+    // ctx.simplify_ty(&mut ty);
+    // println!("{}", ty);
+
+    // ty = ty.label("Cons").unwrap().label("tail").unwrap().clone();
+    // // ty = unfold(ty);
+    // ctx.simplify_ty(&mut ty);
+    // println!("{}", ty);
 }
 
 fn list_type() -> Type {
+    // type = rec /\ X. /\A. Nil | Cons A * X A
+    // datatype 'a List = Cons 'a * 'a List | Nil
+    // List = /\A. Nil | Cons A * List A
     let inner = tyop!(
         kind!(* => *),
         tyop!(
@@ -158,51 +165,15 @@ fn list_type() -> Type {
                 ("Nil", Type::Unit),
                 (
                     "Cons",
-                    product!(Type::Var(0), op_app!(Type::Var(1), Type::Var(0)))
+                    record!(
+                        ("head", Type::Var(0)),
+                        ("tail", op_app!(Type::Var(1), Type::Var(0)))
+                    )
                 )
             )
         )
     );
     Type::Recursive(Box::new(inner))
-}
-
-// This is the "lambda-dropped" version of list_type()
-// Ralf Hinze,
-// Polytypic values possess polykinded types,
-// Science of Computer Programming,
-fn list_ty2() -> Type {
-    let ListF = tyop!(
-        kind!(*),
-        tyop!(
-            kind!(*),
-            sum!(
-                (
-                    "Cons",
-                    record!(("head", Type::Var(1)), ("tail", Type::Var(0)))
-                ),
-                ("Nil", Type::Unit)
-            )
-        )
-    );
-    let List = tyop!(
-        kind!(*),
-        Type::Recursive(Box::new(op_app!(ListF, Type::Var(0))))
-    );
-    List
-}
-
-fn plist() -> Type {
-    let PList = tyop!(
-        kind!(* => *),
-        tyop!(
-            kind!(*),
-            product!(
-                Type::Var(0),
-                op_app!(Type::Var(1), product!(Type::Var(0), Type::Var(0)))
-            )
-        )
-    );
-    Type::Recursive(Box::new(PList))
 }
 
 fn unfold(ty: Type) -> Type {
