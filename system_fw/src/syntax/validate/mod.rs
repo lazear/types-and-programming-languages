@@ -295,19 +295,24 @@ struct DeclNames<'s> {
 }
 
 impl<'s> DeclVisitor<'s> for DeclNames<'s> {
-    fn visit_datatype(&mut self, tyvars: &'s [Type], name: &'s str, ty: &'s Type) {
+    fn visit_datatype(&mut self, _: &'s [Type], name: &'s str, ty: &'s Type) {
+        self.types.push(name);
+        if let TypeKind::Sum(vars) = &ty.kind {
+            for v in vars {
+                self.values.push(&v.label);
+            }
+        }
+    }
+
+    fn visit_type(&mut self, _: &'s [Type], name: &'s str, ty: &'s Type) {
         self.types.push(name);
     }
 
-    fn visit_type(&mut self, tyvars: &'s [Type], name: &'s str, ty: &'s Type) {
-        self.types.push(name);
-    }
-
-    fn visit_value(&mut self, tyvars: &'s [Type], pat: &'s Pattern, expr: &'s Expr) {
+    fn visit_value(&mut self, _: &'s [Type], pat: &'s Pattern, expr: &'s Expr) {
         self.visit_pattern(pat);
     }
 
-    fn visit_function(&mut self, tyvars: &'s [Type], name: &'s str, arms: &'s [FnArm]) {
+    fn visit_function(&mut self, _: &'s [Type], name: &'s str, arms: &'s [FnArm]) {
         self.values.push(name);
     }
 
