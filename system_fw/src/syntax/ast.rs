@@ -21,6 +21,10 @@ macro_rules! container {
                     id: AST_DUMMY,
                 }
             }
+
+            pub fn with_id(kind: $id2, span: Span, id: AstId) -> $id {
+                $id { kind, span, id }
+            }
         }
 
         impl std::fmt::Debug for $id {
@@ -87,7 +91,7 @@ pub enum ExprKind {
     App(Box<Expr>, Box<Expr>),
 
     /// Explicit type abstraction `fn 'x value (arg: 'x) = arg`
-    TyAbs(Box<Kind>, Box<Expr>),
+    TyAbs(String, Box<Kind>, Box<Expr>),
 
     /// Explicit type application `e @ty`
     TyApp(Box<Expr>, Box<Type>),
@@ -111,6 +115,7 @@ pub enum DeclKind {
     Datatype(Vec<Type>, String, Type),
     Value(Vec<Type>, Pattern, Expr),
     Function(Vec<Type>, String, Vec<FnArm>),
+    And(Box<Decl>, Box<Decl>),
     Expr(Expr),
 }
 
@@ -125,6 +130,7 @@ pub enum TypeKind {
     Int,
     Bool,
     Unit,
+    Infer,
     /// Defined name
     Defined(String),
     /// Type variable 'a
@@ -138,11 +144,11 @@ pub enum TypeKind {
     /// Record type { [label: ty],+ }, invariant that N >=1
     Record(Vec<Row>),
     /// Existential type: exists (a :: K) of ty
-    Existential(Box<Kind>, Box<Type>),
+    Existential(String, Box<Kind>, Box<Type>),
     /// Universal type: forall (a :: K) of ty
-    Universal(Box<Kind>, Box<Type>),
+    Universal(String, Box<Kind>, Box<Type>),
     /// Type level function abstraction
-    Abstraction(Box<Kind>, Box<Type>),
+    Abstraction(String, Box<Kind>, Box<Type>),
     /// Type level function application
     Application(Box<Type>, Box<Type>),
     /// Recursive type
@@ -172,6 +178,13 @@ impl TypeKind {
     }
 
     pub fn as_tyvar(&self) -> &str {
+        match self {
+            TypeKind::Variable(s) => s,
+            _ => panic!("Not a type var!"),
+        }
+    }
+
+    pub fn as_tyvar_d(self) -> String {
         match self {
             TypeKind::Variable(s) => s,
             _ => panic!("Not a type var!"),

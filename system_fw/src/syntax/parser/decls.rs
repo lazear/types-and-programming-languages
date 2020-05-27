@@ -10,7 +10,11 @@ impl<'s> Parser<'s> {
         self.bump_if(&Token::Bar);
         let ty = self.type_sum()?;
         span += self.prev;
-        Ok(Decl::new(DeclKind::Datatype(tyvars, tyname, ty), span))
+        Ok(Decl::with_id(
+            DeclKind::Datatype(tyvars, tyname, ty),
+            span,
+            self.allocate_ast_id(),
+        ))
     }
 
     fn decl_type(&mut self) -> Result<Decl, Error> {
@@ -22,7 +26,11 @@ impl<'s> Parser<'s> {
         let ty = self.parse_type()?;
 
         span += self.prev;
-        Ok(Decl::new(DeclKind::Type(tyvars, tyname, ty), span))
+        Ok(Decl::with_id(
+            DeclKind::Type(tyvars, tyname, ty),
+            span,
+            self.allocate_ast_id(),
+        ))
     }
 
     fn decl_value(&mut self) -> Result<Decl, Error> {
@@ -33,7 +41,11 @@ impl<'s> Parser<'s> {
         self.expect(Token::Equals)?;
         let expr = self.parse_expr()?;
         span += self.prev;
-        Ok(Decl::new(DeclKind::Value(tyvars, pat, expr), span))
+        Ok(Decl::with_id(
+            DeclKind::Value(tyvars, pat, expr),
+            span,
+            self.allocate_ast_id(),
+        ))
     }
 
     fn decl_fun_arm(&mut self, ident: &str) -> Result<FnArm, Error> {
@@ -62,46 +74,53 @@ impl<'s> Parser<'s> {
 
         let arms = self.delimited(|p| p.decl_fun_arm(&ident), Token::Bar)?;
         span += self.prev;
-        Ok(Decl::new(DeclKind::Function(tyvars, ident, arms), span))
+        Ok(Decl::with_id(
+            DeclKind::Function(tyvars, ident, arms),
+            span,
+            self.allocate_ast_id(),
+        ))
     }
 
     fn decl_expr(&mut self) -> Result<Decl, Error> {
         let expr = self.parse_expr()?;
         let sp = expr.span;
-        Ok(Decl::new(DeclKind::Expr(expr), sp))
+        Ok(Decl::with_id(
+            DeclKind::Expr(expr),
+            sp,
+            self.allocate_ast_id(),
+        ))
     }
+
     /// Parse a simple declaration
     /// decl ::=    type
     ///             datatype
     ///             val
     ///             fun
     ///             exp
-    pub(crate) fn parse_decl(&mut self) -> Result<Decl, Error> {
-        let d = match self.current() {
+    pub fn parse_decl_atom(&mut self) -> Result<Decl, Error> {
+        match self.current() {
             Token::Type => self.decl_type(),
             Token::Datatype => self.decl_datatype(),
             Token::Val => self.decl_value(),
             Token::Function => self.decl_fun(),
             _ => self.decl_expr(),
-        };
-        let mut d = d?;
-        let id = self.allocate_ast_id();
-        d.id = id;
-        match &d.kind {
-            DeclKind::Type(_, name, _) | DeclKind::Datatype(_, name, _) => {
-                self.definitions.push((name.clone(), id));
-            }
-            DeclKind::Value(_, pats, _) => {
-                use crate::syntax::visit::PatVisitor;
-                let mut pc = PatBindings::default();
-                pc.visit_pattern(pats);
-                for bind in pc.binds {
-                    self.definitions.push((bind.into(), id));
-                }
-            }
-            _ => {}
         }
+    }
 
+    pub(crate) fn parse_decl(&mut self) -> Result<Decl, Error> {
+        let mut span = self.current.span;
+        let mut d = self.parse_decl_atom()?;
+        while let Token::And = self.current.data {
+            self.bump();
+            let d2 = self.once(|p| p.parse_decl_atom(), "expected declaration after `and`")?;
+            span += self.prev;
+            d = Decl::with_id(
+                DeclKind::And(Box::new(d), Box::new(d2)),
+                span,
+                self.allocate_ast_id(),
+            );
+        }
+        span += self.prev;
         Ok(d)
     }
 

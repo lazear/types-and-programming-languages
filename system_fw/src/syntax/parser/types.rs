@@ -58,28 +58,36 @@ impl<'s> Parser<'s> {
     fn existential(&mut self) -> Result<Type, Error> {
         let mut span = self.current.span;
         self.expect(Token::Exists)?;
-        let (_, kind) = self.once(
+        let (name, kind) = self.once(
             |p| p.abstraction_arg(),
             "existential type requires an arg of form ('t :: K)",
         )?;
         self.expect(Token::Of)?;
         let body = self.once(|p| p.parse_type(), "existential type requires a body")?;
         span += self.prev;
-        Ok(Type::new(Existential(Box::new(kind), Box::new(body)), span))
+
+        // We should probably just parse tyvars as string directly...
+        Ok(Type::new(
+            Existential(name.kind.as_tyvar_d(), Box::new(kind), Box::new(body)),
+            span,
+        ))
     }
 
     /// Parse a universal type of form `forall ('tv :: K) of ty`
     fn universal(&mut self) -> Result<Type, Error> {
         let mut span = self.current.span;
         self.expect(Token::Forall)?;
-        let (_, kind) = self.once(
+        let (name, kind) = self.once(
             |p| p.abstraction_arg(),
             "universal type requires an arg of form ('t :: K)",
         )?;
         self.expect(Token::Of)?;
         let body = self.once(|p| p.parse_type(), "universal type requires a body")?;
         span += self.prev;
-        Ok(Type::new(Universal(Box::new(kind), Box::new(body)), span))
+        Ok(Type::new(
+            Universal(name.kind.as_tyvar_d(), Box::new(kind), Box::new(body)),
+            span,
+        ))
     }
 
     /// Parse a type row of form `label: ty`
@@ -156,6 +164,10 @@ impl<'s> Parser<'s> {
                     }))
                 }
             }
+            Token::Wildcard => {
+                self.bump();
+                Ok(Type::new(Infer, span))
+            }
             _ => self.error(ErrorKind::ExpectedType),
         }
     }
@@ -177,14 +189,17 @@ impl<'s> Parser<'s> {
         self.expect(Token::Lambda)?;
 
         // let args = self.plus(|p| p.abstraction_arg())?;
-        let (_, kind) = self.once(
+        let (name, kind) = self.once(
             |p| p.abstraction_arg(),
             "type abstraction requires an arg of form ('t :: K)",
         )?;
         self.expect(Token::DoubleArrow)?;
         let body = self.parse_type()?;
         span += self.prev;
-        Ok(Type::new(Abstraction(Box::new(kind), Box::new(body)), span))
+        Ok(Type::new(
+            Abstraction(name.kind.as_tyvar_d(), Box::new(kind), Box::new(body)),
+            span,
+        ))
     }
 
     /// Parse an application of form: `('a, 'b, ...) ty1 ty2 ty3`

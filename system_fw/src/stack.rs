@@ -13,8 +13,8 @@ impl<T> Stack<T> {
     }
 
     #[inline]
-    pub fn pop(&mut self) {
-        let _ = self.inner.pop();
+    pub fn pop(&mut self) -> Option<T> {
+        self.inner.pop()
     }
 
     #[inline]

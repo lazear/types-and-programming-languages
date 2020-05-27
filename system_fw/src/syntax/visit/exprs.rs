@@ -15,7 +15,7 @@ pub trait MutExprVisitor<'e>: Sized {
         self.visit_expr(e1);
         self.visit_expr(e2);
     }
-    fn visit_tyabs(&mut self, k: &'e mut Kind, e: &'e mut Expr) {
+    fn visit_tyabs(&mut self, s: &'e mut str, k: &'e mut Kind, e: &'e mut Expr) {
         self.visit_expr(e);
     }
     fn visit_tyapp(&mut self, e: &'e mut Expr, ty: &'e mut Type) {
@@ -58,7 +58,7 @@ pub trait MutExprVisitor<'e>: Sized {
             If(e1, e2, e3) => self.visit_if(e1, e2, e3),
             Abs(pat, expr) => self.visit_abs(pat, expr),
             App(e1, e2) => self.visit_app(e1, e2),
-            TyAbs(k, e) => self.visit_tyabs(k, e),
+            TyAbs(s, k, e) => self.visit_tyabs(s, k, e),
             TyApp(e, t) => self.visit_tyapp(e, t),
             Record(fields) => self.visit_record(fields),
             Tuple(exprs) => self.visit_tuple(exprs),
@@ -84,7 +84,7 @@ pub trait ExprVisitor<'e>: Sized {
         self.visit_expr(e1);
         self.visit_expr(e2);
     }
-    fn visit_tyabs(&mut self, k: &'e Kind, e: &'e Expr) {
+    fn visit_tyabs(&mut self, s: &'e str, k: &'e Kind, e: &'e Expr) {
         self.visit_expr(e);
     }
     fn visit_tyapp(&mut self, e: &'e Expr, ty: &'e Type) {
@@ -127,7 +127,7 @@ pub trait ExprVisitor<'e>: Sized {
             If(e1, e2, e3) => self.visit_if(e1, e2, e3),
             Abs(pat, expr) => self.visit_abs(pat, expr),
             App(e1, e2) => self.visit_app(e1, e2),
-            TyAbs(k, e) => self.visit_tyabs(k, e),
+            TyAbs(s, k, e) => self.visit_tyabs(s, k, e),
             TyApp(e, t) => self.visit_tyapp(e, t),
             Record(fields) => self.visit_record(fields),
             Tuple(exprs) => self.visit_tuple(exprs),

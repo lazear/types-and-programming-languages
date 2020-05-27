@@ -28,7 +28,11 @@ fn recursive_labels(tyvars: Vec<ast::Type>, name: String, ty: ast::Type) -> ast:
 
     let ty = tyvars.iter().fold(ty, |ty, tv| {
         ast::Type::new(
-            ast::TypeKind::Abstraction(Box::new(ast::Kind::Star), Box::new(ty)),
+            ast::TypeKind::Abstraction(
+                tv.kind.as_tyvar().into(),
+                Box::new(ast::Kind::Star),
+                Box::new(ty),
+            ),
             sp,
         )
     });
@@ -74,7 +78,6 @@ fn main() {
             }
         }
 
-        println!("parser defs: {:?}", p.definitions);
         // }
     }
 }

@@ -8,7 +8,6 @@ use super::ast::*;
 use super::lexer::Lexer;
 use super::tokens::*;
 use infix::Infix;
-use std::collections::HashMap;
 use util::span::{Span, Spanned};
 
 pub struct Parser<'s> {
@@ -16,7 +15,6 @@ pub struct Parser<'s> {
     current: Spanned<Token>,
     prev: Span,
     infix: Infix,
-    pub definitions: Vec<(String, AstId)>,
     next_ast_id: AstId,
 }
 
@@ -59,7 +57,6 @@ impl<'s> Parser<'s> {
             infix: state.0,
             prev: Span::zero(),
             next_ast_id: AstId(0),
-            definitions: Vec::new(),
         };
         p.bump();
         p

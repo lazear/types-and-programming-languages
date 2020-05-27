@@ -36,15 +36,15 @@ pub trait MutTypeVisitor<'t>: Sized {
         }
     }
 
-    fn visit_existential(&mut self, k: &'t Kind, ty: &'t mut Type) {
+    fn visit_existential(&mut self, s: &'t str, k: &'t Kind, ty: &'t mut Type) {
         self.visit_ty(ty);
     }
 
-    fn visit_universal(&mut self, k: &'t Kind, ty: &'t mut Type) {
+    fn visit_universal(&mut self, s: &'t str, k: &'t Kind, ty: &'t mut Type) {
         self.visit_ty(ty);
     }
 
-    fn visit_abstraction(&mut self, k: &'t Kind, ty: &'t mut Type) {
+    fn visit_abstraction(&mut self, s: &'t str, k: &'t Kind, ty: &'t mut Type) {
         self.visit_ty(ty);
     }
 
@@ -62,15 +62,16 @@ pub trait MutTypeVisitor<'t>: Sized {
             Int => {}
             Bool => {}
             Unit => {}
+            Infer => {}
             Defined(s) => self.visit_defined(s),
             Variable(s) => self.visit_variable(s),
             Function(ty1, ty2) => self.visit_function(ty1, ty2),
             Sum(var) => self.visit_sum(var),
             Product(tys) => self.visit_product(tys),
             Record(rows) => self.visit_record(rows),
-            Existential(k, ty) => self.visit_existential(k, ty),
-            Universal(k, ty) => self.visit_universal(k, ty),
-            Abstraction(k, ty) => self.visit_abstraction(k, ty),
+            Existential(s, k, ty) => self.visit_existential(s, k, ty),
+            Universal(s, k, ty) => self.visit_universal(s, k, ty),
+            Abstraction(s, k, ty) => self.visit_abstraction(s, k, ty),
             Application(ty1, ty2) => self.visit_application(ty1, ty2),
             Recursive(ty) => self.visit_recursive(ty),
         }
@@ -112,15 +113,15 @@ pub trait TypeVisitor<'t>: Sized {
         }
     }
 
-    fn visit_existential(&mut self, k: &'t Kind, ty: &'t Type) {
+    fn visit_existential(&mut self, s: &'t str, k: &'t Kind, ty: &'t Type) {
         self.visit_ty(ty);
     }
 
-    fn visit_universal(&mut self, k: &'t Kind, ty: &'t Type) {
+    fn visit_universal(&mut self, s: &'t str, k: &'t Kind, ty: &'t Type) {
         self.visit_ty(ty);
     }
 
-    fn visit_abstraction(&mut self, k: &'t Kind, ty: &'t Type) {
+    fn visit_abstraction(&mut self, s: &'t str, k: &'t Kind, ty: &'t Type) {
         self.visit_ty(ty);
     }
 
@@ -138,15 +139,16 @@ pub trait TypeVisitor<'t>: Sized {
             Int => {}
             Bool => {}
             Unit => {}
+            Infer => {}
             Defined(s) => self.visit_defined(s),
             Variable(s) => self.visit_variable(s),
             Function(ty1, ty2) => self.visit_function(ty1, ty2),
             Sum(var) => self.visit_sum(var),
             Product(tys) => self.visit_product(tys),
             Record(rows) => self.visit_record(rows),
-            Existential(k, ty) => self.visit_existential(k, ty),
-            Universal(k, ty) => self.visit_universal(k, ty),
-            Abstraction(k, ty) => self.visit_abstraction(k, ty),
+            Existential(s, k, ty) => self.visit_existential(s, k, ty),
+            Universal(s, k, ty) => self.visit_universal(s, k, ty),
+            Abstraction(s, k, ty) => self.visit_abstraction(s, k, ty),
             Application(ty1, ty2) => self.visit_application(ty1, ty2),
             Recursive(ty) => self.visit_recursive(ty),
         }
