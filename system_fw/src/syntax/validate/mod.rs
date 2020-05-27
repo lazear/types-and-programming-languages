@@ -23,6 +23,10 @@ impl<'s> TypeVisitor<'s> for TyNameCollector<'s> {
     }
 }
 
+/// Validate that a [`Program`] is closed, e.g. it has no free
+/// term or type variables. We traverse the program in execution order,
+/// adding bindings for top-level declarations, and also keeping track of
+/// bindings that occur in local scopes for de Bruijn index tracking
 #[derive(Default)]
 pub struct ProgramValidation<'s> {
     tyvars: Stack<&'s str>,
@@ -44,14 +48,20 @@ pub enum WarnOn {
 }
 
 impl<'s> ProgramValidation<'s> {
-    fn raii_tyvars<F: Fn(&mut ProgramValidation<'s>)>(&mut self, f: F) {
+    /// Keep track of the type variable stack, while executing the combinator
+    /// function `f` on `self`. Any stack growth is popped off after `f`
+    /// returns.
+    fn with_tyvars<F: Fn(&mut ProgramValidation<'s>)>(&mut self, f: F) {
         let n = self.tyvars.len();
         f(self);
         let to_pop = self.tyvars.len() - n;
         self.tyvars.popn(to_pop);
     }
 
-    fn raii_tmvars<F: Fn(&mut ProgramValidation<'s>)>(&mut self, f: F) {
+    /// Keep track of the term variable stack, while executing the combinator
+    /// function `f` on `self`. Any stack growth is popped off after `f`
+    /// returns.
+    fn with_tmvars<F: Fn(&mut ProgramValidation<'s>)>(&mut self, f: F) {
         let n = self.tmvars.len();
         f(self);
         let to_pop = self.tmvars.len() - n;
@@ -100,21 +110,21 @@ impl<'s> TypeVisitor<'s> for ProgramValidation<'s> {
     }
 
     fn visit_existential(&mut self, s: &'s str, k: &'s Kind, ty: &'s Type) {
-        self.raii_tyvars(|f| {
+        self.with_tyvars(|f| {
             f.tyvars.push(s);
             f.visit_ty(ty)
         });
     }
 
     fn visit_universal(&mut self, s: &'s str, k: &'s Kind, ty: &'s Type) {
-        self.raii_tyvars(|f| {
+        self.with_tyvars(|f| {
             f.tyvars.push(s);
             f.visit_ty(ty)
         });
     }
 
     fn visit_abstraction(&mut self, s: &'s str, k: &'s Kind, ty: &'s Type) {
-        self.raii_tyvars(|f| {
+        self.with_tyvars(|f| {
             f.tyvars.push(s);
             f.visit_ty(ty)
         });
@@ -186,7 +196,7 @@ impl<'s> ExprVisitor<'s> for ProgramValidation<'s> {
     }
 
     fn visit_abs(&mut self, pat: &'s Pattern, body: &'s Expr) {
-        self.raii_tmvars(|f| {
+        self.with_tmvars(|f| {
             f.visit_pattern(pat);
             f.visit_expr(body);
         });
@@ -197,18 +207,31 @@ impl<'s> ExprVisitor<'s> for ProgramValidation<'s> {
     /// /\A \x: A. x
     /// fun 'a id (x: 'a) = x
     fn visit_tyabs(&mut self, s: &'s str, _: &'s Kind, body: &'s Expr) {
-        self.raii_tyvars(|f| {
+        self.with_tyvars(|f| {
             f.tyvars.push(s);
             f.visit_expr(body);
         });
     }
 
-    fn visit_let(&mut self, decls: &'s [Decl], body: &'s Expr) {}
+    fn visit_let(&mut self, decls: &'s [Decl], body: &'s Expr) {
+        let mut names = DeclNames::default();
+        for decl in decls {
+            names.visit_decl(decl);
+        }
+        self.with_tmvars(|f| {
+            f.with_tyvars(|q| {
+                q.tyvars.extend(names.types.iter().rev().copied());
+                q.tmvars.extend(names.values.iter().rev().copied());
+
+                q.visit_expr(body);
+            })
+        })
+    }
 
     fn visit_case(&mut self, e: &'s Expr, arms: &'s [Arm]) {
         for arm in arms {
             self.last_ex_span = arm.span;
-            self.raii_tmvars(|q| {
+            self.with_tmvars(|q| {
                 q.visit_pattern(&arm.pat);
                 q.visit_expr(&arm.expr);
             });
@@ -224,7 +247,7 @@ impl<'s> ExprVisitor<'s> for ProgramValidation<'s> {
 impl<'s> DeclVisitor<'s> for ProgramValidation<'s> {
     fn visit_datatype(&mut self, tyvars: &'s [Type], name: &'s str, ty: &'s Type) {
         self.defined_types.insert(name);
-        self.raii_tyvars(|f| {
+        self.with_tyvars(|f| {
             f.tyvars.extend(tyvars.iter().map(|t| t.kind.as_tyvar()));
             f.visit_ty(ty);
         });
@@ -232,14 +255,14 @@ impl<'s> DeclVisitor<'s> for ProgramValidation<'s> {
 
     fn visit_type(&mut self, tyvars: &'s [Type], name: &'s str, ty: &'s Type) {
         self.defined_types.insert(name);
-        self.raii_tyvars(|f| {
+        self.with_tyvars(|f| {
             f.tyvars.extend(tyvars.iter().map(|t| t.kind.as_tyvar()));
             f.visit_ty(ty);
         });
     }
 
     fn visit_value(&mut self, tyvars: &'s [Type], pat: &'s Pattern, expr: &'s Expr) {
-        self.raii_tyvars(|f| {
+        self.with_tyvars(|f| {
             f.tyvars.extend(tyvars.iter().map(|t| t.kind.as_tyvar()));
 
             let n = f.tmvars.len();
@@ -255,10 +278,10 @@ impl<'s> DeclVisitor<'s> for ProgramValidation<'s> {
 
     fn visit_function(&mut self, tyvars: &'s [Type], name: &'s str, arms: &'s [FnArm]) {
         self.defined_values.insert(name);
-        self.raii_tyvars(|f| {
+        self.with_tyvars(|f| {
             f.tyvars.extend(tyvars.iter().map(|t| t.kind.as_tyvar()));
             for arm in arms {
-                f.raii_tmvars(|q| {
+                f.with_tmvars(|q| {
                     q.visit_product_pat(&arm.pats);
                     q.visit_expr(&arm.expr);
                 });
@@ -272,8 +295,8 @@ impl<'s> DeclVisitor<'s> for ProgramValidation<'s> {
         let mut names = DeclNames::default();
         names.visit_decl(d1);
         names.visit_decl(d2);
-        self.raii_tmvars(|f| {
-            f.raii_tyvars(|q| {
+        self.with_tmvars(|f| {
+            f.with_tyvars(|q| {
                 q.tyvars.extend(names.types.iter().rev().copied());
                 q.tmvars.extend(names.values.iter().rev().copied());
 
@@ -288,6 +311,8 @@ impl<'s> DeclVisitor<'s> for ProgramValidation<'s> {
     }
 }
 
+/// Helper struct for walking top-level declarations and extracting
+/// bound type and value names. This does no validation or checking
 #[derive(Default)]
 struct DeclNames<'s> {
     values: Vec<&'s str>,
@@ -304,15 +329,15 @@ impl<'s> DeclVisitor<'s> for DeclNames<'s> {
         }
     }
 
-    fn visit_type(&mut self, _: &'s [Type], name: &'s str, ty: &'s Type) {
+    fn visit_type(&mut self, _: &'s [Type], name: &'s str, _: &'s Type) {
         self.types.push(name);
     }
 
-    fn visit_value(&mut self, _: &'s [Type], pat: &'s Pattern, expr: &'s Expr) {
+    fn visit_value(&mut self, _: &'s [Type], pat: &'s Pattern, _: &'s Expr) {
         self.visit_pattern(pat);
     }
 
-    fn visit_function(&mut self, _: &'s [Type], name: &'s str, arms: &'s [FnArm]) {
+    fn visit_function(&mut self, _: &'s [Type], name: &'s str, _: &'s [FnArm]) {
         self.values.push(name);
     }
 
@@ -321,7 +346,7 @@ impl<'s> DeclVisitor<'s> for DeclNames<'s> {
         self.visit_decl(d2);
     }
 
-    fn visit_toplevel_expr(&mut self, expr: &'s Expr) {}
+    fn visit_toplevel_expr(&mut self, _: &'s Expr) {}
 }
 
 impl<'s> PatVisitor<'s> for DeclNames<'s> {
