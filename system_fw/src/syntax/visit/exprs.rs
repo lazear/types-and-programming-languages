@@ -1,24 +1,24 @@
 use super::ast::*;
 
 pub trait MutExprVisitor<'e>: Sized {
-    fn visit_var(&mut self, s: &'e mut str) {}
-    fn visit_constr(&mut self, c: &'e mut str) {}
+    fn visit_var(&mut self, _: &'e mut str) {}
+    fn visit_constr(&mut self, _: &'e mut str) {}
     fn visit_if(&mut self, e1: &'e mut Expr, e2: &'e mut Expr, e3: &'e mut Expr) {
         self.visit_expr(e1);
         self.visit_expr(e2);
         self.visit_expr(e3);
     }
-    fn visit_abs(&mut self, pat: &'e mut Pattern, body: &'e mut Expr) {
+    fn visit_abs(&mut self, _: &'e mut Pattern, body: &'e mut Expr) {
         self.visit_expr(body);
     }
     fn visit_app(&mut self, e1: &'e mut Expr, e2: &'e mut Expr) {
         self.visit_expr(e1);
         self.visit_expr(e2);
     }
-    fn visit_tyabs(&mut self, s: &'e mut str, k: &'e mut Kind, e: &'e mut Expr) {
+    fn visit_tyabs(&mut self, _: &'e mut str, _: &'e mut Kind, e: &'e mut Expr) {
         self.visit_expr(e);
     }
-    fn visit_tyapp(&mut self, e: &'e mut Expr, ty: &'e mut Type) {
+    fn visit_tyapp(&mut self, e: &'e mut Expr, _: &'e mut Type) {
         self.visit_expr(e);
     }
     fn visit_record(&mut self, fields: &'e mut [Field]) {
@@ -41,7 +41,7 @@ pub trait MutExprVisitor<'e>: Sized {
             self.visit_expr(&mut arm.expr);
         }
     }
-    fn visit_let(&mut self, decls: &mut [Decl], e: &'e mut Expr) {
+    fn visit_let(&mut self, _: &mut [Decl], e: &'e mut Expr) {
         self.visit_expr(e);
     }
     fn visit_expr(&mut self, expr: &'e mut Expr) {
@@ -70,24 +70,24 @@ pub trait MutExprVisitor<'e>: Sized {
 }
 
 pub trait ExprVisitor<'e>: Sized {
-    fn visit_var(&mut self, s: &'e str) {}
-    fn visit_constr(&mut self, c: &'e str) {}
+    fn visit_var(&mut self, _: &'e str) {}
+    fn visit_constr(&mut self, _: &'e str) {}
     fn visit_if(&mut self, e1: &'e Expr, e2: &'e Expr, e3: &'e Expr) {
         self.visit_expr(e1);
         self.visit_expr(e2);
         self.visit_expr(e3);
     }
-    fn visit_abs(&mut self, pat: &'e Pattern, body: &'e Expr) {
+    fn visit_abs(&mut self, _: &'e Pattern, body: &'e Expr) {
         self.visit_expr(body);
     }
     fn visit_app(&mut self, e1: &'e Expr, e2: &'e Expr) {
         self.visit_expr(e1);
         self.visit_expr(e2);
     }
-    fn visit_tyabs(&mut self, s: &'e str, k: &'e Kind, e: &'e Expr) {
+    fn visit_tyabs(&mut self, _: &'e str, _: &'e Kind, e: &'e Expr) {
         self.visit_expr(e);
     }
-    fn visit_tyapp(&mut self, e: &'e Expr, ty: &'e Type) {
+    fn visit_tyapp(&mut self, e: &'e Expr, _: &'e Type) {
         self.visit_expr(e);
     }
     fn visit_record(&mut self, fields: &'e [Field]) {
@@ -110,7 +110,7 @@ pub trait ExprVisitor<'e>: Sized {
             self.visit_expr(&arm.expr);
         }
     }
-    fn visit_let(&mut self, decls: &'e [Decl], e: &'e Expr) {
+    fn visit_let(&mut self, _: &'e [Decl], e: &'e Expr) {
         self.visit_expr(e);
     }
     fn visit_expr(&mut self, expr: &'e Expr) {

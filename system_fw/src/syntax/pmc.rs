@@ -14,8 +14,7 @@
 /// We follow the algorithm from Pettersson92, some comments below are
 /// directly taken from the paper
 use super::*;
-use crate::stack::Stack;
-use ast::{Expr, ExprKind, PatKind, Pattern};
+use ast::{Expr, PatKind, Pattern};
 
 /// The intermediate data structure in the algorithm is an acylic
 /// DFA.
@@ -158,7 +157,7 @@ pub fn experiment() {
         | demo xs ys = D xs ys";
     let mut p = super::parser::Parser::new(input);
     let tm = p.parse_decl().unwrap();
-    let (ident, arms) = match tm.kind {
+    let (_, arms) = match tm.kind {
         ast::DeclKind::Function(_, ident, arms) => (ident, arms),
         _ => panic!("Invalid AST!"),
     };

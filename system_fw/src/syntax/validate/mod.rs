@@ -96,7 +96,7 @@ impl<'s> PatVisitor<'s> for ProgramValidation<'s> {
 impl<'s> TypeVisitor<'s> for ProgramValidation<'s> {
     fn visit_defined(&mut self, s: &'s str) {
         match self.tyvars.lookup(&s) {
-            Some(ix) => {}
+            Some(_) => {}
             None => {
                 if !self.defined_types.contains(&s) {
                     let d = Diagnostic::error(
@@ -109,21 +109,21 @@ impl<'s> TypeVisitor<'s> for ProgramValidation<'s> {
         }
     }
 
-    fn visit_existential(&mut self, s: &'s str, k: &'s Kind, ty: &'s Type) {
+    fn visit_existential(&mut self, s: &'s str, _: &'s Kind, ty: &'s Type) {
         self.with_tyvars(|f| {
             f.tyvars.push(s);
             f.visit_ty(ty)
         });
     }
 
-    fn visit_universal(&mut self, s: &'s str, k: &'s Kind, ty: &'s Type) {
+    fn visit_universal(&mut self, s: &'s str, _: &'s Kind, ty: &'s Type) {
         self.with_tyvars(|f| {
             f.tyvars.push(s);
             f.visit_ty(ty)
         });
     }
 
-    fn visit_abstraction(&mut self, s: &'s str, k: &'s Kind, ty: &'s Type) {
+    fn visit_abstraction(&mut self, s: &'s str, _: &'s Kind, ty: &'s Type) {
         self.with_tyvars(|f| {
             f.tyvars.push(s);
             f.visit_ty(ty)
@@ -132,7 +132,7 @@ impl<'s> TypeVisitor<'s> for ProgramValidation<'s> {
 
     fn visit_variable(&mut self, s: &'s str) {
         match self.tyvars.lookup(&s) {
-            Some(ix) => {}
+            Some(_) => {}
             None => {
                 let mut d =
                     Diagnostic::error(self.last_ty_span, format!("Unbound type variable: {}", s));
@@ -175,7 +175,7 @@ impl<'s> TypeVisitor<'s> for ProgramValidation<'s> {
 impl<'s> ExprVisitor<'s> for ProgramValidation<'s> {
     fn visit_var(&mut self, s: &'s str) {
         match self.tmvars.lookup(&s) {
-            Some(ix) => {}
+            Some(_) => {}
             None => {
                 if !self.defined_values.contains(&s) {
                     let d = Diagnostic::error(
@@ -229,6 +229,7 @@ impl<'s> ExprVisitor<'s> for ProgramValidation<'s> {
     }
 
     fn visit_case(&mut self, e: &'s Expr, arms: &'s [Arm]) {
+        self.visit_expr(e);
         for arm in arms {
             self.last_ex_span = arm.span;
             self.with_tmvars(|q| {

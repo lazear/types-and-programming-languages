@@ -2,9 +2,9 @@ use super::*;
 use ast::{Kind, Row, Type, TypeKind, Variant};
 
 pub trait MutTypeVisitor<'t>: Sized {
-    fn visit_defined(&mut self, s: &'t mut str) {}
+    fn visit_defined(&mut self, _: &'t mut str) {}
 
-    fn visit_variable(&mut self, s: &'t mut str) {}
+    fn visit_variable(&mut self, _: &'t mut str) {}
 
     fn visit_function(&mut self, ty1: &'t mut Type, ty2: &'t mut Type) {
         self.visit_ty(ty1);
@@ -36,15 +36,15 @@ pub trait MutTypeVisitor<'t>: Sized {
         }
     }
 
-    fn visit_existential(&mut self, s: &'t str, k: &'t Kind, ty: &'t mut Type) {
+    fn visit_existential(&mut self, _: &'t str, _: &'t Kind, ty: &'t mut Type) {
         self.visit_ty(ty);
     }
 
-    fn visit_universal(&mut self, s: &'t str, k: &'t Kind, ty: &'t mut Type) {
+    fn visit_universal(&mut self, _: &'t str, _: &'t Kind, ty: &'t mut Type) {
         self.visit_ty(ty);
     }
 
-    fn visit_abstraction(&mut self, s: &'t str, k: &'t Kind, ty: &'t mut Type) {
+    fn visit_abstraction(&mut self, _: &'t str, _: &'t Kind, ty: &'t mut Type) {
         self.visit_ty(ty);
     }
 
@@ -79,9 +79,9 @@ pub trait MutTypeVisitor<'t>: Sized {
 }
 
 pub trait TypeVisitor<'t>: Sized {
-    fn visit_defined(&mut self, s: &'t str) {}
+    fn visit_defined(&mut self, _: &'t str) {}
 
-    fn visit_variable(&mut self, s: &'t str) {}
+    fn visit_variable(&mut self, _: &'t str) {}
 
     fn visit_function(&mut self, ty1: &'t Type, ty2: &'t Type) {
         self.visit_ty(ty1);
@@ -113,15 +113,15 @@ pub trait TypeVisitor<'t>: Sized {
         }
     }
 
-    fn visit_existential(&mut self, s: &'t str, k: &'t Kind, ty: &'t Type) {
+    fn visit_existential(&mut self, _: &'t str, _: &'t Kind, ty: &'t Type) {
         self.visit_ty(ty);
     }
 
-    fn visit_universal(&mut self, s: &'t str, k: &'t Kind, ty: &'t Type) {
+    fn visit_universal(&mut self, _: &'t str, _: &'t Kind, ty: &'t Type) {
         self.visit_ty(ty);
     }
 
-    fn visit_abstraction(&mut self, s: &'t str, k: &'t Kind, ty: &'t Type) {
+    fn visit_abstraction(&mut self, _: &'t str, _: &'t Kind, ty: &'t Type) {
         self.visit_ty(ty);
     }
 

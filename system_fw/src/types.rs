@@ -125,22 +125,22 @@ impl fmt::Display for TyKind {
 }
 
 pub trait MutTypeVisitor: Sized {
-    fn visit_var(&mut self, var: &mut usize) {}
+    fn visit_var(&mut self, _: &mut usize) {}
 
     fn visit_arrow(&mut self, ty1: &mut Type, ty2: &mut Type) {
         self.visit(ty1);
         self.visit(ty2);
     }
 
-    fn visit_universal(&mut self, kind: &mut TyKind, ty: &mut Type) {
+    fn visit_universal(&mut self, _: &mut TyKind, ty: &mut Type) {
         self.visit(ty);
     }
 
-    fn visit_existential(&mut self, kind: &mut TyKind, ty: &mut Type) {
+    fn visit_existential(&mut self, _: &mut TyKind, ty: &mut Type) {
         self.visit(ty);
     }
 
-    fn visit_abs(&mut self, kind: &mut TyKind, ty: &mut Type) {
+    fn visit_abs(&mut self, _: &mut TyKind, ty: &mut Type) {
         self.visit(ty);
     }
 
@@ -161,7 +161,7 @@ pub trait MutTypeVisitor: Sized {
         }
     }
 
-    fn visit_projection(&mut self, ty: &mut Type, index: usize) {
+    fn visit_projection(&mut self, ty: &mut Type, _: usize) {
         self.visit(ty);
     }
 
@@ -179,7 +179,7 @@ pub trait MutTypeVisitor: Sized {
             Type::Var(v) => self.visit_var(v),
             Type::Record(fields) => self.visit_record(fields),
             Type::Product(tys) => self.visit_product(tys),
-            Type::Projection(ty, idx) => self.visit(ty),
+            Type::Projection(ty, _) => self.visit(ty),
             Type::Sum(variants) => self.visit_record(variants),
             Type::Recursive(ty1) => self.visit_recursive(ty1),
             Type::Arrow(ty1, ty2) => self.visit_arrow(ty1, ty2),
@@ -210,19 +210,19 @@ impl MutTypeVisitor for Shift {
         }
     }
 
-    fn visit_universal(&mut self, kind: &mut TyKind, ty: &mut Type) {
+    fn visit_universal(&mut self, _: &mut TyKind, ty: &mut Type) {
         self.cutoff += 1;
         self.visit(ty);
         self.cutoff -= 1;
     }
 
-    fn visit_existential(&mut self, kind: &mut TyKind, ty: &mut Type) {
+    fn visit_existential(&mut self, _: &mut TyKind, ty: &mut Type) {
         self.cutoff += 1;
         self.visit(ty);
         self.cutoff -= 1;
     }
 
-    fn visit_abs(&mut self, kind: &mut TyKind, ty: &mut Type) {
+    fn visit_abs(&mut self, _: &mut TyKind, ty: &mut Type) {
         self.cutoff += 1;
         self.visit(ty);
         self.cutoff -= 1;
@@ -247,19 +247,19 @@ impl Subst {
 }
 
 impl MutTypeVisitor for Subst {
-    fn visit_universal(&mut self, kind: &mut TyKind, ty: &mut Type) {
+    fn visit_universal(&mut self, _: &mut TyKind, ty: &mut Type) {
         self.cutoff += 1;
         self.visit(ty);
         self.cutoff -= 1;
     }
 
-    fn visit_existential(&mut self, kind: &mut TyKind, ty: &mut Type) {
+    fn visit_existential(&mut self, _: &mut TyKind, ty: &mut Type) {
         self.cutoff += 1;
         self.visit(ty);
         self.cutoff -= 1;
     }
 
-    fn visit_abs(&mut self, kind: &mut TyKind, ty: &mut Type) {
+    fn visit_abs(&mut self, _: &mut TyKind, ty: &mut Type) {
         self.cutoff += 1;
         self.visit(ty);
         self.cutoff -= 1;

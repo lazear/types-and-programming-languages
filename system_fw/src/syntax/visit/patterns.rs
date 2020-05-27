@@ -1,13 +1,13 @@
 use super::ast::{PatKind, Pattern, Type};
 
 pub trait MutPatVisitor<'p>: Sized {
-    fn visit_constructor(&mut self, s: &'p mut str) {}
-    fn visit_variable(&mut self, s: &'p mut str) {}
+    fn visit_constructor(&mut self, _: &'p mut str) {}
+    fn visit_variable(&mut self, _: &'p mut str) {}
     fn visit_pattern(&mut self, pat: &'p mut Pattern) {
         self.walk_pattern(pat);
     }
 
-    fn visit_ascribe(&mut self, pat: &'p mut Pattern, ty: &'p mut Type) {
+    fn visit_ascribe(&mut self, pat: &'p mut Pattern, _: &'p mut Type) {
         self.visit_pattern(pat);
     }
 
@@ -43,13 +43,13 @@ pub trait MutPatVisitor<'p>: Sized {
 }
 
 pub trait PatVisitor<'p>: Sized {
-    fn visit_constructor(&mut self, s: &'p str) {}
-    fn visit_variable(&mut self, s: &'p str) {}
+    fn visit_constructor(&mut self, _: &'p str) {}
+    fn visit_variable(&mut self, _: &'p str) {}
     fn visit_pattern(&mut self, pat: &'p Pattern) {
         self.walk_pattern(pat);
     }
 
-    fn visit_ascribe(&mut self, pat: &'p Pattern, ty: &'p Type) {
+    fn visit_ascribe(&mut self, pat: &'p Pattern, _: &'p Type) {
         self.visit_pattern(pat);
     }
 

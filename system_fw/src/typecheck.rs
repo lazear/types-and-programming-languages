@@ -1,7 +1,7 @@
 use crate::diagnostics::Diagnostic;
 use crate::stack::Stack;
-use crate::terms::{Constant, Field, Kind, Record, Term};
-use crate::types::{MutTypeVisitor, Shift, Subst, TyField, TyKind, Type};
+use crate::terms::{Constant, Kind, Field, Record, Term};
+use crate::types::{MutTypeVisitor, TyField, TyKind, Type};
 use util::span::Span;
 /// A typing context, Γ
 #[derive(Debug)]
@@ -477,7 +477,7 @@ impl Context {
                 // and wraps the type into μF
                 // Alternatively, Fold can also take an argument of type μF A,
                 // term where term types to F(μF) A
-                let mut rec = rec.clone();
+                let rec = rec.clone();
                 // self.simplify_ty(&mut rec)
                 //     .map_err(|ke| ke.to_diag(term.span))?;
                 match rec.as_ref() {

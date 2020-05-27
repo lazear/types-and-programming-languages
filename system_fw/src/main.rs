@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 #[macro_use]
 pub mod macros;
 pub mod diagnostics;
@@ -13,12 +14,12 @@ use syntax::ast;
 use syntax::parser::{Error, ErrorKind, Parser};
 use syntax::validate;
 use syntax::visit::TypeVisitor;
-use terms::{Field, Kind, Record, Term};
-use types::{TyKind, Type};
+use terms::Term;
+use types::Type;
 use util::span::Span;
 
 fn recursive_labels(tyvars: Vec<ast::Type>, name: String, ty: ast::Type) -> ast::Type {
-    let vars = ty.kind.variants();
+    // let vars = ty.kind.variants();
     let mut coll = validate::TyNameCollector::default();
     coll.visit_ty(&ty);
 
@@ -46,7 +47,7 @@ fn recursive_labels(tyvars: Vec<ast::Type>, name: String, ty: ast::Type) -> ast:
 }
 
 fn main() {
-    let mut ctx = typecheck::Context::default();
+    // let mut ctx = typecheck::Context::default();
 
     // syntax::pmc::experiment();
 
@@ -55,7 +56,7 @@ fn main() {
         print!("repl: ");
         std::io::stdout().flush().unwrap();
         std::io::stdin().read_to_string(&mut buffer).unwrap();
-        let mut p = syntax::parser::Parser::new(&buffer);
+        let mut p = Parser::new(&buffer);
 
         // loop {
         match p.parse_program() {
@@ -86,7 +87,7 @@ fn unfold(ty: Type) -> Type {
     match &ty {
         Type::Recursive(inner) => op_app!(*inner.clone(), ty),
         Type::App(a, b) => match a.as_ref() {
-            Type::Recursive(rec) => op_app!(unfold(*a.clone()), *b.clone()),
+            Type::Recursive(_) => op_app!(unfold(*a.clone()), *b.clone()),
             _ => ty,
         },
         _ => ty,
