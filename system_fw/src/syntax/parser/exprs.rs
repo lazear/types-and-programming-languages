@@ -25,7 +25,7 @@ impl<'s> Parser<'s> {
         // let pat = self.once(|p| p.parse_pattern(), "missing pattern in let
         // binding")?; self.expect(Token::Equals)?;
         // let t1 = self.once(|p| p.parse_expr(), "let binder required")?;
-        let decls = self.parse_decl_seq()?;
+        let decls = self.parse_program()?.decls;
         self.expect(Token::In)?;
         let t2 = self.once(|p| p.parse_expr(), "let body required")?;
         self.expect(Token::End)?;

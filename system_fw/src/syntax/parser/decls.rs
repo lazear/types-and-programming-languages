@@ -86,17 +86,43 @@ impl<'s> Parser<'s> {
         };
         let mut d = d?;
         let id = self.allocate_ast_id();
+        d.id = id;
+        match &d.kind {
+            DeclKind::Type(_, name, _) | DeclKind::Datatype(_, name, _) => {
+                self.definitions.push((name.clone(), id));
+            }
+            DeclKind::Value(_, pats, _) => {
+                use crate::syntax::visit::PatVisitor;
+                let mut pc = PatBindings::default();
+                pc.visit_pattern(pats);
+                for bind in pc.binds {
+                    self.definitions.push((bind.into(), id));
+                }
+            }
+            _ => {}
+        }
 
         Ok(d)
     }
 
-    pub(crate) fn parse_decl_seq(&mut self) -> Result<Vec<Decl>, Error> {
-        let mut seqs = vec![self.parse_decl()?];
+    pub fn parse_program(&mut self) -> Result<Program, Error> {
+        let mut decls = vec![self.parse_decl()?];
         self.bump_if(&Token::Semicolon);
         while let Ok(d) = self.parse_decl() {
-            seqs.push(d);
+            decls.push(d);
             self.bump_if(&Token::Semicolon);
         }
-        Ok(seqs)
+        Ok(Program { decls })
+    }
+}
+
+#[derive(Default)]
+struct PatBindings<'p> {
+    binds: Vec<&'p str>,
+}
+
+impl<'p> crate::syntax::visit::PatVisitor<'p> for PatBindings<'p> {
+    fn visit_variable(&mut self, s: &'p str) {
+        self.binds.push(s);
     }
 }

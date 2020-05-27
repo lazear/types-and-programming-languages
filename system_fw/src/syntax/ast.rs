@@ -36,6 +36,10 @@ container!(Type, TypeKind);
 container!(Decl, DeclKind);
 container!(Pattern, PatKind);
 
+pub struct Program {
+    pub decls: Vec<Decl>,
+}
+
 /// Arm of a case expression
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Arm {
@@ -167,19 +171,10 @@ impl TypeKind {
         }
     }
 
-    pub fn as_tyvar(&self) -> String {
+    pub fn as_tyvar(&self) -> &str {
         match self {
-            TypeKind::Variable(s) => s.clone(),
+            TypeKind::Variable(s) => s,
             _ => panic!("Not a type var!"),
-        }
-    }
-}
-
-impl Decl {
-    fn definition_name(&self) -> Option<&str> {
-        match &self.kind {
-            DeclKind::Type(_, name, _) | DeclKind::Datatype(_, name, _) => Some(name),
-            _ => None,
         }
     }
 }

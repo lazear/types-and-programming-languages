@@ -11,7 +11,7 @@ pub mod types;
 use std::io::prelude::*;
 use syntax::ast;
 use syntax::parser::{Error, ErrorKind, Parser};
-use syntax::validate::TyNameCollector;
+use syntax::validate;
 use syntax::visit::TypeVisitor;
 use terms::{Field, Kind, Record, Term};
 use types::{TyKind, Type};
@@ -19,7 +19,7 @@ use util::span::Span;
 
 fn recursive_labels(tyvars: Vec<ast::Type>, name: String, ty: ast::Type) -> ast::Type {
     let vars = ty.kind.variants();
-    let mut coll = TyNameCollector::default();
+    let mut coll = validate::TyNameCollector::default();
     coll.visit_ty(&ty);
 
     let recur = coll.definitions.contains(&name.as_ref());
@@ -54,15 +54,16 @@ fn main() {
         let mut p = syntax::parser::Parser::new(&buffer);
 
         // loop {
-        match p.parse_decl() {
+        match p.parse_program() {
             Ok(d) => {
-                println!("====> {:?}", d);
-                match d.kind {
-                    ast::DeclKind::Datatype(tyvars, name, ty) => {
-                        println!("elab test: {:?}", recursive_labels(tyvars, name, ty))
-                    }
-                    _ => {}
-                }
+                println!("====> {:?}", &d.decls);
+                println!("Validate: {:?}", validate::ProgramValidation::validate(&d));
+                // match d.kind {
+                //     ast::DeclKind::Datatype(tyvars, name, ty) => {
+                //         println!("elab test: {:?}", recursive_labels(tyvars,
+                // name, ty))     }
+                //     _ => {}
+                // }
             }
             Err(Error {
                 kind: ErrorKind::EOF,
@@ -72,6 +73,8 @@ fn main() {
                 println!("[err] {:?}", e);
             }
         }
+
+        println!("parser defs: {:?}", p.definitions);
         // }
     }
 }

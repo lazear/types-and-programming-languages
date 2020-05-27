@@ -55,6 +55,17 @@ impl<T> Stack<T> {
     }
 }
 
+impl<T: PartialEq> Stack<T> {
+    pub fn lookup(&self, key: &T) -> Option<usize> {
+        for (idx, s) in self.inner.iter().enumerate() {
+            if key == s {
+                return Some(idx);
+            }
+        }
+        None
+    }
+}
+
 impl<T> Extend<T> for Stack<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for elem in iter {

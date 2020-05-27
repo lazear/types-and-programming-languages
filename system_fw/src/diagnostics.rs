@@ -81,9 +81,11 @@ impl fmt::Debug for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "\n{:?}: {}\n{}",
+            "\n{:?}: {} starting at line {}, col {}\n{}",
             self.level,
             self.primary.info,
+            self.primary.span.start.line,
+            self.primary.span.start.col,
             self.other
                 .iter()
                 .map(|a| a.info.clone())
