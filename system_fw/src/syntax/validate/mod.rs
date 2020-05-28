@@ -6,6 +6,8 @@ use std::collections::HashSet;
 use std::iter::IntoIterator;
 use util::span::Span;
 
+pub mod elaborate;
+
 /// Collect type variables and references to defined names
 #[derive(Default, Debug, Clone)]
 pub struct TyNameCollector<'s> {

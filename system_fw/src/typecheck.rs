@@ -1,6 +1,6 @@
 use crate::diagnostics::Diagnostic;
 use crate::stack::Stack;
-use crate::terms::{Constant, Kind, Field, Record, Term};
+use crate::terms::{Constant, Field, Kind, Record, Term};
 use crate::types::{MutTypeVisitor, TyField, TyKind, Type};
 use util::span::Span;
 /// A typing context, Γ

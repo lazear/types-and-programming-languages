@@ -3,6 +3,7 @@
 pub mod macros;
 pub mod diagnostics;
 pub mod functor;
+pub mod hir;
 pub mod stack;
 pub mod syntax;
 pub mod terms;
@@ -13,7 +14,7 @@ use std::io::prelude::*;
 use syntax::ast;
 use syntax::parser::{Error, ErrorKind, Parser};
 use syntax::validate;
-use syntax::visit::TypeVisitor;
+use syntax::visit::{DeclVisitor, TypeVisitor};
 use terms::Term;
 use types::Type;
 use util::span::Span;
@@ -63,12 +64,9 @@ fn main() {
             Ok(d) => {
                 println!("====> {:?}", &d.decls);
                 println!("Validate: {:?}", validate::ProgramValidation::validate(&d));
-                // match d.kind {
-                //     ast::DeclKind::Datatype(tyvars, name, ty) => {
-                //         println!("elab test: {:?}", recursive_labels(tyvars,
-                // name, ty))     }
-                //     _ => {}
-                // }
+                validate::elaborate::ElaborationContext::new()
+                    .elab_program(&d)
+                    .unwrap();
             }
             Err(Error {
                 kind: ErrorKind::EOF,
