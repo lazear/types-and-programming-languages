@@ -45,11 +45,11 @@ pub enum Pattern {
     /// Datatype constructor, HirId points to the constructor value binding
     Constructor(HirId),
     /// Variable binding
-    Variable,
+    Variable(String),
     /// Tuple of pattern bindings (_, x)
     Product(Vec<Pattern>),
     /// Record pattern { label1, label2 }
-    Record(Vec<Pattern>),
+    Record(Vec<String>),
     /// Algebraic datatype constructor, along with binding pattern
     Application(HirId, Box<Pattern>),
 }
@@ -60,8 +60,11 @@ pub enum Expr {
     Int(usize),
     LocalVar(DeBruijn),
     ProgramVar(HirId),
+
     // Datatype constructor, pointing to type def and tag of the constr
     Constr(HirId, usize),
+    Deconstr(HirId, usize),
+
     If(Box<Expr>, Box<Expr>, Box<Expr>),
 
     // Desugar into explicit type bindings
@@ -72,7 +75,9 @@ pub enum Expr {
     TyApp(Box<Expr>, Box<Type>),
     Record(Vec<Field>),
     Tuple(Vec<Expr>),
-    Projection(Box<Expr>, Box<Expr>),
+
+    RecordProj(Box<Expr>, String),
+    TupleProj(Box<Expr>, usize),
     Case(Box<Expr>, Vec<Arm>),
     Let(Vec<Decl>, Box<Expr>),
 }

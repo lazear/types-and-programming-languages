@@ -136,7 +136,8 @@ fn pat_variable_rule(a: &Pattern) -> bool {
         Any => true,
         Variable(_) => true,
         Ascribe(p, _) => pat_variable_rule(p),
-        Record(p) | Product(p) => p.iter().all(pat_variable_rule),
+        Record(p) => true,
+        Product(p) => p.iter().all(pat_variable_rule),
         _ => false,
     }
 }

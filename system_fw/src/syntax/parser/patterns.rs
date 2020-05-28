@@ -19,7 +19,7 @@ impl<'s> Parser<'s> {
     fn record_pattern(&mut self) -> Result<Pattern, Error> {
         let mut span = self.current.span;
         self.expect(Token::LBrace)?;
-        let v = self.delimited(|p| p.parse_pattern(), Token::Comma)?;
+        let v = self.delimited(|p| p.expect_lower_id(), Token::Comma)?;
         self.expect(Token::RBrace)?;
         span += self.prev;
         Ok(Pattern::new(Record(v), span))

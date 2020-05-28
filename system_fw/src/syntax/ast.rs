@@ -75,7 +75,7 @@ pub enum PatKind {
     /// Tuple of pattern bindings (_, x)
     Product(Vec<Pattern>),
     /// Record pattern { label1, label2 }
-    Record(Vec<Pattern>),
+    Record(Vec<String>),
     /// Algebraic datatype constructor, along with binding pattern
     Application(Box<Pattern>, Box<Pattern>),
 }

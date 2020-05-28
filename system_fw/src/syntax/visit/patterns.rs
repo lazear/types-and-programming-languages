@@ -17,11 +17,7 @@ pub trait MutPatVisitor<'p>: Sized {
         }
     }
 
-    fn visit_record(&mut self, pats: &'p mut [Pattern]) {
-        for pat in pats {
-            self.visit_pattern(pat);
-        }
-    }
+    fn visit_record(&mut self, pats: &'p mut [String]) {}
 
     fn walk_pattern(&mut self, pat: &'p mut Pattern) {
         use PatKind::*;
@@ -59,11 +55,7 @@ pub trait PatVisitor<'p>: Sized {
         }
     }
 
-    fn visit_record(&mut self, pats: &'p [Pattern]) {
-        for pat in pats {
-            self.visit_pattern(pat);
-        }
-    }
+    fn visit_record(&mut self, pats: &'p [String]) {}
 
     fn walk_pattern(&mut self, pat: &'p Pattern) {
         use PatKind::*;
