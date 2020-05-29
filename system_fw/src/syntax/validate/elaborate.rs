@@ -1,9 +1,6 @@
 use super::*;
-use crate::diagnostics::Diagnostic;
-use crate::hir::Decl as HDecl;
-use crate::hir::Expr as HExpr;
-use crate::hir::Type as HType;
-use crate::hir::{self, DeBruijn, HirId};
+
+use crate::hir::{self, Constructor, DeBruijn, HirId};
 use crate::stack::Stack;
 use crate::syntax::pmc::InitMatrix;
 use std::collections::{HashMap, HashSet};
@@ -14,27 +11,36 @@ use util::span::Span;
 /// term or type variables. We traverse the program in execution order,
 /// adding bindings for top-level declarations, and also keeping track of
 /// bindings that occur in local scopes for de Bruijn index tracking
+#[derive(Default)]
 pub struct ElaborationContext<'s> {
     tyvars: Stack<&'s str>,
     tmvars: Stack<&'s str>,
-    defined_values: HashMap<String, HirId>,
-    defined_types: HashMap<String, HirId>,
 
+    // defined_values: HashMap<String, HirId>,
+    // defined_types: HashMap<String, HirId>,
+    namespaces: Vec<Namespace>,
+    current: usize,
+
+    constructors: HashMap<HirId, Constructor>,
     elaborated: HashMap<HirId, hir::Decl>,
     next_hir_id: HirId,
+}
+
+#[derive(Default)]
+pub struct Namespace {
+    id: usize,
+    parent: Option<usize>,
+    values: HashMap<String, HirId>,
+    types: HashMap<String, HirId>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 
 pub enum ElabError {
-    Undefined(String, util::span::Span),
+    UndefinedType(String, util::span::Span),
+    UndefinedValue(String, util::span::Span),
+    UndefinedConstr(String, util::span::Span),
     InvalidBinding(String, util::span::Span),
-}
-
-#[derive(Copy, Clone, PartialEq)]
-enum Scope {
-    Local,
-    Global,
 }
 
 impl<'s> ElaborationContext<'s> {
@@ -78,14 +84,14 @@ impl<'s> ElaborationContext<'s> {
     fn define_value(&mut self, name: String, expr: hir::Expr) -> HirId {
         let id = self.allocate_hir_id();
         self.elaborated.insert(id, hir::Decl::Value(expr));
-        self.defined_values.insert(name, id);
+        self.namespaces[self.current].values.insert(name, id);
         id
     }
 
     fn define_type(&mut self, name: String, ty: hir::Type) -> HirId {
         let id = self.allocate_hir_id();
         self.elaborated.insert(id, hir::Decl::Type(ty));
-        self.defined_types.insert(name, id);
+        self.namespaces[self.current].types.insert(name, id);
         id
     }
 
@@ -115,78 +121,125 @@ impl<'s> ElaborationContext<'s> {
             hir::Expr::TyAbs(Box::new(hir::Kind::Star), Box::new(e))
         });
 
-        self.define_value(name.into(), expr)
+        let arity = type_signature.is_some();
+
+        let con_id = self.define_value(name.into(), expr);
+        self.constructors.insert(
+            con_id,
+            Constructor {
+                name: name.into(),
+                type_id,
+                con_id,
+                tag,
+                arity,
+            },
+        );
+        con_id
     }
 
     pub fn dump(&self) {
-        println!("Current value bindings:");
-        for (name, key) in &self.defined_values {
-            println!(
-                "[{:?}] {}: {:?}",
-                key,
-                name,
-                self.elaborated.get(key).unwrap()
-            );
+        for n in &self.namespaces {
+            println!("Current value bindings:");
+            for (name, key) in &n.values {
+                println!(
+                    "\t[{:?}] {}: {:?}",
+                    key,
+                    name,
+                    self.elaborated.get(key).unwrap()
+                );
+            }
+            println!("Current type bindings:");
+            for (name, key) in &n.types {
+                println!(
+                    "\t[{:?}] {}: {:?}",
+                    key,
+                    name,
+                    self.elaborated.get(key).unwrap()
+                );
+            }
         }
-        println!("Current type bindings:");
-        for (name, key) in &self.defined_types {
-            println!(
-                "[{:?}] {}: {:?}",
-                key,
-                name,
-                self.elaborated.get(key).unwrap()
-            );
+
+        println!("Current constr bindings:");
+        for (name, key) in &self.constructors {
+            println!("{:?}", key,);
         }
     }
 
-    fn ty_lookup(&self, s: &str, scope: Scope) -> Option<hir::Type> {
-        match scope {
-            Scope::Local => self.tyvars.lookup(&s).map(|idx| {
-                hir::Type::Var(DeBruijn {
-                    idx,
-                    name: s.into(),
-                })
-            }),
-            Scope::Global => self
-                .defined_types
-                .get(s)
-                .map(|idx| hir::Type::Defined(*idx)),
+    fn lexical_value(&self, s: &str) -> Option<HirId> {
+        let mut ptr = &self.namespaces[self.current];
+        loop {
+            match ptr.values.get(s) {
+                Some(idx) => return Some(*idx),
+                None => ptr = &self.namespaces[ptr.parent?],
+            }
         }
     }
 
-    fn expr_lookup(&self, s: &str, scope: Scope) -> Option<hir::Expr> {
-        let ret = match scope {
-            Scope::Local => self.tmvars.lookup(&s).map(|idx| {
-                hir::Expr::LocalVar(DeBruijn {
-                    idx,
-                    name: s.into(),
-                })
-            }),
-            Scope::Global => self
-                .defined_values
-                .get(s)
-                .map(|idx| hir::Expr::ProgramVar(*idx)),
-        };
-        // We don't have a sigil for local term variables like we do for type
-        // variables, so just attempt to lexically scope it first.
-        // We don't need to do this for Scope::Global, because that is only
-        // for constructors.... or do we need to do this for let bindings?
-        // TODO ^^
-        if ret.is_none() && scope == Scope::Local {
-            return self.expr_lookup(s, Scope::Global);
-        }
-        ret
+    fn debruijn_value(&self, s: &str) -> Option<hir::Expr> {
+        self.tmvars.lookup(&s).map(|idx| {
+            hir::Expr::LocalVar(DeBruijn {
+                idx,
+                name: s.into(),
+            })
+        })
     }
 
-    pub fn new() -> ElaborationContext<'s> {
-        ElaborationContext {
-            tmvars: Stack::default(),
-            tyvars: Stack::default(),
-            defined_values: HashMap::default(),
-            defined_types: HashMap::default(),
-            elaborated: HashMap::default(),
-            next_hir_id: HirId(0),
+    fn lookup_value(&self, s: &str) -> Option<hir::Expr> {
+        if let Some(db) = self.debruijn_value(s) {
+            return Some(db);
         }
+        self.lexical_value(s).map(hir::Expr::ProgramVar)
+    }
+
+    fn lexical_type(&self, s: &str) -> Option<HirId> {
+        let mut ptr = &self.namespaces[self.current];
+        loop {
+            match ptr.types.get(s) {
+                Some(idx) => return Some(*idx),
+                None => ptr = &self.namespaces[ptr.parent?],
+            }
+        }
+    }
+
+    fn debruijn_type(&self, s: &str) -> Option<hir::Type> {
+        self.tyvars.lookup(&s).map(|idx| {
+            hir::Type::Var(DeBruijn {
+                idx,
+                name: s.into(),
+            })
+        })
+    }
+
+    pub fn new() -> Self {
+        let mut ec = Self::default();
+        let global_ns = Namespace::default();
+        ec.namespaces.push(global_ns);
+        ec
+    }
+
+    fn enter_namespace(&mut self) -> usize {
+        let id = self.namespaces.len();
+        self.namespaces.push(Namespace {
+            id,
+            parent: Some(self.current),
+            types: HashMap::new(),
+            values: HashMap::new(),
+        });
+        id
+    }
+
+    fn leave_namespace(&mut self) {
+        match self.namespaces[self.current].parent {
+            Some(id) => self.current = id,
+            None => panic!("trying to leave global namespace!"),
+        }
+    }
+
+    fn with_new_namespace<T, F: Fn(&mut ElaborationContext<'s>) -> T>(&mut self, f: F) -> T {
+        self.enter_namespace();
+        let t = f(self);
+        self.leave_namespace();
+        t
     }
 }
 
@@ -213,11 +266,12 @@ impl<'s> ElaborationContext<'s> {
             Unit => Ok(hir::Type::Unit),
             Infer => Ok(hir::Type::Infer),
             Defined(s) => self
-                .ty_lookup(s, Scope::Global)
-                .ok_or_else(|| ElabError::Undefined(s.into(), ty.span)),
+                .lexical_type(s)
+                .map(hir::Type::Defined)
+                .ok_or_else(|| ElabError::UndefinedType(s.into(), ty.span)),
             Variable(s) => self
-                .ty_lookup(s, Scope::Local)
-                .ok_or_else(|| ElabError::Undefined(s.into(), ty.span)),
+                .debruijn_type(s)
+                .ok_or_else(|| ElabError::UndefinedType(s.into(), ty.span)),
             Function(ty1, ty2) => Ok(hir::Type::Arrow(
                 Box::new(self.elab_type(ty1)?),
                 Box::new(self.elab_type(ty2)?),
@@ -286,11 +340,14 @@ impl<'s> ElaborationContext<'s> {
             Unit => Ok(hir::Expr::Unit),
             Int(i) => Ok(hir::Expr::Int(*i)),
             Var(s) => self
-                .expr_lookup(s, Scope::Local)
-                .ok_or_else(|| ElabError::Undefined(s.into(), expr.span)),
+                .lookup_value(s)
+                .ok_or_else(|| ElabError::UndefinedValue(s.into(), expr.span)),
             Constr(s) => self
-                .expr_lookup(s, Scope::Global)
-                .ok_or_else(|| ElabError::Undefined(s.into(), expr.span)),
+                .lexical_value(s)
+                .map(|id| self.constructors.get(&id))
+                .flatten()
+                .map(|c| hir::Expr::Constr(c.type_id, c.tag))
+                .ok_or_else(|| ElabError::UndefinedConstr(s.into(), expr.span)),
             If(e1, e2, e3) => Ok(hir::Expr::If(
                 Box::new(self.elab_expr(e1)?),
                 Box::new(self.elab_expr(e2)?),
@@ -355,16 +412,23 @@ impl<'s> ElaborationContext<'s> {
                 Box::new(self.elab_type(ty)?),
             )),
             PatKind::Constructor(s) => self
-                .defined_types
-                .get(s.as_ref() as &str)
-                .copied()
-                .ok_or_else(|| ElabError::Undefined(s.clone(), pat.span))
+                .lexical_value(s)
+                .ok_or_else(|| ElabError::UndefinedConstr(s.clone(), pat.span))
                 .map(hir::Pattern::Constructor),
             PatKind::Application(con, arg) => {
                 let econ = self.elab_pattern(con)?;
                 let earg = self.elab_pattern(arg)?;
                 let id = match econ {
-                    hir::Pattern::Constructor(id) => id,
+                    hir::Pattern::Constructor(id) => {
+                        let con_info = self.constructors.get(&id).unwrap();
+                        if !con_info.arity {
+                            return Err(ElabError::InvalidBinding(
+                                format!("constructor {} doesn't accept arguments!", con_info.name),
+                                pat.span,
+                            ));
+                        }
+                        id
+                    }
                     _ => {
                         return Err(ElabError::InvalidBinding(
                             format!("cannot apply {:?} to non-constructor {:?}", arg, con),
@@ -406,7 +470,7 @@ impl<'s> ElaborationContext<'s> {
 
         // Insert first, so we can be recursive if we need to
         let id = self.allocate_hir_id();
-        self.defined_types.insert(name.into(), id);
+        self.namespaces[self.current].values.insert(name.into(), id);
 
         // We just do all of this inside of the closure, rather than delegrating
         // to visit_sum, because we need access to both `tyvars` for generating
@@ -481,13 +545,12 @@ impl<'s> ElaborationContext<'s> {
                 span,
             )),
             Application(con, arg) => {
-                // // val Some (x, xy) = expr
-                // // val tup = case expr of Some (x, xy) => (x, xy)
-                // // val x = tup.0
-                // // val y = tup.1
-
-                // let ast_arm = Arm { pat: pat, expr: }
-                unimplemented!()
+                let con_info = self.constructors.get(&con).unwrap();
+                let e = hir::Expr::App(
+                    Box::new(hir::Expr::Deconstr(con_info.type_id, con_info.tag)),
+                    Box::new(expr),
+                );
+                Ok(self.define_value("$anon_bind_decon".into(), e))
             }
             Literal(_) => Err(ElabError::InvalidBinding(
                 format!("cannot bind a literal pattern to a value!"),
@@ -518,6 +581,7 @@ impl<'s> ElaborationContext<'s> {
             DeclKind::Datatype(tyvars, name, ty) => self.elab_decl_datatype(tyvars, name, ty),
             DeclKind::Type(tyvars, name, ty) => self.elab_decl_type(tyvars, name, ty),
             DeclKind::Value(tyvars, pat, expr) => self.elab_decl_value(tyvars, pat, expr),
+            DeclKind::And(d1, d2) => unimplemented!(),
             _ => unimplemented!(),
         }
     }

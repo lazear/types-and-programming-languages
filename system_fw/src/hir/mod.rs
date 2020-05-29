@@ -6,7 +6,7 @@ pub struct DeBruijn {
     pub name: String,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, PartialOrd, Eq, Hash)]
 pub struct HirId(pub(crate) u32);
 
 /// Arm of a case expression
@@ -31,6 +31,19 @@ pub struct Program {
 pub enum Decl {
     Type(Type),
     Value(Expr),
+}
+
+#[derive(Clone, Debug, PartialEq, PartialOrd)]
+pub struct Constructor {
+    pub name: String,
+    // Points to the constructor function in defined_values
+    pub con_id: HirId,
+    // Points to a Type::Sum in the defined_types map
+    pub type_id: HirId,
+    // Index of this constructor into the sum variants
+    pub tag: usize,
+    // Whether this constr takes an argument or not
+    pub arity: bool,
 }
 
 /// Patterns for case and let expressions
@@ -64,7 +77,6 @@ pub enum Expr {
     // Datatype constructor, pointing to type def and tag of the constr
     Constr(HirId, usize),
     Deconstr(HirId, usize),
-
     If(Box<Expr>, Box<Expr>, Box<Expr>),
 
     // Desugar into explicit type bindings

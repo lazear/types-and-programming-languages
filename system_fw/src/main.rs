@@ -58,15 +58,13 @@ fn main() {
         std::io::stdout().flush().unwrap();
         std::io::stdin().read_to_string(&mut buffer).unwrap();
         let mut p = Parser::new(&buffer);
-
+        let mut ctx = validate::elaborate::ElaborationContext::new();
         // loop {
         match p.parse_program() {
             Ok(d) => {
                 println!("====> {:?}", &d.decls);
-                println!("Validate: {:?}", validate::ProgramValidation::validate(&d));
-                validate::elaborate::ElaborationContext::new()
-                    .elab_program(&d)
-                    .unwrap();
+                // println!("Validate: {:?}", validate::ProgramValidation::validate(&d));
+                ctx.elab_program(&d).unwrap();
             }
             Err(Error {
                 kind: ErrorKind::EOF,
