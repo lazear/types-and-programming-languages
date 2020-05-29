@@ -225,6 +225,7 @@ impl<'s> ElaborationContext<'s> {
             types: HashMap::new(),
             values: HashMap::new(),
         });
+        self.current = id;
         id
     }
 
@@ -316,11 +317,28 @@ impl<'s> ElaborationContext<'s> {
 
 impl<'s> ElaborationContext<'s> {
     fn elab_let(&mut self, decls: &'s [Decl], expr: &'s Expr) -> Result<hir::Expr, ElabError> {
-        unimplemented!()
+        self.with_new_namespace(|f| {
+            for d in decls {
+                f.elab_decl(d)?;
+            }
+            f.elab_expr(expr)
+        })
+    }
+
+    fn elab_arm(&mut self, arm: &'s Arm) -> Result<hir::Arm, ElabError> {
+        Ok(hir::Arm {
+            pat: self.elab_pattern(&arm.pat)?,
+            expr: self.elab_expr(&arm.expr)?,
+        })
     }
 
     fn elab_case(&mut self, expr: &'s Expr, arms: &'s [Arm]) -> Result<hir::Expr, ElabError> {
-        unimplemented!()
+        let ex = self.elab_expr(expr)?;
+        let arms = arms
+            .iter()
+            .map(|a| self.elab_arm(a))
+            .collect::<Result<_, _>>()?;
+        Ok(hir::Expr::Case(Box::new(ex), arms))
     }
 
     fn elab_field(&mut self, field: &'s Field) -> Result<hir::Field, ElabError> {
@@ -438,7 +456,6 @@ impl<'s> ElaborationContext<'s> {
                 };
                 Ok(hir::Pattern::Application(id, Box::new(earg)))
             }
-            PatKind::Literal(i) => Ok(hir::Pattern::Literal(*i)),
         }
     }
 }
@@ -470,7 +487,7 @@ impl<'s> ElaborationContext<'s> {
 
         // Insert first, so we can be recursive if we need to
         let id = self.allocate_hir_id();
-        self.namespaces[self.current].values.insert(name.into(), id);
+        self.namespaces[self.current].types.insert(name.into(), id);
 
         // We just do all of this inside of the closure, rather than delegrating
         // to visit_sum, because we need access to both `tyvars` for generating
@@ -516,10 +533,15 @@ impl<'s> ElaborationContext<'s> {
     ) -> Result<HirId, ElabError> {
         use hir::Pattern::*;
         match pat {
-            Any | Unit => Ok(self.define_value("_".into(), expr)),
+            Any | Unit => Ok(self.define_value(String::default(), expr)),
             Variable(s) => Ok(self.define_value(s, expr)),
             Product(sub) => {
-                let id = self.define_value("$anon_bind_tuple".into(), expr);
+                // No need for extra redirection
+                let id = match expr {
+                    hir::Expr::ProgramVar(id) => id,
+                    _ => self.define_value(String::default(), expr),
+                };
+
                 let base = Box::new(hir::Expr::ProgramVar(id));
                 for (idx, pat) in sub.into_iter().enumerate() {
                     self.deconstruct_pat_binding(
@@ -531,7 +553,10 @@ impl<'s> ElaborationContext<'s> {
                 Ok(id)
             }
             Record(sub) => {
-                let id = self.define_value("$anon_bind_record".into(), expr);
+                let id = match expr {
+                    hir::Expr::ProgramVar(id) => id,
+                    _ => self.define_value(String::default(), expr),
+                };
                 let base = Box::new(hir::Expr::ProgramVar(id));
 
                 for (idx, pat) in sub.into_iter().enumerate() {
@@ -540,17 +565,27 @@ impl<'s> ElaborationContext<'s> {
                 Ok(id)
             }
             Ascribe(pat, _) => self.deconstruct_pat_binding(*pat, expr, span),
-            Constructor(s) => Err(ElabError::InvalidBinding(
+            Constructor(_) => Err(ElabError::InvalidBinding(
                 format!("cannot bind constructor to a value!"),
                 span,
             )),
             Application(con, arg) => {
+                //      con  arg     expr
+                // val Some (x, y) = Some (10, 9)
+                // val Some (x, y) = funct 10
+                //     $anon = func 10
+                //      case $anon of
+
                 let con_info = self.constructors.get(&con).unwrap();
                 let e = hir::Expr::App(
                     Box::new(hir::Expr::Deconstr(con_info.type_id, con_info.tag)),
                     Box::new(expr),
                 );
-                Ok(self.define_value("$anon_bind_decon".into(), e))
+
+                let id = self
+                    .with_new_namespace(|f| f.define_value("$anon_bind_decon".into(), e.clone()));
+                let e = hir::Expr::ProgramVar(id);
+                self.deconstruct_pat_binding(*arg, e, span)
             }
             Literal(_) => Err(ElabError::InvalidBinding(
                 format!("cannot bind a literal pattern to a value!"),
@@ -576,13 +611,31 @@ impl<'s> ElaborationContext<'s> {
         })
     }
 
+    fn elab_decl_fun(
+        &mut self,
+        tyvars: &'s [Type],
+        name: &'s str,
+        arms: &'s [FnArm],
+    ) -> Result<HirId, ElabError> {
+        self.with_tyvars(|f| {
+            f.tyvars.extend(tyvars.iter().map(|t| t.kind.as_tyvar()));
+            f.with_tmvars(|f| unimplemented!())
+        })
+    }
+
+    fn elab_decl_expr(&mut self, expr: &'s Expr) -> Result<HirId, ElabError> {
+        let e = self.elab_expr(expr)?;
+        Ok(self.define_value(String::default(), e))
+    }
+
     fn elab_decl(&mut self, decl: &'s Decl) -> Result<HirId, ElabError> {
         match &decl.kind {
             DeclKind::Datatype(tyvars, name, ty) => self.elab_decl_datatype(tyvars, name, ty),
             DeclKind::Type(tyvars, name, ty) => self.elab_decl_type(tyvars, name, ty),
             DeclKind::Value(tyvars, pat, expr) => self.elab_decl_value(tyvars, pat, expr),
             DeclKind::And(d1, d2) => unimplemented!(),
-            _ => unimplemented!(),
+            DeclKind::Function(tyvars, name, arms) => self.elab_decl_fun(tyvars, name, arms),
+            DeclKind::Expr(e) => self.elab_decl_expr(e),
         }
     }
 

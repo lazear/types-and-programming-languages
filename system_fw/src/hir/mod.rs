@@ -92,6 +92,7 @@ pub enum Expr {
     TupleProj(Box<Expr>, usize),
     Case(Box<Expr>, Vec<Arm>),
     Let(Vec<Decl>, Box<Expr>),
+    Fix(Box<Expr>),
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
