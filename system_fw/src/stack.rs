@@ -57,7 +57,7 @@ impl<T> Stack<T> {
 
 impl<T: PartialEq> Stack<T> {
     pub fn lookup(&self, key: &T) -> Option<usize> {
-        for (idx, s) in self.inner.iter().enumerate() {
+        for (idx, s) in self.inner.iter().rev().enumerate() {
             if key == s {
                 return Some(idx);
             }
