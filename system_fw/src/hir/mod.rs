@@ -35,7 +35,6 @@ pub enum Decl {
 
 #[derive(Clone, Debug, PartialEq, PartialOrd)]
 pub struct Constructor {
-    pub name: String,
     // Points to the constructor function in defined_values
     pub con_id: HirId,
     // Points to a Type::Sum in the defined_types map
@@ -44,6 +43,7 @@ pub struct Constructor {
     pub tag: usize,
     // Whether this constr takes an argument or not
     pub arity: bool,
+    pub type_arity: u8,
 }
 
 /// Patterns for case and let expressions

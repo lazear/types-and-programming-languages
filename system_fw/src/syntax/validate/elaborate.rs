@@ -399,7 +399,15 @@ impl<'s> ElaborationContext<'s> {
             Ascribe(_, ty) => Ok(*ty.clone()),
             Constructor(id) => {
                 let con = self.constructors.get(&id).expect("internal error");
-                Ok(hir::Type::Defined(con.type_id))
+                let cty = hir::Type::Defined(con.type_id);
+                if con.type_arity != 0 {
+                    Ok(hir::Type::Application(
+                        Box::new(cty),
+                        Box::new(hir::Type::Infer),
+                    ))
+                } else {
+                    Ok(cty)
+                }
             }
             Product(pats) => pats
                 .into_iter()
@@ -419,9 +427,9 @@ impl<'s> ElaborationContext<'s> {
             Application(id, arg) => {
                 let con = self.constructors.get(&id).expect("internal error");
                 let cty = hir::Type::Defined(con.type_id);
-                Ok(cty)
-                // self.naive_type_infer(arg)
-                // .map(|ty| hir::Type::Application(Box::new(cty), Box::new(ty)))
+                // Ok(cty)
+                self.naive_type_infer(arg)
+                    .map(|ty| hir::Type::Application(Box::new(cty), Box::new(ty)))
             }
             Variable(_) => Ok(hir::Type::Infer),
         }
@@ -458,8 +466,12 @@ impl<'s> ElaborationContext<'s> {
                     hir::Pattern::Constructor(id) => {
                         let con_info = self.constructors.get(&id).unwrap();
                         if !con_info.arity {
+                            let name = match &con.as_ref().kind {
+                                PatKind::Constructor(s) => s.clone(),
+                                _ => panic!("interal error!"),
+                            };
                             return Err(ElabError::InvalidBinding(
-                                format!("constructor {} doesn't accept arguments!", con_info.name),
+                                format!("constructor {} doesn't accept arguments!", name),
                                 pat.span,
                             ));
                         }
@@ -525,11 +537,11 @@ impl<'s> ElaborationContext<'s> {
         self.constructors.insert(
             con_id,
             Constructor {
-                name: name.into(),
                 type_id,
                 con_id,
                 tag,
                 arity,
+                type_arity: tyvar_arity as u8,
             },
         );
         con_id
@@ -686,6 +698,7 @@ impl<'s> ElaborationContext<'s> {
                     .map(|p| self.elab_pattern(p, true))
                     .collect::<Result<_, _>>()?,
             );
+            dbg!(&self.tmvars);
             exprs.push(self.elab_expr(&arm.expr)?);
         }
 
@@ -725,6 +738,15 @@ impl<'s> ElaborationContext<'s> {
             match (a, b) {
                 (Infer, x) => x,
                 (x, Infer) => x,
+                (Application(r1, r2), Application(r3, r4)) if r1 == r3 => {
+                    Application(r1, Box::new(unify(*r2, *r4)))
+                }
+                (Product(xs), Product(ys)) if xs.len() == ys.len() => Product(
+                    xs.into_iter()
+                        .zip(ys.into_iter())
+                        .map(|(x, y)| unify(x, y))
+                        .collect(),
+                ),
                 _ => hir::Type::Unclear,
             }
         }
@@ -743,6 +765,8 @@ impl<'s> ElaborationContext<'s> {
         self.with_tyvars(|f| {
             f.tyvars.extend(tyvars.iter().map(|t| t.kind.as_tyvar()));
             f.with_tmvars(|f| {
+                f.tmvars.push(name);
+
                 let matrix = f.build_pat_matrix(arms)?;
                 let tys = f.infer_type_matrix(&matrix)?;
                 let tys = Self::try_unify_type_matrix(tys);
@@ -766,6 +790,14 @@ impl<'s> ElaborationContext<'s> {
                     .into_iter()
                     .rev()
                     .fold(case, |acc, ty| hir::Expr::Abs(Box::new(ty), Box::new(acc)));
+                let fun = hir::Expr::Abs(
+                    Box::new(hir::Type::Arrow(
+                        Box::new(hir::Type::Infer),
+                        Box::new(hir::Type::Infer),
+                    )),
+                    Box::new(fun),
+                );
+                let fun = hir::Expr::Fix(Box::new(fun));
 
                 Ok(f.define_value(name.into(), fun))
             })
