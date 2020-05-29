@@ -419,8 +419,9 @@ impl<'s> ElaborationContext<'s> {
             Application(id, arg) => {
                 let con = self.constructors.get(&id).expect("internal error");
                 let cty = hir::Type::Defined(con.type_id);
-                self.naive_type_infer(arg)
-                    .map(|ty| hir::Type::Application(Box::new(cty), Box::new(ty)))
+                Ok(cty)
+                // self.naive_type_infer(arg)
+                // .map(|ty| hir::Type::Application(Box::new(cty), Box::new(ty)))
             }
             Variable(_) => Ok(hir::Type::Infer),
         }
@@ -715,6 +716,24 @@ impl<'s> ElaborationContext<'s> {
         Ok(cols)
     }
 
+    fn try_unify_type_matrix(mat: Vec<HashSet<hir::Type>>) -> Vec<hir::Type> {
+        fn unify(a: hir::Type, b: hir::Type) -> hir::Type {
+            use hir::Type::*;
+            if a == b {
+                return a;
+            }
+            match (a, b) {
+                (Infer, x) => x,
+                (x, Infer) => x,
+                _ => hir::Type::Unclear,
+            }
+        }
+
+        mat.into_iter()
+            .map(|col| col.into_iter().fold(hir::Type::Infer, |ty, x| unify(ty, x)))
+            .collect()
+    }
+
     fn elab_decl_fun(
         &mut self,
         tyvars: &'s [Type],
@@ -726,10 +745,29 @@ impl<'s> ElaborationContext<'s> {
             f.with_tmvars(|f| {
                 let matrix = f.build_pat_matrix(arms)?;
                 let tys = f.infer_type_matrix(&matrix)?;
-                dbg!(&matrix);
-                dbg!(&tys);
+                let tys = Self::try_unify_type_matrix(tys);
 
-                Ok(HirId(0))
+                let arms = matrix.collapse();
+                let expr = hir::Expr::Tuple(
+                    (0..tys.len())
+                        .rev()
+                        .map(|idx| {
+                            hir::Expr::LocalVar(DeBruijn {
+                                name: String::new(),
+                                idx,
+                            })
+                        })
+                        .collect(),
+                );
+
+                let case = hir::Expr::Case(Box::new(expr), arms);
+
+                let fun = tys
+                    .into_iter()
+                    .rev()
+                    .fold(case, |acc, ty| hir::Expr::Abs(Box::new(ty), Box::new(acc)));
+
+                Ok(f.define_value(name.into(), fun))
             })
         })
     }
@@ -766,4 +804,17 @@ pub struct PatternMatrix {
     exprs: Vec<hir::Expr>,
     rows: usize,
     cols: usize,
+}
+
+impl PatternMatrix {
+    fn collapse(self) -> Vec<hir::Arm> {
+        let mut arms = Vec::new();
+        for (pat, expr) in self.pats.into_iter().zip(self.exprs.into_iter()) {
+            arms.push(hir::Arm {
+                pat: hir::Pattern::Product(pat),
+                expr,
+            });
+        }
+        arms
+    }
 }

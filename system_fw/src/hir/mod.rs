@@ -108,6 +108,7 @@ pub enum Type {
     Unit,
     Infer,
     Error,
+    Unclear,
     /// Defined name
     Defined(HirId),
     /// Type variable 'a
@@ -152,6 +153,7 @@ impl fmt::Debug for Type {
             Type::Bool => write!(f, "bool"),
             Type::Infer => write!(f, "_"),
             Type::Error => write!(f, "!"),
+            Type::Unclear => write!(f, "?"),
             Type::Var(v) => write!(f, "{}", &v.name),
             Type::Sum(v) => write!(
                 f,
