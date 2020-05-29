@@ -48,6 +48,10 @@ impl<'s> Parser<'s> {
                 self.bump();
                 Ok(Pattern::new(Literal(n), span))
             }
+            Token::Unit => {
+                self.bump();
+                Ok(Pattern::new(PatKind::Unit, span))
+            }
             Token::LParen => self.tuple_pattern(),
             Token::LBrace => self.record_pattern(),
             _ => self.error(ErrorKind::ExpectedPattern),

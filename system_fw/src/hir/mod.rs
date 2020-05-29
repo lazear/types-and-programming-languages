@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub struct DeBruijn {
     pub idx: usize,
     pub name: String,
@@ -95,13 +95,13 @@ pub enum Expr {
     Fix(Box<Expr>),
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub enum Kind {
     Star,
     Arrow(Box<Kind>, Box<Kind>),
 }
 
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Hash)]
 pub enum Type {
     Int,
     Bool,
@@ -132,13 +132,13 @@ pub enum Type {
     Recursive(Box<Type>),
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Hash)]
 pub struct Variant {
     pub label: String,
     pub ty: Option<Type>,
 }
 
-#[derive(Clone, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Hash)]
 pub struct Row {
     pub label: String,
     pub ty: Type,

@@ -43,6 +43,7 @@ pub enum ElabError {
     InvalidBinding(String, util::span::Span),
 }
 
+/// Housekeeping, namespace methods
 impl<'s> ElaborationContext<'s> {
     /// Keep track of the type variable stack, while executing the combinator
     /// function `f` on `self`. Any stack growth is popped off after `f`
@@ -93,48 +94,6 @@ impl<'s> ElaborationContext<'s> {
         self.elaborated.insert(id, hir::Decl::Type(ty));
         self.namespaces[self.current].types.insert(name, id);
         id
-    }
-
-    fn elab_constructor(
-        &mut self,
-        name: &'s str,
-        tag: usize,
-        tyvar_arity: usize,
-        type_signature: Option<&hir::Type>,
-        type_id: HirId,
-    ) -> HirId {
-        let expr = match type_signature {
-            Some(ty) => hir::Expr::Abs(
-                Box::new(ty.clone()),
-                Box::new(hir::Expr::App(
-                    Box::new(hir::Expr::Constr(type_id, tag)),
-                    Box::new(hir::Expr::LocalVar(DeBruijn {
-                        name: String::from("x"),
-                        idx: 0,
-                    })),
-                )),
-            ),
-            None => hir::Expr::Constr(type_id, tag),
-        };
-
-        let expr = (0..tyvar_arity).fold(expr, |e, _| {
-            hir::Expr::TyAbs(Box::new(hir::Kind::Star), Box::new(e))
-        });
-
-        let arity = type_signature.is_some();
-
-        let con_id = self.define_value(name.into(), expr);
-        self.constructors.insert(
-            con_id,
-            Constructor {
-                name: name.into(),
-                type_id,
-                con_id,
-                tag,
-                arity,
-            },
-        );
-        con_id
     }
 
     pub fn dump(&self) {
@@ -244,6 +203,7 @@ impl<'s> ElaborationContext<'s> {
     }
 }
 
+/// Type elaboration
 impl<'s> ElaborationContext<'s> {
     fn elab_ty_row(&mut self, row: &'s Row) -> Result<hir::Row, ElabError> {
         Ok(hir::Row {
@@ -315,6 +275,7 @@ impl<'s> ElaborationContext<'s> {
     }
 }
 
+/// Expr elaboration
 impl<'s> ElaborationContext<'s> {
     fn elab_let(&mut self, decls: &'s [Decl], expr: &'s Expr) -> Result<hir::Expr, ElabError> {
         self.with_new_namespace(|f| {
@@ -327,7 +288,7 @@ impl<'s> ElaborationContext<'s> {
 
     fn elab_arm(&mut self, arm: &'s Arm) -> Result<hir::Arm, ElabError> {
         Ok(hir::Arm {
-            pat: self.elab_pattern(&arm.pat)?,
+            pat: self.elab_pattern(&arm.pat, true)?,
             expr: self.elab_expr(&arm.expr)?,
         })
     }
@@ -348,8 +309,23 @@ impl<'s> ElaborationContext<'s> {
         })
     }
 
+    /// We desugar to a case expression
+    /// fn (Some x) => x + 1
+    /// fn $x : Infer option => case $x of (Some x) => x + 1
     fn elab_abs(&mut self, pat: &'s Pattern, body: &'s Expr) -> Result<hir::Expr, ElabError> {
-        unimplemented!()
+        // Wow we have a lot of bindings
+        self.with_tmvars(|f| {
+            let pat = f.elab_pattern(pat, true)?;
+            let expr = f.elab_expr(body)?;
+            let ty = f.naive_type_infer(&pat)?;
+            let arm = hir::Arm { pat, expr };
+            let dummy = hir::Expr::LocalVar(DeBruijn {
+                name: "$anon".into(),
+                idx: 0,
+            });
+            let case = hir::Expr::Case(Box::new(dummy), vec![arm]);
+            Ok(hir::Expr::Abs(Box::new(ty), Box::new(case)))
+        })
     }
 
     fn elab_expr(&mut self, expr: &'s Expr) -> Result<hir::Expr, ElabError> {
@@ -412,21 +388,62 @@ impl<'s> ElaborationContext<'s> {
     }
 }
 
+/// Pattern elaboration
 impl<'s> ElaborationContext<'s> {
-    fn elab_pattern(&mut self, pat: &'s Pattern) -> Result<hir::Pattern, ElabError> {
+    fn naive_type_infer(&self, pat: &hir::Pattern) -> Result<hir::Type, ElabError> {
+        use hir::Pattern::*;
+        match pat {
+            Any => Ok(hir::Type::Infer),
+            Unit => Ok(hir::Type::Unit),
+            Literal(_) => Ok(hir::Type::Int),
+            Ascribe(_, ty) => Ok(*ty.clone()),
+            Constructor(id) => {
+                let con = self.constructors.get(&id).expect("internal error");
+                Ok(hir::Type::Defined(con.type_id))
+            }
+            Product(pats) => pats
+                .into_iter()
+                .map(|p| self.naive_type_infer(p))
+                .collect::<Result<_, _>>()
+                .map(hir::Type::Product),
+
+            // Maybe we should go back to sub pats...
+            Record(s) => Ok(hir::Type::Record(
+                s.into_iter()
+                    .map(|s| hir::Row {
+                        label: s.clone(),
+                        ty: hir::Type::Infer,
+                    })
+                    .collect(),
+            )),
+            Application(id, arg) => {
+                let con = self.constructors.get(&id).expect("internal error");
+                let cty = hir::Type::Defined(con.type_id);
+                self.naive_type_infer(arg)
+                    .map(|ty| hir::Type::Application(Box::new(cty), Box::new(ty)))
+            }
+            Variable(_) => Ok(hir::Type::Infer),
+        }
+    }
+    fn elab_pattern(&mut self, pat: &'s Pattern, bind: bool) -> Result<hir::Pattern, ElabError> {
         match &pat.kind {
             PatKind::Any => Ok(hir::Pattern::Any),
             PatKind::Unit => Ok(hir::Pattern::Unit),
             PatKind::Literal(i) => Ok(hir::Pattern::Literal(*i)),
-            PatKind::Variable(s) => Ok(hir::Pattern::Variable(s.clone())),
+            PatKind::Variable(s) => {
+                if bind {
+                    self.tmvars.push(s);
+                }
+                Ok(hir::Pattern::Variable(s.clone()))
+            }
             PatKind::Product(sub) => sub
                 .iter()
-                .map(|p| self.elab_pattern(p))
+                .map(|p| self.elab_pattern(p, bind))
                 .collect::<Result<_, _>>()
                 .map(hir::Pattern::Product),
             PatKind::Record(sub) => Ok(hir::Pattern::Record(sub.clone())),
             PatKind::Ascribe(pat, ty) => Ok(hir::Pattern::Ascribe(
-                Box::new(self.elab_pattern(pat)?),
+                Box::new(self.elab_pattern(pat, bind)?),
                 Box::new(self.elab_type(ty)?),
             )),
             PatKind::Constructor(s) => self
@@ -434,8 +451,8 @@ impl<'s> ElaborationContext<'s> {
                 .ok_or_else(|| ElabError::UndefinedConstr(s.clone(), pat.span))
                 .map(hir::Pattern::Constructor),
             PatKind::Application(con, arg) => {
-                let econ = self.elab_pattern(con)?;
-                let earg = self.elab_pattern(arg)?;
+                let econ = self.elab_pattern(con, bind)?;
+                let earg = self.elab_pattern(arg, bind)?;
                 let id = match econ {
                     hir::Pattern::Constructor(id) => {
                         let con_info = self.constructors.get(&id).unwrap();
@@ -460,6 +477,7 @@ impl<'s> ElaborationContext<'s> {
     }
 }
 
+/// Decl elaboration
 impl<'s> ElaborationContext<'s> {
     fn elab_decl_type(
         &mut self,
@@ -472,6 +490,48 @@ impl<'s> ElaborationContext<'s> {
             hir::Type::Abstraction(Box::new(hir::Kind::Star), Box::new(ty))
         });
         Ok(self.define_type(name.into(), ty))
+    }
+
+    fn elab_constructor(
+        &mut self,
+        name: &'s str,
+        tag: usize,
+        tyvar_arity: usize,
+        type_signature: Option<&hir::Type>,
+        type_id: HirId,
+    ) -> HirId {
+        let expr = match type_signature {
+            Some(ty) => hir::Expr::Abs(
+                Box::new(ty.clone()),
+                Box::new(hir::Expr::App(
+                    Box::new(hir::Expr::Constr(type_id, tag)),
+                    Box::new(hir::Expr::LocalVar(DeBruijn {
+                        name: String::from("x"),
+                        idx: 0,
+                    })),
+                )),
+            ),
+            None => hir::Expr::Constr(type_id, tag),
+        };
+
+        let expr = (0..tyvar_arity).fold(expr, |e, _| {
+            hir::Expr::TyAbs(Box::new(hir::Kind::Star), Box::new(e))
+        });
+
+        let arity = type_signature.is_some();
+
+        let con_id = self.define_value(name.into(), expr);
+        self.constructors.insert(
+            con_id,
+            Constructor {
+                name: name.into(),
+                type_id,
+                con_id,
+                tag,
+                arity,
+            },
+        );
+        con_id
     }
 
     fn elab_decl_datatype(
@@ -604,11 +664,55 @@ impl<'s> ElaborationContext<'s> {
             f.tyvars.extend(tyvars.iter().map(|t| t.kind.as_tyvar()));
             f.with_tmvars(|f| {
                 let sp = pat.span;
-                let pat = f.elab_pattern(pat)?;
+                let pat = f.elab_pattern(pat, false)?;
                 let ex = f.elab_expr(expr)?;
                 f.deconstruct_pat_binding(pat, ex, sp)
             })
         })
+    }
+
+    fn build_pat_matrix(&mut self, arms: &'s [FnArm]) -> Result<PatternMatrix, ElabError> {
+        let rows = arms.len();
+        let mut pats: Vec<Vec<hir::Pattern>> = Vec::with_capacity(rows);
+        let mut exprs = Vec::with_capacity(rows);
+
+        let mut cols = 0;
+        for arm in arms {
+            cols = cols.max(arm.pats.len());
+            pats.push(
+                arm.pats
+                    .iter()
+                    .map(|p| self.elab_pattern(p, true))
+                    .collect::<Result<_, _>>()?,
+            );
+            exprs.push(self.elab_expr(&arm.expr)?);
+        }
+
+        for r in pats.iter_mut() {
+            if r.len() < cols {
+                r.extend(std::iter::repeat(hir::Pattern::Any).take(cols - r.len()));
+            }
+        }
+
+        Ok(PatternMatrix {
+            pats,
+            exprs,
+            rows,
+            cols,
+        })
+    }
+
+    fn infer_type_matrix(&self, mat: &PatternMatrix) -> Result<Vec<HashSet<hir::Type>>, ElabError> {
+        let mut cols: Vec<HashSet<hir::Type>> = (0..mat.cols).map(|_| HashSet::default()).collect();
+
+        for i in 0..mat.cols {
+            for j in 0..mat.rows {
+                let ty = self.naive_type_infer(&mat.pats[j][i])?;
+                cols[i].insert(ty);
+            }
+        }
+
+        Ok(cols)
     }
 
     fn elab_decl_fun(
@@ -619,7 +723,14 @@ impl<'s> ElaborationContext<'s> {
     ) -> Result<HirId, ElabError> {
         self.with_tyvars(|f| {
             f.tyvars.extend(tyvars.iter().map(|t| t.kind.as_tyvar()));
-            f.with_tmvars(|f| unimplemented!())
+            f.with_tmvars(|f| {
+                let matrix = f.build_pat_matrix(arms)?;
+                let tys = f.infer_type_matrix(&matrix)?;
+                dbg!(&matrix);
+                dbg!(&tys);
+
+                Ok(HirId(0))
+            })
         })
     }
 
@@ -647,4 +758,12 @@ impl<'s> ElaborationContext<'s> {
         }
         Ok(v)
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct PatternMatrix {
+    pats: Vec<Vec<hir::Pattern>>,
+    exprs: Vec<hir::Expr>,
+    rows: usize,
+    cols: usize,
 }
