@@ -14,14 +14,14 @@ Several Rust implementations of exercises from Benjamin Pierce's "Types and Prog
 
 - `system_f` contains a parser, typechecker, and evaluator for the simply typed lambda calculus with parametric polymorphism (System F). 
 
-          The implementation of System F is the most complete so far, and I've tried to write a parser, typechecker and diagnostic system that can given meaningful messages, such as:
+The implementation of System F is the most complete so far, and I've tried to write a parser, typechecker and diagnostic system that can given meaningful messages, such as:
 
-          ```
-          type Var = { A | B Nat | C Nat }
-          let func = (\x: Var. case x of | A => 0 | B y => succ x | C y => pred x) in func C 2 of Var
-                                                       ^~~~^ --- abstraction requires type Nat
-                                                            ^^ --- but it is applied to type "A: Unit | B: Nat | C: Nat"
-          ```
+```
+type Var = { A | B Nat | C Nat }
+let func = (\x: Var. case x of | A => 0 | B y => succ x | C y => pred x) in func C 2 of Var
+                                             ^~~~^ --- abstraction requires type Nat
+                                                  ^^ --- but it is applied to type "A: Unit | B: Nat | C: Nat"
+```
 
 - `system_fw` contains a parser for a high-level, Standard ML like source language that is desugared into an HIR, and then System F-omega. This extends `system_f` with type operators and higher-kinded types. This is where most of the ongoing work is located, as I'd like to make this the basis of a toy (but powerful, and useable) programming language. Ideally we will have some form of bidirectional type inference
 
