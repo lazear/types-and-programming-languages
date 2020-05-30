@@ -16,8 +16,7 @@ impl Shift {
 impl MutTypeVisitor for Shift {
     fn visit_var(&mut self, var: &mut usize) {
         if *var >= self.cutoff {
-            *var = usize::try_from(*var as isize + self.shift)
-                .expect("Variable has been shifted below 0! Fatal bug");
+            *var = usize::try_from(*var as isize + self.shift).expect("Variable has been shifted below 0! Fatal bug");
         }
     }
 

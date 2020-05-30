@@ -66,9 +66,7 @@ impl Context {
     }
 
     fn pop(&mut self) {
-        self.stack
-            .pop_front()
-            .expect("Context::pop() with empty type stack");
+        self.stack.pop_front().expect("Context::pop() with empty type stack");
     }
 
     fn find(&self, idx: usize) -> Option<&Type> {
@@ -89,11 +87,7 @@ impl Context {
 }
 
 /// Helper function for extracting type from a variant
-pub fn variant_field<'vs>(
-    var: &'vs [Variant],
-    label: &str,
-    span: Span,
-) -> Result<&'vs Type, Diagnostic> {
+pub fn variant_field<'vs>(var: &'vs [Variant], label: &str, span: Span) -> Result<&'vs Type, Diagnostic> {
     for f in var {
         if label == f.label {
             return Ok(&f.ty);
@@ -157,10 +151,7 @@ impl Context {
                             Ok(*ty1)
                         } else {
                             let d = Diagnostic::error(term.span, "Type mismatch in fix term")
-                                .message(
-                                    inner.span,
-                                    format!("Abstraction requires type {:?}->{:?}", ty1, ty1),
-                                );
+                                .message(inner.span, format!("Abstraction requires type {:?}->{:?}", ty1, ty1));
                             Err(d)
                         }
                     }
@@ -180,16 +171,9 @@ impl Context {
                             if ty_ == f.ty {
                                 return Ok(*ty.clone());
                             } else {
-                                let d = Diagnostic::error(
-                                    term.span,
-                                    "Invalid associated type in variant",
-                                )
-                                .message(
+                                let d = Diagnostic::error(term.span, "Invalid associated type in variant").message(
                                     tm.span,
-                                    format!(
-                                        "variant {} requires type {:?}, but this is {:?}",
-                                        label, f.ty, ty_
-                                    ),
+                                    format!("variant {} requires type {:?}, but this is {:?}", label, f.ty, ty_),
                                 );
                                 return Err(d);
                             }
@@ -218,11 +202,7 @@ impl Context {
                     Some(ty) => Ok(ty.clone()),
                     None => Err(Diagnostic::error(
                         term.span,
-                        format!(
-                            "{} is out of range for product of length {}",
-                            idx,
-                            types.len()
-                        ),
+                        format!("{} is out of range for product of length {}", idx, types.len()),
                     )),
                 },
                 ty => Err(Diagnostic::error(
@@ -231,10 +211,7 @@ impl Context {
                 )),
             },
             Kind::Product(terms) => Ok(Type::Product(
-                terms
-                    .iter()
-                    .map(|t| self.type_check(t))
-                    .collect::<Result<_, _>>()?,
+                terms.iter().map(|t| self.type_check(t)).collect::<Result<_, _>>()?,
             )),
             Kind::Let(pat, t1, t2) => {
                 let ty = self.type_check(t1)?;
@@ -338,19 +315,13 @@ impl Context {
                     } else {
                         let d = Diagnostic::error(term.span, "Type mismatch in pack")
                             .message(term.span, format!("signature has type {:?}", sig_prime))
-                            .message(
-                                evidence.span,
-                                format!("but term has a type {:?}", evidence_ty),
-                            );
+                            .message(evidence.span, format!("but term has a type {:?}", evidence_ty));
                         Err(d)
                     }
                 } else {
                     Err(Diagnostic::error(
                         term.span,
-                        format!(
-                            "Expected an existential type signature, not {:?}",
-                            signature
-                        ),
+                        format!("Expected an existential type signature, not {:?}", signature),
                     ))
                 }
             }
@@ -415,13 +386,7 @@ impl MutTermVisitor for Context {
         self.visit(term);
     }
 
-    fn visit_injection(
-        &mut self,
-        sp: &mut Span,
-        label: &mut String,
-        term: &mut Term,
-        ty: &mut Type,
-    ) {
+    fn visit_injection(&mut self, sp: &mut Span, label: &mut String, term: &mut Term, ty: &mut Type) {
         self.aliaser().visit(ty);
         self.visit(term);
     }
@@ -455,10 +420,7 @@ impl fmt::Debug for Type {
             Type::Product(v) => write!(
                 f,
                 "({})",
-                v.iter()
-                    .map(|x| format!("{:?}", x))
-                    .collect::<Vec<String>>()
-                    .join(",")
+                v.iter().map(|x| format!("{:?}", x)).collect::<Vec<String>>().join(",")
             ),
             Type::Alias(s) => write!(f, "{}", s),
             Type::Arrow(t1, t2) => write!(f, "({:?}->{:?})", t1, t2),

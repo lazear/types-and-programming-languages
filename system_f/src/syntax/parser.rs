@@ -285,10 +285,7 @@ impl<'s> Parser<'s> {
         self.expect(TokenKind::Proj)?;
         let body = self.once(|p| p.parse(), "abstraction body required")?;
         self.tmvar.pop();
-        Ok(Term::new(
-            Kind::Abs(Box::new(ty), Box::new(body)),
-            sp + self.span,
-        ))
+        Ok(Term::new(Kind::Abs(Box::new(ty), Box::new(body)), sp + self.span))
     }
 
     fn fold(&mut self) -> Result<Term, Error> {
@@ -296,10 +293,7 @@ impl<'s> Parser<'s> {
         let sp = self.span;
         let ty = self.once(|p| p.ty(), "type annotation required after `fold`")?;
         let tm = self.once(|p| p.parse(), "term required after `fold`")?;
-        Ok(Term::new(
-            Kind::Fold(Box::new(ty), Box::new(tm)),
-            sp + self.span,
-        ))
+        Ok(Term::new(Kind::Fold(Box::new(ty), Box::new(tm)), sp + self.span))
     }
 
     fn unfold(&mut self) -> Result<Term, Error> {
@@ -307,10 +301,7 @@ impl<'s> Parser<'s> {
         let sp = self.span;
         let ty = self.once(|p| p.ty(), "type annotation required after `unfold`")?;
         let tm = self.once(|p| p.parse(), "term required after `unfold`")?;
-        Ok(Term::new(
-            Kind::Unfold(Box::new(ty), Box::new(tm)),
-            sp + self.span,
-        ))
+        Ok(Term::new(Kind::Unfold(Box::new(ty), Box::new(tm)), sp + self.span))
     }
 
     fn fix(&mut self) -> Result<Term, Error> {
@@ -349,10 +340,8 @@ impl<'s> Parser<'s> {
             TokenKind::Uppercase(_) => self.tyabs(),
             TokenKind::Lowercase(_) => self.tmabs(),
             _ => {
-                self.diagnostic.push(
-                    "expected identifier after lambda, found".to_string(),
-                    self.span,
-                );
+                self.diagnostic
+                    .push("expected identifier after lambda, found".to_string(), self.span);
                 self.error(ErrorKind::ExpectedIdent)
             }
         }
@@ -375,10 +364,8 @@ impl<'s> Parser<'s> {
         match self.bump() {
             TokenKind::Uppercase(s) => Ok(s),
             tk => {
-                self.diagnostic.push(
-                    format!("expected uppercase identifier, found {:?}", tk),
-                    self.span,
-                );
+                self.diagnostic
+                    .push(format!("expected uppercase identifier, found {:?}", tk), self.span);
                 self.error(ErrorKind::ExpectedIdent)
             }
         }
@@ -388,10 +375,8 @@ impl<'s> Parser<'s> {
         match self.bump() {
             TokenKind::Lowercase(s) => Ok(s),
             tk => {
-                self.diagnostic.push(
-                    format!("expected lowercase identifier, found {:?}", tk),
-                    self.span,
-                );
+                self.diagnostic
+                    .push(format!("expected lowercase identifier, found {:?}", tk), self.span);
                 self.error(ErrorKind::ExpectedIdent)
             }
         }
@@ -526,10 +511,7 @@ impl<'s> Parser<'s> {
         self.bump_if(&TokenKind::Bar);
         let arms = self.once_or_more(|p| p.case_arm(), TokenKind::Bar)?;
 
-        Ok(Term::new(
-            Kind::Case(Box::new(expr), arms),
-            span + self.span,
-        ))
+        Ok(Term::new(Kind::Case(Box::new(expr), arms), span + self.span))
     }
 
     fn injection(&mut self) -> Result<Term, Error> {
@@ -599,15 +581,12 @@ impl<'s> Parser<'s> {
                 match self.tmvar.lookup(&var) {
                     Some(idx) => Ok(Term::new(Kind::Var(idx), self.span)),
                     None => {
-                        self.diagnostic
-                            .push(format!("unbound variable {}", var), self.span);
+                        self.diagnostic.push(format!("unbound variable {}", var), self.span);
                         self.error(ErrorKind::UnboundTypeVar)
                     }
                 }
             }
-            TokenKind::Nat(_) | TokenKind::True | TokenKind::False | TokenKind::Unit => {
-                self.literal()
-            }
+            TokenKind::Nat(_) | TokenKind::True | TokenKind::False | TokenKind::Unit => self.literal(),
             TokenKind::Eof => self.error(ErrorKind::Eof),
             TokenKind::Semicolon => {
                 self.bump();
@@ -632,10 +611,7 @@ impl<'s> Parser<'s> {
                 }
             };
             let sp = atom.span + self.span;
-            Ok(Term::new(
-                Kind::Projection(Box::new(atom), idx as usize),
-                sp,
-            ))
+            Ok(Term::new(Kind::Projection(Box::new(atom), idx as usize), sp))
         } else {
             Ok(atom)
         }

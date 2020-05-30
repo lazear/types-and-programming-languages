@@ -89,9 +89,7 @@ fn eval1(ctx: &Context, term: Term) -> Result<Box<Term>, Error> {
         Term::Projection(rec, proj) => {
             if value(ctx, &rec) {
                 match rec.as_ref() {
-                    Term::Record(rec) => {
-                        crate::term::record_access(rec, &proj).ok_or(Error::NoRuleApplies)
-                    }
+                    Term::Record(rec) => crate::term::record_access(rec, &proj).ok_or(Error::NoRuleApplies),
                     _ => Ok(Term::Projection(eval1(ctx, *rec)?, proj).into()),
                 }
             } else {

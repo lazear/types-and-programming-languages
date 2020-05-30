@@ -76,10 +76,8 @@ impl<'s> Parser<'s> {
         match spanned.data {
             t if t == token => Some(spanned),
             t => {
-                self.diagnostic.push(
-                    format!("Expected token {:?}, found {:?}", token, t),
-                    spanned.span,
-                );
+                self.diagnostic
+                    .push(format!("Expected token {:?}, found {:?}", token, t), spanned.span);
                 None
             }
         }

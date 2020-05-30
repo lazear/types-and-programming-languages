@@ -43,9 +43,7 @@ impl<'ctx> Eval<'ctx> {
             Primitive::Succ => map(|l| l + 1, term),
             Primitive::Pred => map(|l| l.saturating_sub(1), term),
             Primitive::IsZero => match &term.kind {
-                Kind::Lit(Literal::Nat(0)) => {
-                    Some(Term::new(Kind::Lit(Literal::Bool(true)), term.span))
-                }
+                Kind::Lit(Literal::Nat(0)) => Some(Term::new(Kind::Lit(Literal::Bool(true)), term.span)),
                 _ => Some(Term::new(Kind::Lit(Literal::Bool(false)), term.span)),
             },
         }
@@ -103,10 +101,7 @@ impl<'ctx> Eval<'ctx> {
             },
             Kind::Injection(label, tm, ty) => {
                 let t_prime = self.small_step(*tm)?;
-                Some(Term::new(
-                    Kind::Injection(label, Box::new(t_prime), ty),
-                    term.span,
-                ))
+                Some(Term::new(Kind::Injection(label, Box::new(t_prime), ty), term.span))
             }
             Kind::Projection(tm, idx) => {
                 if self.normal_form(&tm) {
@@ -117,10 +112,7 @@ impl<'ctx> Eval<'ctx> {
                     }
                 } else {
                     let t_prime = self.small_step(*tm)?;
-                    Some(Term::new(
-                        Kind::Projection(Box::new(t_prime), idx),
-                        term.span,
-                    ))
+                    Some(Term::new(Kind::Projection(Box::new(t_prime), idx), term.span))
                 }
             }
             Kind::Product(terms) => {
@@ -187,10 +179,7 @@ impl<'ctx> Eval<'ctx> {
             Kind::Pack(wit, evidence, sig) => {
                 if !self.normal_form(&evidence) {
                     let t_prime = self.small_step(*evidence)?;
-                    return Some(Term::new(
-                        Kind::Pack(wit, Box::new(t_prime), sig),
-                        term.span,
-                    ));
+                    return Some(Term::new(Kind::Pack(wit, Box::new(t_prime), sig), term.span));
                 }
                 None
             }
@@ -272,10 +261,7 @@ mod test {
     fn application() {
         let ctx = crate::types::Context::default();
         let eval = Eval::with_context(&ctx);
-        let tm = app!(
-            abs!(Type::Nat, app!(prim!(Primitive::Succ), var!(0))),
-            nat!(1)
-        );
+        let tm = app!(abs!(Type::Nat, app!(prim!(Primitive::Succ), var!(0))), nat!(1));
 
         let t1 = eval.small_step(tm);
         assert_eq!(t1, Some(app!(prim!(Primitive::Succ), nat!(1))));
@@ -295,10 +281,7 @@ mod test {
         );
 
         let t1 = eval.small_step(tm);
-        assert_eq!(
-            t1,
-            Some(abs!(Type::Nat, app!(prim!(Primitive::Succ), var!(0))))
-        );
+        assert_eq!(t1, Some(abs!(Type::Nat, app!(prim!(Primitive::Succ), var!(0)))));
         let t2 = eval.small_step(t1.unwrap());
         assert_eq!(t2, None);
     }
@@ -307,10 +290,7 @@ mod test {
     fn projection() {
         let ctx = crate::types::Context::default();
         let eval = Eval::with_context(&ctx);
-        let product = Term::new(
-            Kind::Product(vec![nat!(5), nat!(6), nat!(29)]),
-            Span::zero(),
-        );
+        let product = Term::new(Kind::Product(vec![nat!(5), nat!(6), nat!(29)]), Span::zero());
         let projection = Term::new(Kind::Projection(Box::new(product), 2), Span::zero());
         let term = app!(prim!(Primitive::Succ), projection);
 

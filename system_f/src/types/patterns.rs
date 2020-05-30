@@ -189,11 +189,7 @@ impl Context {
     /// the shared type of all of the case arms - the term associated with each
     /// arm should have one type, and that type should be the same for all of
     /// the arms.
-    pub(crate) fn type_check_case(
-        &mut self,
-        expr: &Term,
-        arms: &[Arm],
-    ) -> Result<Type, Diagnostic> {
+    pub(crate) fn type_check_case(&mut self, expr: &Term, arms: &[Arm]) -> Result<Type, Diagnostic> {
         let ty = self.type_check(expr)?;
         let mut matrix = patterns::Matrix::new(ty);
 
@@ -218,25 +214,17 @@ impl Context {
                     return Err(Diagnostic::error(arm.span, "unreachable pattern!"));
                 }
             } else {
-                return Err(Diagnostic::error(
-                    expr.span,
-                    format!("case binding has a type {:?}", &matrix.expr_ty),
-                )
-                .message(
-                    arm.span,
-                    format!(
-                        "but this pattern cannot bind a value of type {:?}",
-                        &matrix.expr_ty
+                return Err(
+                    Diagnostic::error(expr.span, format!("case binding has a type {:?}", &matrix.expr_ty)).message(
+                        arm.span,
+                        format!("but this pattern cannot bind a value of type {:?}", &matrix.expr_ty),
                     ),
-                ));
+                );
             }
         }
 
         if set.len() != 1 {
-            return Err(Diagnostic::error(
-                expr.span,
-                format!("incompatible arms! {:?}", set),
-            ));
+            return Err(Diagnostic::error(expr.span, format!("incompatible arms! {:?}", set)));
         }
 
         if matrix.exhaustive() {
@@ -287,9 +275,7 @@ impl Context {
             Pattern::Constructor(label, inner) => match ty {
                 Type::Variant(v) => {
                     for discriminant in v {
-                        if label == &discriminant.label
-                            && self.pattern_type_eq(&inner, &discriminant.ty)
-                        {
+                        if label == &discriminant.label && self.pattern_type_eq(&inner, &discriminant.ty) {
                             return true;
                         }
                     }

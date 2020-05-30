@@ -16,9 +16,7 @@ fn shift1(d: isize, c: isize, tm: RcTerm) -> RcTerm {
             }
         }
         Term::TmAbs(sp, x) => Term::TmAbs(*sp, shift1(d, c + 1, x.clone())).into(),
-        Term::TmApp(sp, a, b) => {
-            Term::TmApp(*sp, shift1(d, c, a.clone()), shift1(d, c, b.clone())).into()
-        }
+        Term::TmApp(sp, a, b) => Term::TmApp(*sp, shift1(d, c, a.clone()), shift1(d, c, b.clone())).into(),
     }
 }
 

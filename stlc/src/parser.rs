@@ -67,10 +67,8 @@ impl<'s> Parser<'s> {
         match &tk.kind {
             t if t == &kind => Some(tk),
             _ => {
-                self.diagnostic.push(
-                    format!("Expected token {:?}, found {:?}", kind, tk.kind),
-                    tk.span,
-                );
+                self.diagnostic
+                    .push(format!("Expected token {:?}, found {:?}", kind, tk.kind), tk.span);
                 None
             }
         }

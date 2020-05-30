@@ -8,6 +8,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "bidir"
+version = "0.1.0"
+
+[[package]]
 name = "dependent"
 version = "0.1.0"
 

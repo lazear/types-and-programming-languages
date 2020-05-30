@@ -60,10 +60,7 @@ macro_rules! tyapp {
 /// Type abstraction term
 macro_rules! tyabs {
     ( $t:expr) => {
-        crate::terms::Term::new(
-            crate::terms::Kind::TyAbs(Box::new($t)),
-            util::span::Span::dummy(),
-        )
+        crate::terms::Term::new(crate::terms::Kind::TyAbs(Box::new($t)), util::span::Span::dummy())
     };
 }
 

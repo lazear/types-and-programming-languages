@@ -149,9 +149,7 @@ impl fmt::Display for Term {
             Kind::TyApp(term, ty) => write!(f, "({} [{:?}])", term, ty),
             Kind::Fold(ty, term) => write!(f, "fold [{:?}] {}", ty, term),
             Kind::Unfold(ty, term) => write!(f, "unfold [{:?}] {}", ty, term),
-            Kind::Pack(witness, body, sig) => {
-                write!(f, "[|pack {{*{:?}, {}}} as {:?} |]", witness, body, sig)
-            }
+            Kind::Pack(witness, body, sig) => write!(f, "[|pack {{*{:?}, {}}} as {:?} |]", witness, body, sig),
             Kind::Unpack(m, n) => write!(f, "unpack {} as {}", m, n),
         }
     }
@@ -174,11 +172,7 @@ mod test {
             variant!("B", Type::Product(vec![Type::Nat, Type::Bool])),
         ]);
 
-        let a_pats = vec![
-            con!("A", Pattern::Any),
-            con!("A", num!(9)),
-            con!("A", num!(10)),
-        ];
+        let a_pats = vec![con!("A", Pattern::Any), con!("A", num!(9)), con!("A", num!(10))];
 
         let b_pats = vec![
             con!("B", Pattern::Any),

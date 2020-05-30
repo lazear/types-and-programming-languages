@@ -173,13 +173,7 @@ impl MutTermVisitor for TyTermSubst {
         self.visit_ty(sig);
     }
 
-    fn visit_injection(
-        &mut self,
-        sp: &mut Span,
-        label: &mut String,
-        term: &mut Term,
-        ty: &mut Type,
-    ) {
+    fn visit_injection(&mut self, sp: &mut Span, label: &mut String, term: &mut Term, ty: &mut Type) {
         self.visit_ty(ty);
         self.visit(term);
     }

@@ -46,10 +46,7 @@ impl Span {
             col: std::u32::MAX,
             abs: std::u32::MAX,
         };
-        Span {
-            start: max,
-            end: max,
-        }
+        Span { start: max, end: max }
     }
 
     pub const fn zero() -> Span {
@@ -58,10 +55,7 @@ impl Span {
             col: 0,
             abs: 0,
         };
-        Span {
-            start: max,
-            end: max,
-        }
+        Span { start: max, end: max }
     }
 }
 
@@ -108,8 +102,7 @@ impl<T, E> Spanned<Result<T, E>> {
     /// Spanned<E>>`]
     pub fn map_result(self) -> Result<Spanned<T>, Spanned<E>> {
         let Spanned { span, data } = self;
-        data.map(|t| Spanned::new(span, t))
-            .map_err(|e| Spanned::new(span, e))
+        data.map(|t| Spanned::new(span, t)).map_err(|e| Spanned::new(span, e))
     }
 }
 

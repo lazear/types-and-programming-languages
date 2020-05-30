@@ -157,18 +157,7 @@ mod test {
     #[test]
     fn valid() {
         let input = "succ(succ(succ(0)))";
-        let expected = vec![
-            Succ,
-            LParen,
-            Succ,
-            LParen,
-            Succ,
-            LParen,
-            Int(0),
-            RParen,
-            RParen,
-            RParen,
-        ];
+        let expected = vec![Succ, LParen, Succ, LParen, Succ, LParen, Int(0), RParen, RParen, RParen];
         let output = Lexer::new(input.chars())
             .into_iter()
             .map(|t| t.kind)

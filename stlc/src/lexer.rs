@@ -198,8 +198,7 @@ impl<'s> Iterator for Lexer<'s> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.lex() {
             Token {
-                kind: TokenKind::Eof,
-                ..
+                kind: TokenKind::Eof, ..
             } => None,
             tok => Some(tok),
         }
@@ -213,18 +212,7 @@ mod test {
     #[test]
     fn valid() {
         let input = "succ(succ(succ(0)))";
-        let expected = vec![
-            Succ,
-            LParen,
-            Succ,
-            LParen,
-            Succ,
-            LParen,
-            Nat(0),
-            RParen,
-            RParen,
-            RParen,
-        ];
+        let expected = vec![Succ, LParen, Succ, LParen, Succ, LParen, Nat(0), RParen, RParen, RParen];
         let output = Lexer::new(input.chars())
             .into_iter()
             .map(|t| t.kind)

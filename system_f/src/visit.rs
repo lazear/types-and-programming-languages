@@ -79,13 +79,7 @@ pub trait MutTermVisitor: Sized {
     }
 
     fn visit_primitive(&mut self, sp: &mut Span, prim: &mut Primitive) {}
-    fn visit_injection(
-        &mut self,
-        sp: &mut Span,
-        label: &mut String,
-        term: &mut Term,
-        ty: &mut Type,
-    ) {
+    fn visit_injection(&mut self, sp: &mut Span, label: &mut String, term: &mut Term, ty: &mut Type) {
         self.visit(term);
     }
 
@@ -113,13 +107,7 @@ pub trait MutTermVisitor: Sized {
         self.visit(term);
     }
 
-    fn visit_pack(
-        &mut self,
-        sp: &mut Span,
-        witness: &mut Type,
-        evidence: &mut Term,
-        signature: &mut Type,
-    ) {
+    fn visit_pack(&mut self, sp: &mut Span, witness: &mut Type, evidence: &mut Term, signature: &mut Type) {
         self.visit(evidence);
     }
 

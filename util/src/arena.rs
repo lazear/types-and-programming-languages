@@ -136,8 +136,7 @@ impl<T> Arena<T> {
 
         // Subtract one for the free-list pointer
         for idx in start..end - 1 {
-            self.data
-                .push(Entry::Vacant(Some(NonZeroU32::new(idx + 1).unwrap())));
+            self.data.push(Entry::Vacant(Some(NonZeroU32::new(idx + 1).unwrap())));
         }
 
         *self.data.last_mut().unwrap() = Entry::Vacant(head);
@@ -185,9 +184,7 @@ impl<T> Arena<T> {
     /// into the newly allocated space
     fn reserve_insert(&mut self, item: T) -> Index {
         self.reserve(self.capacity());
-        self.try_insert(item)
-            .map_err(|_| ())
-            .expect("Out of memory")
+        self.try_insert(item).map_err(|_| ()).expect("Out of memory")
     }
 
     /// Remove an `item` from the `Arena` at the specified index,
@@ -271,9 +268,7 @@ impl<T> Iterator for IntoIter<T> {
     fn next(&mut self) -> Option<Self::Item> {
         while self.idx < self.data.len() {
             self.idx += 1;
-            if let Entry::Occupied(t) =
-                std::mem::replace(&mut self.data[self.idx - 1], Entry::Vacant(None))
-            {
+            if let Entry::Occupied(t) = std::mem::replace(&mut self.data[self.idx - 1], Entry::Vacant(None)) {
                 return Some(t);
             }
         }

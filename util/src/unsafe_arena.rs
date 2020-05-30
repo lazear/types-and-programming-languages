@@ -202,9 +202,7 @@ fn extend(a: Layout, b: Layout) -> Layout {
 impl<T> Chunk<T> {
     #[inline]
     fn layout(capacity: usize) -> Layout {
-        let chunk_layout =
-            Layout::from_size_align(mem::size_of::<Chunk<T>>(), mem::align_of::<Chunk<T>>())
-                .unwrap();
+        let chunk_layout = Layout::from_size_align(mem::size_of::<Chunk<T>>(), mem::align_of::<Chunk<T>>()).unwrap();
 
         let size = mem::size_of::<T>().checked_mul(capacity).unwrap();
         let elem_layout = Layout::from_size_align(size, mem::align_of::<T>()).unwrap();
@@ -246,9 +244,7 @@ impl<T> Chunk<T> {
     #[inline]
     pub fn start(&self) -> *mut T {
         let ptr: *const Chunk<T> = self;
-        let layout =
-            Layout::from_size_align(mem::size_of::<Chunk<T>>(), mem::align_of::<Chunk<T>>())
-                .unwrap();
+        let layout = Layout::from_size_align(mem::size_of::<Chunk<T>>(), mem::align_of::<Chunk<T>>()).unwrap();
 
         let r = round(&layout, mem::align_of::<T>());
 
@@ -364,10 +360,7 @@ mod test {
                     capacity: 0x2000,
                     used: v.len() + 1
                 },
-                Info {
-                    capacity: c,
-                    used: 2
-                }
+                Info { capacity: c, used: 2 }
             ]
         );
     }

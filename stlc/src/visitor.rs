@@ -100,10 +100,7 @@ impl Default for Shifting {
 
 impl Shifting {
     pub fn new(direction: Direction) -> Self {
-        Shifting {
-            cutoff: 0,
-            direction,
-        }
+        Shifting { cutoff: 0, direction }
     }
 }
 

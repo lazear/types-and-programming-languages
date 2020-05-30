@@ -50,9 +50,7 @@ pub fn code_format(src: &str, diag: Diagnostic) {
             if anno.span.start.line != line {
                 continue;
             }
-            let empty = (0..anno.span.start.col + 3)
-                .map(|_| ' ')
-                .collect::<String>();
+            let empty = (0..anno.span.start.col + 3).map(|_| ' ').collect::<String>();
             let tilde = (1..anno.span.end.col.saturating_sub(anno.span.start.col))
                 .map(|_| '~')
                 .collect::<String>();

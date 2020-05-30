@@ -72,10 +72,7 @@ impl Diagnostic<'_> {
 impl Drop for Diagnostic<'_> {
     fn drop(&mut self) {
         if self.error_count() != 0 {
-            panic!(
-                "Diagnostic dropped without handling {} errors!",
-                self.error_count()
-            );
+            panic!("Diagnostic dropped without handling {} errors!", self.error_count());
         }
     }
 }
