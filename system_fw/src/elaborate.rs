@@ -88,9 +88,7 @@ impl<'s> ElaborationContext<'s> {
     fn elab_kind(&self, k: &Kind) -> hir::Kind {
         match k {
             Kind::Star => hir::Kind::Star,
-            Kind::Arrow(k1, k2) => {
-                hir::Kind::Arrow(Box::new(self.elab_kind(k1)), Box::new(self.elab_kind(k2)))
-            }
+            Kind::Arrow(k1, k2) => hir::Kind::Arrow(Box::new(self.elab_kind(k1)), Box::new(self.elab_kind(k2))),
         }
     }
 
@@ -118,21 +116,11 @@ impl<'s> ElaborationContext<'s> {
         for n in &self.namespaces {
             println!("Current value bindings:");
             for (name, key) in &n.values {
-                println!(
-                    "\t[{:?}] {}: {:?}",
-                    key,
-                    name,
-                    self.elaborated.get(key).unwrap()
-                );
+                println!("\t[{:?}] {}: {:?}", key, name, self.elaborated.get(key).unwrap());
             }
             println!("Current type bindings:");
             for (name, key) in &n.types {
-                println!(
-                    "\t[{:?}] {}: {:?}",
-                    key,
-                    name,
-                    self.elaborated.get(key).unwrap()
-                );
+                println!("\t[{:?}] {}: {:?}", key, name, self.elaborated.get(key).unwrap());
             }
         }
 
@@ -156,12 +144,9 @@ impl<'s> ElaborationContext<'s> {
 
     /// Search for a variable bound in a temporary lexical scope (i.e. a function)
     fn debruijn_value(&self, s: &str) -> Option<hir::Expr> {
-        self.tmvars.lookup(&s).map(|idx| {
-            hir::Expr::LocalVar(DeBruijn {
-                idx,
-                name: s.into(),
-            })
-        })
+        self.tmvars
+            .lookup(&s)
+            .map(|idx| hir::Expr::LocalVar(DeBruijn { idx, name: s.into() }))
     }
 
     /// Search for a value binding, starting with any temporary lambda captures,
@@ -184,12 +169,9 @@ impl<'s> ElaborationContext<'s> {
     }
 
     fn debruijn_type(&self, s: &str) -> Option<hir::Type> {
-        self.tyvars.lookup(&s).map(|idx| {
-            hir::Type::Var(DeBruijn {
-                idx,
-                name: s.into(),
-            })
-        })
+        self.tyvars
+            .lookup(&s)
+            .map(|idx| hir::Type::Var(DeBruijn { idx, name: s.into() }))
     }
 
     fn enter_namespace(&mut self) -> usize {
@@ -261,14 +243,10 @@ impl<'s> ElaborationContext<'s> {
             // bug if we reached this path somehow.
             Sum(_) => unreachable!(),
             Product(tys) => Ok(hir::Type::Product(
-                tys.iter()
-                    .map(|t| self.elab_type(t))
-                    .collect::<Result<_, _>>()?,
+                tys.iter().map(|t| self.elab_type(t)).collect::<Result<_, _>>()?,
             )),
             Record(rows) => Ok(hir::Type::Record(
-                rows.iter()
-                    .map(|t| self.elab_ty_row(t))
-                    .collect::<Result<_, _>>()?,
+                rows.iter().map(|t| self.elab_ty_row(t)).collect::<Result<_, _>>()?,
             )),
             Existential(s, k, ty) => Ok(hir::Type::Existential(
                 Box::new(self.elab_kind(k)),
@@ -286,9 +264,7 @@ impl<'s> ElaborationContext<'s> {
                 Box::new(self.elab_type(ty1)?),
                 Box::new(self.elab_type(ty2)?),
             )),
-            Recursive(ty) => self
-                .elab_type(ty)
-                .map(|ty| hir::Type::Recursive(Box::new(ty))),
+            Recursive(ty) => self.elab_type(ty).map(|ty| hir::Type::Recursive(Box::new(ty))),
         }
     }
 }
@@ -313,10 +289,7 @@ impl<'s> ElaborationContext<'s> {
 
     fn elab_case(&mut self, expr: &'s Expr, arms: &'s [Arm]) -> Result<hir::Expr, ElabError> {
         let ex = self.elab_expr(expr)?;
-        let arms = arms
-            .iter()
-            .map(|a| self.elab_arm(a))
-            .collect::<Result<_, _>>()?;
+        let arms = arms.iter().map(|a| self.elab_arm(a)).collect::<Result<_, _>>()?;
         Ok(hir::Expr::Case(Box::new(ex), arms))
     }
 
@@ -390,10 +363,7 @@ impl<'s> ElaborationContext<'s> {
                 .collect::<Result<_, _>>()
                 .map(hir::Expr::Tuple),
             Projection(e1, e2) => match &e2.kind {
-                ExprKind::Var(label) => Ok(hir::Expr::RecordProj(
-                    Box::new(self.elab_expr(e1)?),
-                    label.clone(),
-                )),
+                ExprKind::Var(label) => Ok(hir::Expr::RecordProj(Box::new(self.elab_expr(e1)?), label.clone())),
                 ExprKind::Int(idx) => Ok(hir::Expr::TupleProj(Box::new(self.elab_expr(e1)?), *idx)),
                 _ => Err(ElabError::InvalidBinding(
                     format!("attempt to project using {:?}", e2),
@@ -419,10 +389,7 @@ impl<'s> ElaborationContext<'s> {
                 let con = self.constructors.get(&id).expect("internal error");
                 let cty = hir::Type::Defined(con.type_id);
                 if con.type_arity != 0 {
-                    Ok(hir::Type::Application(
-                        Box::new(cty),
-                        Box::new(hir::Type::Infer),
-                    ))
+                    Ok(hir::Type::Application(Box::new(cty), Box::new(hir::Type::Infer)))
                 } else {
                     Ok(cty)
                 }
@@ -510,12 +477,7 @@ impl<'s> ElaborationContext<'s> {
 
 /// Decl elaboration
 impl<'s> ElaborationContext<'s> {
-    fn elab_decl_type(
-        &mut self,
-        tyvars: &'s [Type],
-        name: &'s str,
-        ty: &'s Type,
-    ) -> Result<HirId, ElabError> {
+    fn elab_decl_type(&mut self, tyvars: &'s [Type], name: &'s str, ty: &'s Type) -> Result<HirId, ElabError> {
         let ty = self.elab_type(ty)?;
         let ty = tyvars.iter().fold(ty, |ty, var| {
             hir::Type::Abstraction(Box::new(hir::Kind::Star), Box::new(ty))
@@ -545,9 +507,7 @@ impl<'s> ElaborationContext<'s> {
             None => hir::Expr::Constr(type_id, tag),
         };
 
-        let expr = (0..tyvar_arity).fold(expr, |e, _| {
-            hir::Expr::TyAbs(Box::new(hir::Kind::Star), Box::new(e))
-        });
+        let expr = (0..tyvar_arity).fold(expr, |e, _| hir::Expr::TyAbs(Box::new(hir::Kind::Star), Box::new(e)));
 
         let arity = type_signature.is_some();
 
@@ -565,12 +525,7 @@ impl<'s> ElaborationContext<'s> {
         con_id
     }
 
-    fn elab_decl_datatype(
-        &mut self,
-        tyvars: &'s [Type],
-        name: &'s str,
-        ty: &'s Type,
-    ) -> Result<HirId, ElabError> {
+    fn elab_decl_datatype(&mut self, tyvars: &'s [Type], name: &'s str, ty: &'s Type) -> Result<HirId, ElabError> {
         // Quickly collection all names that this type points to
         let mut coll = TyNameCollector::default();
         coll.visit_ty(&ty);
@@ -635,11 +590,7 @@ impl<'s> ElaborationContext<'s> {
 
                 let base = Box::new(hir::Expr::ProgramVar(id));
                 for (idx, pat) in sub.into_iter().enumerate() {
-                    self.deconstruct_pat_binding(
-                        pat,
-                        hir::Expr::TupleProj(base.clone(), idx),
-                        span,
-                    )?;
+                    self.deconstruct_pat_binding(pat, hir::Expr::TupleProj(base.clone(), idx), span)?;
                 }
                 Ok(id)
             }
@@ -673,8 +624,7 @@ impl<'s> ElaborationContext<'s> {
                     Box::new(expr),
                 );
 
-                let id = self
-                    .with_new_namespace(|f| f.define_value("$anon_bind_decon".into(), e.clone()));
+                let id = self.with_new_namespace(|f| f.define_value("$anon_bind_decon".into(), e.clone()));
                 let e = hir::Expr::ProgramVar(id);
                 self.deconstruct_pat_binding(*arg, e, span)
             }
@@ -685,12 +635,7 @@ impl<'s> ElaborationContext<'s> {
         }
     }
 
-    fn elab_decl_value(
-        &mut self,
-        tyvars: &'s [Type],
-        pat: &'s Pattern,
-        expr: &'s Expr,
-    ) -> Result<HirId, ElabError> {
+    fn elab_decl_value(&mut self, tyvars: &'s [Type], pat: &'s Pattern, expr: &'s Expr) -> Result<HirId, ElabError> {
         self.with_tyvars(|f| {
             f.tyvars.extend(tyvars.iter().map(|t| t.kind.as_tyvar()));
             f.with_tmvars(|f| {
@@ -756,15 +701,10 @@ impl<'s> ElaborationContext<'s> {
             match (a, b) {
                 (Infer, x) => x,
                 (x, Infer) => x,
-                (Application(r1, r2), Application(r3, r4)) if r1 == r3 => {
-                    Application(r1, Box::new(unify(*r2, *r4)))
+                (Application(r1, r2), Application(r3, r4)) if r1 == r3 => Application(r1, Box::new(unify(*r2, *r4))),
+                (Product(xs), Product(ys)) if xs.len() == ys.len() => {
+                    Product(xs.into_iter().zip(ys.into_iter()).map(|(x, y)| unify(x, y)).collect())
                 }
-                (Product(xs), Product(ys)) if xs.len() == ys.len() => Product(
-                    xs.into_iter()
-                        .zip(ys.into_iter())
-                        .map(|(x, y)| unify(x, y))
-                        .collect(),
-                ),
                 _ => hir::Type::Unclear,
             }
         }
@@ -774,12 +714,7 @@ impl<'s> ElaborationContext<'s> {
             .collect()
     }
 
-    fn elab_decl_fun(
-        &mut self,
-        tyvars: &'s [Type],
-        name: &'s str,
-        arms: &'s [FnArm],
-    ) -> Result<HirId, ElabError> {
+    fn elab_decl_fun(&mut self, tyvars: &'s [Type], name: &'s str, arms: &'s [FnArm]) -> Result<HirId, ElabError> {
         self.with_tyvars(|f| {
             f.tyvars.extend(tyvars.iter().map(|t| t.kind.as_tyvar()));
             f.with_tmvars(|f| {
@@ -877,41 +812,41 @@ struct DeclNames<'s> {
     types: Vec<&'s str>,
 }
 
-impl<'s> DeclVisitor<'s> for DeclNames<'s> {
-    fn visit_datatype(&mut self, _: &'s [Type], name: &'s str, ty: &'s Type) {
-        self.types.push(name);
-        if let TypeKind::Sum(vars) = &ty.kind {
-            for v in vars {
-                self.values.push(&v.label);
-            }
-        }
-    }
+// impl<'s> DeclVisitor<'s> for DeclNames<'s> {
+//     fn visit_datatype(&mut self, _: &'s [Type], name: &'s str, ty: &'s Type) {
+//         self.types.push(name);
+//         if let TypeKind::Sum(vars) = &ty.kind {
+//             for v in vars {
+//                 self.values.push(&v.label);
+//             }
+//         }
+//     }
 
-    fn visit_type(&mut self, _: &'s [Type], name: &'s str, _: &'s Type) {
-        self.types.push(name);
-    }
+//     fn visit_type(&mut self, _: &'s [Type], name: &'s str, _: &'s Type) {
+//         self.types.push(name);
+//     }
 
-    fn visit_value(&mut self, _: &'s [Type], pat: &'s Pattern, _: &'s Expr) {
-        self.visit_pattern(pat);
-    }
+//     fn visit_value(&mut self, _: &'s [Type], pat: &'s Pattern, _: &'s Expr) {
+//         self.visit_pattern(pat);
+//     }
 
-    fn visit_function(&mut self, _: &'s [Type], name: &'s str, _: &'s [FnArm]) {
-        self.values.push(name);
-    }
+//     fn visit_function(&mut self, _: &'s [Type], name: &'s str, _: &'s [FnArm]) {
+//         self.values.push(name);
+//     }
 
-    fn visit_and_decl(&mut self, d1: &'s Decl, d2: &'s Decl) {
-        self.visit_decl(d1);
-        self.visit_decl(d2);
-    }
+//     fn visit_and_decl(&mut self, d1: &'s Decl, d2: &'s Decl) {
+//         self.visit_decl(d1);
+//         self.visit_decl(d2);
+//     }
 
-    fn visit_toplevel_expr(&mut self, _: &'s Expr) {}
-}
+//     fn visit_toplevel_expr(&mut self, _: &'s Expr) {}
+// }
 
-impl<'s> PatVisitor<'s> for DeclNames<'s> {
-    fn visit_variable(&mut self, s: &'s str) {
-        self.values.push(s);
-    }
-}
+// impl<'s> PatVisitor<'s> for DeclNames<'s> {
+//     fn visit_variable(&mut self, s: &'s str) {
+//         self.values.push(s);
+//     }
+// }
 
 /// Collect type variables and references to defined names
 #[derive(Default, Debug, Clone)]

@@ -36,8 +36,7 @@ fn main() {
                 hir::bidir::test(elab);
             }
             Err(Error {
-                kind: ErrorKind::EOF,
-                ..
+                kind: ErrorKind::EOF, ..
             }) => {}
             Err(e) => {
                 println!("[err] {:?}", e);

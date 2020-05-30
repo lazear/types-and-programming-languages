@@ -208,9 +208,7 @@ impl<'s> Iterator for Lexer<'s> {
     type Item = Spanned<Token>;
     fn next(&mut self) -> Option<Self::Item> {
         match self.lex() {
-            Spanned {
-                data: Token::EOF, ..
-            } => None,
+            Spanned { data: Token::EOF, .. } => None,
             tok => Some(tok),
         }
     }

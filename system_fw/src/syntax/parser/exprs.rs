@@ -58,17 +58,11 @@ impl<'s> Parser<'s> {
     fn lambda_expr(&mut self) -> Result<Expr, Error> {
         let mut span = self.current.span;
         self.expect(Token::Lambda)?;
-        let arg = self.once(
-            |p| p.parse_pattern(),
-            "expected pattern binding in lambda expression!",
-        )?;
+        let arg = self.once(|p| p.parse_pattern(), "expected pattern binding in lambda expression!")?;
         self.expect(Token::DoubleArrow)?;
         let body = self.parse_expr()?;
         span += self.prev;
-        Ok(Expr::new(
-            ExprKind::Abs(Box::new(arg), Box::new(body)),
-            span,
-        ))
+        Ok(Expr::new(ExprKind::Abs(Box::new(arg), Box::new(body)), span))
     }
 
     fn if_expr(&mut self) -> Result<Expr, Error> {
@@ -96,12 +90,8 @@ impl<'s> Parser<'s> {
     fn atomic_expr(&mut self) -> Result<Expr, Error> {
         let mut span = self.current.span;
         match self.current.data {
-            Token::LowerId(_) => self
-                .expect_lower_id()
-                .map(|e| Expr::new(ExprKind::Var(e), span)),
-            Token::UpperId(_) => self
-                .expect_upper_id()
-                .map(|e| Expr::new(ExprKind::Constr(e), span)),
+            Token::LowerId(_) => self.expect_lower_id().map(|e| Expr::new(ExprKind::Var(e), span)),
+            Token::UpperId(_) => self.expect_upper_id().map(|e| Expr::new(ExprKind::Constr(e), span)),
             Token::LBrace => self.record_expr(),
             Token::Let => self.let_binding(),
             Token::Int(n) => {

@@ -1,10 +1,7 @@
 use super::*;
 
 pub fn parameterized_set() -> Type {
-    tyop!(
-        kind!(*),
-        exist!(kind!(* => *), op_app!(Type::Var(0), Type::Var(1)))
-    )
+    tyop!(kind!(*), exist!(kind!(* => *), op_app!(Type::Var(0), Type::Var(1))))
 }
 
 fn list_type() -> Type {
@@ -16,10 +13,7 @@ fn list_type() -> Type {
                 ("Nil", Type::Unit),
                 (
                     "Cons",
-                    record!(
-                        ("head", Type::Var(0)),
-                        ("tail", op_app!(Type::Var(1), Type::Var(0)))
-                    )
+                    record!(("head", Type::Var(0)), ("tail", op_app!(Type::Var(1), Type::Var(0))))
                 )
             )
         )
@@ -53,11 +47,7 @@ pub fn parameterized_set_term() -> Term {
     // {*X::*=>*, X T}
     tyabs!(
         kind!(*),
-        pack!(
-            list_type(),
-            body,
-            op_app!(parameterized_set(), Type::Var(0))
-        )
+        pack!(list_type(), body, op_app!(parameterized_set(), Type::Var(0)))
     )
 }
 

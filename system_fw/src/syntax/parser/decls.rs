@@ -84,11 +84,7 @@ impl<'s> Parser<'s> {
     fn decl_expr(&mut self) -> Result<Decl, Error> {
         let expr = self.parse_expr()?;
         let sp = expr.span;
-        Ok(Decl::with_id(
-            DeclKind::Expr(expr),
-            sp,
-            self.allocate_ast_id(),
-        ))
+        Ok(Decl::with_id(DeclKind::Expr(expr), sp, self.allocate_ast_id()))
     }
 
     /// Parse a simple declaration
@@ -114,11 +110,7 @@ impl<'s> Parser<'s> {
             self.bump();
             let d2 = self.once(|p| p.parse_decl_atom(), "expected declaration after `and`")?;
             span += self.prev;
-            d = Decl::with_id(
-                DeclKind::And(Box::new(d), Box::new(d2)),
-                span,
-                self.allocate_ast_id(),
-            );
+            d = Decl::with_id(DeclKind::And(Box::new(d), Box::new(d2)), span, self.allocate_ast_id());
         }
         span += self.prev;
         Ok(d)
@@ -132,16 +124,5 @@ impl<'s> Parser<'s> {
             self.bump_if(&Token::Semicolon);
         }
         Ok(Program { decls })
-    }
-}
-
-#[derive(Default)]
-struct PatBindings<'p> {
-    binds: Vec<&'p str>,
-}
-
-impl<'p> crate::syntax::visit::PatVisitor<'p> for PatBindings<'p> {
-    fn visit_variable(&mut self, s: &'p str) {
-        self.binds.push(s);
     }
 }

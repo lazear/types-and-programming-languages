@@ -95,10 +95,7 @@ impl<'s> Parser<'s> {
         let mut span = self.current.span;
         let label = self.expect_lower_id()?;
         self.expect(Token::Colon)?;
-        let ty = self.once(
-            |p| p.parse_type(),
-            "record type row requires a type {label: ty, ...}",
-        )?;
+        let ty = self.once(|p| p.parse_type(), "record type row requires a type {label: ty, ...}")?;
         span += self.prev;
 
         Ok(Row { label, ty, span })

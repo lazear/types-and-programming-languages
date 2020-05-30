@@ -112,10 +112,9 @@ impl KindError {
                     k
                 ),
             ),
-            KindError::Unbound(idx) => Diagnostic::error(
-                span,
-                format!("unbound type variable with de Bruijn index {}", idx),
-            ),
+            KindError::Unbound(idx) => {
+                Diagnostic::error(span, format!("unbound type variable with de Bruijn index {}", idx))
+            }
             KindError::NotProduct => Diagnostic::error(span, format!("a product kind is required")),
         }
     }
@@ -124,11 +123,7 @@ impl KindError {
 impl Context {
     pub fn kinding(&mut self, ty: &Type) -> Result<TyKind, KindError> {
         match ty {
-            Type::Var(idx) => self
-                .kstack
-                .get(*idx)
-                .cloned()
-                .ok_or(KindError::Unbound(*idx)),
+            Type::Var(idx) => self.kstack.get(*idx).cloned().ok_or(KindError::Unbound(*idx)),
             Type::Abs(kind, t) => {
                 self.kstack.push(*kind.clone());
                 let k_ = self.kinding(&t)?;
@@ -251,9 +246,7 @@ impl Context {
     }
 
     fn is_star_kind(&mut self, ty: &Type, err_span: Span) -> Result<(), Diagnostic> {
-        let kind = self
-            .kinding(ty)
-            .map_err(|k| KindError::to_diag(k, err_span))?;
+        let kind = self.kinding(ty).map_err(|k| KindError::to_diag(k, err_span))?;
         if kind == TyKind::Star {
             Ok(())
         } else {
@@ -288,14 +281,10 @@ impl Context {
             }
             Kind::App(m, n) => {
                 let mut ty = self.typecheck(&m)?;
-                self.simplify_ty(&mut ty)
-                    .map_err(|ke| ke.to_diag(term.span))?;
+                self.simplify_ty(&mut ty).map_err(|ke| ke.to_diag(term.span))?;
                 if let Type::Arrow(ty11, ty12) = ty {
                     let ty2 = self.typecheck(&n)?;
-                    if self
-                        .equiv(&ty11, &ty2)
-                        .map_err(|ke| ke.to_diag(term.span))?
-                    {
+                    if self.equiv(&ty11, &ty2).map_err(|ke| ke.to_diag(term.span))? {
                         Ok(*ty12)
                     } else {
                         dbg!(&self.stack);
@@ -303,10 +292,7 @@ impl Context {
                         let d = Diagnostic::error(term.span, "type mismatch in application")
                             .message(
                                 m.span,
-                                format!(
-                                    "abstraction {} requires type {} to return {}",
-                                    m, ty11, ty12
-                                ),
+                                format!("abstraction {} requires type {} to return {}", m, ty11, ty12),
                             )
                             .message(n.span, format!("term {} has a type of {}", n, ty2));
                         return Err(d);
@@ -315,10 +301,8 @@ impl Context {
                     // dbg!(&self.stack);
                     dbg!(&m);
                     dbg!(&ty);
-                    let d = Diagnostic::error(term.span, "type mismatch in application").message(
-                        m.span,
-                        format!("this term {} has a type {}, not T->U", m, ty),
-                    );
+                    let d = Diagnostic::error(term.span, "type mismatch in application")
+                        .message(m.span, format!("this term {} has a type {}, not T->U", m, ty));
                     return Err(d);
                 }
             }
@@ -341,13 +325,10 @@ impl Context {
             }
             Kind::TyApp(tyabs, applied) => {
                 let mut ty = self.typecheck(&tyabs)?;
-                self.simplify_ty(&mut ty)
-                    .map_err(|ke| ke.to_diag(term.span))?;
+                self.simplify_ty(&mut ty).map_err(|ke| ke.to_diag(term.span))?;
                 match ty {
                     Type::Universal(k1, u) => {
-                        let k2 = self
-                            .kinding(&applied)
-                            .map_err(|k| KindError::to_diag(k, term.span))?;
+                        let k2 = self.kinding(&applied).map_err(|k| KindError::to_diag(k, term.span))?;
                         if k2 == *k1 {
                             // actually do subst
                             let mut u = *u;
@@ -355,19 +336,19 @@ impl Context {
                             Ok(u)
                         } else {
                             let d = Diagnostic::error(term.span, "type kind mismatch in term-level type application")
-                            .message(tyabs.span, format!("universal type requires a type of kind {}, but a kind of {} is given", &k1, k2));
+                                .message(
+                                    tyabs.span,
+                                    format!(
+                                        "universal type requires a type of kind {}, but a kind of {} is given",
+                                        &k1, k2
+                                    ),
+                                );
                             Err(d)
                         }
                     }
                     ty => {
-                        let d = Diagnostic::error(
-                            term.span,
-                            "type mismatch in term-level type application",
-                        )
-                        .message(
-                            tyabs.span,
-                            format!("this term has a type {}, not forall. X::K", ty),
-                        );
+                        let d = Diagnostic::error(term.span, "type mismatch in term-level type application")
+                            .message(tyabs.span, format!("this term has a type {}, not forall. X::K", ty));
                         Err(d)
                     }
                 }
@@ -393,12 +374,8 @@ impl Context {
                                 return Ok(*f.ty);
                             }
                         }
-                        Err(
-                            Diagnostic::error(term.span, "invalid field access").message(
-                                tm.span,
-                                format!("term does not have a label named {}", field),
-                            ),
-                        )
+                        Err(Diagnostic::error(term.span, "invalid field access")
+                            .message(tm.span, format!("term does not have a label named {}", field)))
                     }
                     _ => Err(Diagnostic::error(term.span, "invalid field access")
                         .message(tm.span, format!("term has a type of {}, not Record", ty))),
@@ -406,28 +383,19 @@ impl Context {
             }
             Kind::Injection(label, tm, ty) => {
                 let mut ty = ty.clone();
-                self.simplify_ty(&mut ty)
-                    .map_err(|ke| ke.to_diag(term.span))?;
+                self.simplify_ty(&mut ty).map_err(|ke| ke.to_diag(term.span))?;
                 match ty.as_ref() {
                     Type::Sum(fields) => {
                         for f in fields {
                             if label == &f.label {
                                 let mut ty_ = self.typecheck(tm)?;
-                                self.simplify_ty(&mut ty_)
-                                    .map_err(|ke| ke.to_diag(term.span))?;
+                                self.simplify_ty(&mut ty_).map_err(|ke| ke.to_diag(term.span))?;
                                 if &ty_ == f.ty.as_ref() {
                                     return Ok(*ty.clone());
                                 } else {
-                                    let d = Diagnostic::error(
-                                        term.span,
-                                        "Invalid associated type in variant",
-                                    )
-                                    .message(
+                                    let d = Diagnostic::error(term.span, "Invalid associated type in variant").message(
                                         tm.span,
-                                        format!(
-                                            "variant {} requires type {}, but this is {}",
-                                            label, f.ty, ty_
-                                        ),
+                                        format!("variant {} requires type {}, but this is {}", label, f.ty, ty_),
                                     );
                                     return Err(d);
                                 }
@@ -484,8 +452,7 @@ impl Context {
                     Type::Recursive(inner) => {
                         let ty_ = self.typecheck(&tm)?;
                         let mut s = Type::App(inner.clone(), rec.clone());
-                        self.simplify_ty(&mut s)
-                            .map_err(|ke| ke.to_diag(term.span))?;
+                        self.simplify_ty(&mut s).map_err(|ke| ke.to_diag(term.span))?;
                         if self.equiv(&ty_, &s).map_err(|ke| ke.to_diag(term.span))? {
                             Ok(*rec)
                         } else {
@@ -497,17 +464,10 @@ impl Context {
                     }
                     Type::App(ty1, ty2) => match ty1.as_ref() {
                         Type::Recursive(rec_inner) => {
-                            let mut apped = Type::App(
-                                Box::new(Type::App(rec_inner.clone(), ty1.clone())),
-                                ty2.clone(),
-                            );
-                            self.simplify_ty(&mut apped)
-                                .map_err(|ke| ke.to_diag(term.span))?;
+                            let mut apped = Type::App(Box::new(Type::App(rec_inner.clone(), ty1.clone())), ty2.clone());
+                            self.simplify_ty(&mut apped).map_err(|ke| ke.to_diag(term.span))?;
                             let ty_ = self.typecheck(&tm)?;
-                            if self
-                                .equiv(&ty_, &apped)
-                                .map_err(|ke| ke.to_diag(term.span))?
-                            {
+                            if self.equiv(&ty_, &apped).map_err(|ke| ke.to_diag(term.span))? {
                                 Ok(*rec)
                             } else {
                                 let d = Diagnostic::error(term.span, "Type mismatch in fold")
@@ -519,10 +479,7 @@ impl Context {
                         _ => {
                             let d = Diagnostic::error(
                                 term.span,
-                                format!(
-                                    "Fold requires a recursive type in application of {} to {}",
-                                    ty1, ty2
-                                ),
+                                format!("Fold requires a recursive type in application of {} to {}", ty1, ty2),
                             );
                             Err(d)
                         }
@@ -538,28 +495,25 @@ impl Context {
                 // Γ⊢ packed : [ X -> witness ] T2 and Γ⊢  {∃X, T2} :: *
                 // then {*witness, packed} as  {∃X, T2}
 
-                let k = self
-                    .kinding(sig)
-                    .map_err(|k| KindError::to_diag(k, term.span))?;
+                let k = self.kinding(sig).map_err(|k| KindError::to_diag(k, term.span))?;
                 if k != TyKind::Star {
-                    return diag!(
-                        term.span,
-                        "existential type definition does not have a kind of *"
-                    );
+                    return diag!(term.span, "existential type definition does not have a kind of *");
                 }
 
                 let mut sig = sig.clone();
-                self.simplify_ty(&mut sig)
-                    .map_err(|ke| ke.to_diag(term.span))?;
+                self.simplify_ty(&mut sig).map_err(|ke| ke.to_diag(term.span))?;
 
                 match sig.as_mut() {
                     Type::Existential(kind, t2) => {
-                        let witness_kind = self
-                            .kinding(&witness)
-                            .map_err(|k| KindError::to_diag(k, term.span))?;
+                        let witness_kind = self.kinding(&witness).map_err(|k| KindError::to_diag(k, term.span))?;
 
                         if &witness_kind != kind.as_ref() {
-                            return diag!(term.span, "existential type requires a type of kind {}, but implementation type has a kind of {}", kind, witness_kind);
+                            return diag!(
+                                term.span,
+                                "existential type requires a type of kind {}, but implementation type has a kind of {}",
+                                kind,
+                                witness_kind
+                            );
                         }
 
                         let ty_packed = self.typecheck(packed)?;
@@ -575,18 +529,12 @@ impl Context {
                         {
                             Ok(*sig.clone())
                         } else {
-                            Err(Diagnostic::error(
-                                term.span,
-                                "type mismatch in existential package",
-                            )
-                            .message(packed.span, format!("term has a type of {}", ty_packed))
-                            .message(
-                                term.span,
-                                format!(
-                                    "but the existential package type is defined as {}",
-                                    ty_packed_prime,
-                                ),
-                            ))
+                            Err(Diagnostic::error(term.span, "type mismatch in existential package")
+                                .message(packed.span, format!("term has a type of {}", ty_packed))
+                                .message(
+                                    term.span,
+                                    format!("but the existential package type is defined as {}", ty_packed_prime,),
+                                ))
                         }
                     }
                     ty => diag!(term.span, "cannot pack an existential type into {}", ty),
@@ -604,12 +552,8 @@ impl Context {
                         self.kstack.pop();
                         Ok(body_ty)
                     }
-                    _ => Err(
-                        Diagnostic::error(term.span, "type mismatch during unpack").message(
-                            packed.span,
-                            format!("term has a type of {}, not {{∃X::K, T}}", ty),
-                        ),
-                    ),
+                    _ => Err(Diagnostic::error(term.span, "type mismatch during unpack")
+                        .message(packed.span, format!("term has a type of {}, not {{∃X::K, T}}", ty))),
                 }
             }
         }
@@ -627,10 +571,7 @@ mod test {
         // Instantiations of polymorphic identity function ∀X. X->X
         let inst1 = tyapp!(id.clone(), Type::Nat);
         let inst2 = tyapp!(id.clone(), arrow!(Type::Unit, Type::Nat));
-        let inst3 = tyapp!(
-            id.clone(),
-            univ!(kind!(*), arrow!(Type::Var(0), Type::Var(0)))
-        );
+        let inst3 = tyapp!(id.clone(), univ!(kind!(*), arrow!(Type::Var(0), Type::Var(0))));
 
         let mut ctx = Context::default();
         // ΛX. λx: X. x  should typecheck to ∀X. X->X
@@ -641,10 +582,7 @@ mod test {
         assert_eq!(ctx.typecheck(&inst1), Ok(arrow!(Type::Nat, Type::Nat)));
         assert_eq!(
             ctx.typecheck(&inst2),
-            Ok(arrow!(
-                arrow!(Type::Unit, Type::Nat),
-                arrow!(Type::Unit, Type::Nat)
-            ))
+            Ok(arrow!(arrow!(Type::Unit, Type::Nat), arrow!(Type::Unit, Type::Nat)))
         );
         assert_eq!(
             ctx.typecheck(&inst3),
@@ -659,10 +597,7 @@ mod test {
     fn ty_exist() {
         let interface_ty = exist!(
             kind!(*),
-            record!(
-                ("new", Type::Var(0)),
-                ("get", arrow!(Type::Var(0), Type::Nat))
-            )
+            record!(("new", Type::Var(0)), ("get", arrow!(Type::Var(0), Type::Nat)))
         );
         let adt = Term::new(
             Kind::Record(Record {
@@ -685,10 +620,7 @@ mod test {
         let mut ctx = Context::default();
         assert_eq!(ctx.typecheck(&counter), Ok(interface_ty));
 
-        let unpacked = unpack!(
-            counter,
-            app!(access!(var!(0), "get"), access!(var!(0), "new"))
-        );
+        let unpacked = unpack!(counter, app!(access!(var!(0), "get"), access!(var!(0), "new")));
         assert_eq!(ctx.typecheck(&unpacked), Ok(Type::Nat));
     }
 
@@ -697,10 +629,7 @@ mod test {
         let ty = tyop!(kind!(*), Type::Var(0));
         let mut ctx = Context::default();
         assert_eq!(ctx.kinding(&ty), Ok(kind!(* => *)));
-        assert_eq!(
-            ctx.kinding(&Type::App(Box::new(ty), Box::new(Type::Nat))),
-            Ok(kind!(*))
-        );
+        assert_eq!(ctx.kinding(&Type::App(Box::new(ty), Box::new(Type::Nat))), Ok(kind!(*)));
 
         let pair = tyop!(kind!(*), tyop!(kind!(*), univ!(kind!(*), Type::Var(0))));
         assert_eq!(ctx.kinding(&pair), Ok(kind!(kind!(*) => kind!(* => *))));

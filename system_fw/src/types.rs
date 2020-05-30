@@ -79,10 +79,7 @@ impl fmt::Display for Type {
             Type::Product(tys) => write!(
                 f,
                 "({})",
-                tys.iter()
-                    .map(|ty| ty.to_string())
-                    .collect::<Vec<_>>()
-                    .join(",")
+                tys.iter().map(|ty| ty.to_string()).collect::<Vec<_>>().join(",")
             ),
             Type::Projection(ty, idx) => write!(f, "{}.{}", ty, idx),
             Type::Sum(fields) => write!(
@@ -113,11 +110,7 @@ impl fmt::Display for TyKind {
                 k => write!(f, "{}->{}", k1, k),
             },
             TyKind::Product(v) => {
-                let s = v
-                    .iter()
-                    .map(|k| format!("{}", k))
-                    .collect::<Vec<String>>()
-                    .join(",");
+                let s = v.iter().map(|k| format!("{}", k)).collect::<Vec<String>>().join(",");
                 write!(f, "({})", s)
             }
         }
@@ -205,8 +198,8 @@ impl Shift {
 impl MutTypeVisitor for Shift {
     fn visit_var(&mut self, var: &mut usize) {
         if *var >= self.cutoff {
-            *var = usize::try_from(*var as isize + self.shift)
-                .expect("Type variable has been shifted below 0! Fatal bug");
+            *var =
+                usize::try_from(*var as isize + self.shift).expect("Type variable has been shifted below 0! Fatal bug");
         }
     }
 

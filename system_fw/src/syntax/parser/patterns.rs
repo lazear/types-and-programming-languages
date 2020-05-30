@@ -38,12 +38,8 @@ impl<'s> Parser<'s> {
                 self.bump();
                 Ok(Pattern::new(Any, span))
             }
-            Token::LowerId(_) => self
-                .expect_lower_id()
-                .map(|s| Pattern::new(Variable(s), span)),
-            Token::UpperId(_) => self
-                .expect_upper_id()
-                .map(|s| Pattern::new(Constructor(s), span)),
+            Token::LowerId(_) => self.expect_lower_id().map(|s| Pattern::new(Variable(s), span)),
+            Token::UpperId(_) => self.expect_upper_id().map(|s| Pattern::new(Constructor(s), span)),
             Token::Int(n) => {
                 self.bump();
                 Ok(Pattern::new(Literal(n), span))
@@ -67,10 +63,7 @@ impl<'s> Parser<'s> {
             match self.atomic_pattern() {
                 Ok(arg) => {
                     span += self.prev;
-                    return Ok(Pattern::new(
-                        Application(Box::new(pat), Box::new(arg)),
-                        span,
-                    ));
+                    return Ok(Pattern::new(Application(Box::new(pat), Box::new(arg)), span));
                 }
                 _ => return Ok(pat),
             }

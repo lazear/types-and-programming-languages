@@ -164,9 +164,7 @@ impl fmt::Debug for Type {
                     .map(|x| format!(
                         "{}{}",
                         x.label,
-                        x.ty.as_ref()
-                            .map(|i| format!(" of {:?}", i))
-                            .unwrap_or(String::new())
+                        x.ty.as_ref().map(|i| format!(" of {:?}", i)).unwrap_or(String::new())
                     ))
                     .collect::<Vec<String>>()
                     .join(" | ")
@@ -174,10 +172,7 @@ impl fmt::Debug for Type {
             Type::Product(v) => write!(
                 f,
                 "({})",
-                v.iter()
-                    .map(|x| format!("{:?}", x))
-                    .collect::<Vec<String>>()
-                    .join(",")
+                v.iter().map(|x| format!("{:?}", x)).collect::<Vec<String>>().join(",")
             ),
             Type::Record(v) => write!(
                 f,

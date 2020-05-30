@@ -30,9 +30,7 @@ impl<'hir> Context<'hir> {
         match e {
             Expr::Unit => Some(Concrete(Unit)),
             Expr::Int(_) => Some(Concrete(Int)),
-            Expr::LocalVar(DeBruijn { idx, .. }) => {
-                self.ctx.get(self.ctx.len().checked_sub(idx + 1)?).cloned()
-            }
+            Expr::LocalVar(DeBruijn { idx, .. }) => self.ctx.get(self.ctx.len().checked_sub(idx + 1)?).cloned(),
             _ => None,
         }
     }

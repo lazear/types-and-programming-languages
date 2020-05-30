@@ -84,9 +84,7 @@ impl<T: Clone> Clone for Stack<T> {
 
 impl<T: Default> Default for Stack<T> {
     fn default() -> Self {
-        Stack {
-            inner: Vec::default(),
-        }
+        Stack { inner: Vec::default() }
     }
 }
 

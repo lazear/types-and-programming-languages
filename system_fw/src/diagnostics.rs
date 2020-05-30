@@ -86,11 +86,7 @@ impl fmt::Debug for Diagnostic {
             self.primary.info,
             self.primary.span.start.line,
             self.primary.span.start.col,
-            self.other
-                .iter()
-                .map(|a| a.info.clone())
-                .collect::<Vec<_>>()
-                .join("\n")
+            self.other.iter().map(|a| a.info.clone()).collect::<Vec<_>>().join("\n")
         )
     }
 }
