@@ -119,6 +119,17 @@ impl Context {
         None
     }
 
+    fn hole(&mut self, exist: usize) -> Option<&mut Element> {
+        let mut ret = None;
+        for (idx, el) in self.ctx.iter().enumerate() {
+            match el {
+                Element::Exist(n) if *n == exist => ret = Some(idx),
+                _ => {}
+            }
+        }
+        Some(&mut self.ctx[ret?])
+    }
+
     fn subtype(&mut self, a: &Type, b: &Type) -> Result<(), String> {
         use Type::*;
         match (a, b) {
@@ -150,16 +161,54 @@ impl Context {
                 })
             }
             // Rule <: InstantiateL
-            (Exist(alpha), A) => {
-                println!("FV({:?}) contains {} {}", A, alpha, A.freevars().contains(alpha));
-                unimplemented!()
+            (Exist(alpha), a) => {
+                // println!("FV({:?}) contains {} {}", a, alpha, a.freevars().contains(alpha));
+                self.instantiateL(*alpha, a)
             }
             // Rule <: InstantiateR
-            (A, Exist(alpha)) => {
-                println!("FV({:?}) contains {} {}", A, alpha, A.freevars().contains(alpha));
-                unimplemented!()
+            (a, Exist(alpha)) => {
+                // println!("FV({:?}) contains {} {}", a, alpha, a.freevars().contains(alpha));
+                self.instantiateR(a, *alpha)
             }
             (a, b) => Err(format!("{:?} is not a subtype of {:?}", a, b)),
+        }
+    }
+
+    fn instantiateL(&mut self, alpha: usize, a: &Type) -> Result<(), String> {
+        println!("InstL Exist({}) <: {:?}", alpha, a);
+        // InstLSolve
+        if a.monotype() {
+            *self.hole(alpha).unwrap() = Element::Solved(alpha, a.clone());
+            Ok(())
+        } else {
+            match a {
+                // InstLArr
+                Type::Arrow(A1, A2) => unimplemented!(),
+                // InstalLAllR
+                Type::Univ(beta) => unimplemented!(),
+                // InstallLReach
+                Type::Exist(beta) => unimplemented!(),
+                _ => Err(format!("Could not instantiate Exist({}) to {:?}", alpha, a)),
+            }
+        }
+    }
+
+    fn instantiateR(&mut self, a: &Type, alpha: usize) -> Result<(), String> {
+        println!("InstR {:?} <: Exist({}) ", a, alpha);
+        // InstRSolve
+        if a.monotype() {
+            *self.hole(alpha).unwrap() = Element::Solved(alpha, a.clone());
+            Ok(())
+        } else {
+            match a {
+                // InstRArr
+                Type::Arrow(A1, A2) => unimplemented!(),
+                // InstalRAllR
+                Type::Univ(beta) => unimplemented!(),
+                // InstallRReach
+                Type::Exist(beta) => unimplemented!(),
+                _ => Err(format!("Could not instantiate Exist({}) to {:?}", alpha, a)),
+            }
         }
     }
 
@@ -202,12 +251,31 @@ impl Context {
                 // alpha and beta stay on the stack, since they appear in the output type
                 Ok(Type::Arrow(Box::new(Type::Exist(alpha)), Box::new(Type::Exist(beta))))
             }
+            // Rule ->E
             Expr::App(e1, e2) => {
-                let ty = self.infer(&e1)?;
-                dbg!(ty);
-                dbg!(&self);
-                unimplemented!()
+                let A = self.infer(&e1)?;
+                let A = self.apply(A);
+                self.infer_app(&A, e2)
             }
+        }
+    }
+
+    fn infer_app(&mut self, ty: &Type, e2: &Expr) -> Result<Type, String> {
+        match ty {
+            Type::Exist(alpha) => unimplemented!(),
+            Type::Arrow(A, C) => {
+                self.check(e2, A)?;
+                Ok(*C.clone())
+            }
+            Type::Univ(A) => {
+                let alpha = self.fresh_ev();
+                let mut A_ = A.clone();
+                A_.subst(&Type::Exist(alpha));
+
+                self.ctx.push(Element::Exist(alpha));
+                self.infer_app(&A_, e2)
+            }
+            _ => Err(format!("Cannot appl ty {:?} to expr {:?}", e2, ty)),
         }
     }
 
@@ -264,7 +332,8 @@ macro_rules! ann {
 fn main() {
     println!("Hello, world!");
 
-    let id = abs!(var!(0));
+    let id = app!(abs!(var!(0)), Expr::Unit);
+
     let mut ctx = Context::default();
 
     dbg!(ctx.infer(&id));
