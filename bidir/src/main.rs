@@ -1,5 +1,12 @@
+//! "Complete and Easy Bidirectional Typechecking for Higher-Rank Polymorphism"
+//! Paper by J. Dunfield and N. Krishnaswami
+//!
+//! Also see very useful Haskell implementation:
+//! https://github.com/lexi-lambda/higher-rank/
+
 use std::collections::HashSet;
 
+/// A source-level type
 #[derive(Clone, Debug, PartialEq)]
 enum Type {
     Unit,
@@ -18,19 +25,25 @@ impl Type {
         }
     }
 
+    /// Collect the free existential variables of the type
     fn freevars(&self) -> Vec<usize> {
-        match &self {
-            Type::Unit | Type::Var(_) => vec![],
-            Type::Exist(v) => vec![*v],
-            Type::Arrow(a, b) => {
-                let mut v = a.freevars();
-                v.extend(b.freevars());
-                v
+        fn walk(ty: &Type, vec: &mut Vec<usize>) {
+            match ty {
+                Type::Unit | Type::Var(_) => {}
+                Type::Exist(v) => vec.push(*v),
+                Type::Arrow(a, b) => {
+                    walk(a, vec);
+                    walk(b, vec);
+                }
+                Type::Univ(a) => walk(a, vec),
             }
-            Type::Univ(a) => a.freevars(),
         }
+        let mut v = Vec::new();
+        walk(self, &mut v);
+        v
     }
 
+    /// Perform subsitution of type `s` into self, algorithm from TAPL
     fn subst(&mut self, s: &Type) {
         fn walk<F: Fn(&mut Type)>(t: &mut Type, c: usize, f: &F) {
             match t {
@@ -47,79 +60,112 @@ impl Type {
     }
 }
 
+/// An expression in our simply typed lambda calculus
 #[derive(Clone, Debug, PartialEq)]
 enum Expr {
+    /// The unit expression, ()
     Unit,
+    /// A term variable, given in de Bruijn notation
     Var(usize),
+    /// A lambda abstraction, with it's body. (\x. body)
     Abs(Box<Expr>),
+    /// Application (e1 e2)
     App(Box<Expr>, Box<Expr>),
+    /// Explicit type annotation of a term, (x : A)
     Ann(Box<Expr>, Box<Type>),
 }
 
+/// An element in the typing context
 #[derive(Clone, Debug, PartialEq)]
 enum Element {
+    /// Universal type variable
     Var(usize),
-    Ann(usize, Type),
+    /// Term variable typing x : A. We differ from the paper in that we use
+    /// de Bruijn indices for variables, so we don't need to mark which var
+    /// this annotation belongs to - it always belongs to the innermost binding (idx 0)
+    /// and we will find this by traversing the stack
+    Ann(Type),
+    /// Unsolved existential type variable
     Exist(usize),
+    /// Existential type variable that has been solved
+    /// to some monotype
     Solved(usize, Type),
+    /// I am actually unsure if we really need a marker, due to how we structure
+    /// scoping, see `with_scope` method.
     Marker(usize),
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Context {
+    /// We model the algorithmic context as a simple stack of elements
     ctx: Vec<Element>,
+    /// We assign fresh exist. variables a unique, strictly increasing number
     ev: usize,
 }
 
 impl Context {
+    /// Generate a fresh identifier
     fn fresh_ev(&mut self) -> usize {
         let e = self.ev;
         self.ev += 1;
         e
     }
 
+    /// Apply the context to a type, replacing any solved existential variables
+    /// in the context onto the type, if it contains a matching existential
     fn apply(&self, ty: Type) -> Type {
         match ty {
             Type::Unit | Type::Var(_) => ty,
             Type::Arrow(a, b) => Type::Arrow(Box::new(self.apply(*a)), Box::new(self.apply(*b))),
             Type::Univ(ty) => Type::Univ(Box::new(self.apply(*ty))),
             Type::Exist(n) => {
-                println!("apply ex{}, {:?}", n, self.ctx);
-                match self.solution(n) {
-                    Some(solved) => solved.clone(),
+                match self.find_solved(n) {
+                    // Apply to the solved variable also - this is important
+                    // since we can have solved references deeper in the stack
+                    Some(solved) => self.apply(solved.clone()),
                     None => ty,
                 }
             }
         }
     }
 
-    fn get_ann(&self, idx: usize) -> Option<&Type> {
-        dbg!(&self.ctx);
-        for (ix, ty) in self.ctx.iter().rev().enumerate().filter_map(|(i, x)| {
-            if let Element::Ann(_, ty) = x {
-                Some((i, ty))
-            } else {
-                None
-            }
-        }) {
-            if ix == idx {
-                return Some(ty);
+    /// Find the term annotation corresponding to de Bruijn index `idx`.
+    /// We traverse the stack in a reversed order, counting each annotation
+    /// we come across
+    fn find_annotation(&self, idx: usize) -> Option<&Type> {
+        let mut ix = 0;
+        for elem in self.ctx.iter().rev() {
+            match &elem {
+                Element::Ann(ty) => {
+                    if ix == idx {
+                        return Some(&ty);
+                    }
+                    ix += 1
+                }
+                _ => {}
             }
         }
+
         None
     }
 
-    fn solution(&self, idx: usize) -> Option<&Type> {
+    /// Find the monotype associated with a solved existential variable `alpha`
+    /// in the context, if it exists.
+    fn find_solved(&self, alpha: usize) -> Option<&Type> {
         for elem in &self.ctx {
             match &elem {
-                Element::Solved(n, ty) if *n == idx => return Some(ty),
+                Element::Solved(n, ty) if *n == alpha => return Some(ty),
                 _ => {}
             }
         }
         None
     }
 
-    fn hole(&mut self, exist: usize) -> Option<&mut Element> {
+    /// This is one of the more confusing parts of the paper, IMO. We have to open
+    /// a 'hole' in the context, where we can replace/insert some arbitrary amount
+    /// of bindings where an unsolved existential (or marker, in the paper) was
+    /// previously located
+    fn splice_hole<F: Fn(&mut Vec<Element>)>(&mut self, exist: usize, f: F) -> Result<(), String> {
         let mut ret = None;
         for (idx, el) in self.ctx.iter().enumerate() {
             match el {
@@ -127,10 +173,18 @@ impl Context {
                 _ => {}
             }
         }
-        Some(&mut self.ctx[ret?])
+        let idx = ret.ok_or_else(|| format!("{} not bound in ctx", exist))?;
+        let rest = self.ctx.split_off(idx + 1);
+        self.ctx.pop();
+        println!("splicing {:?}, {:?}", self.ctx, rest);
+        f(&mut self.ctx);
+        self.ctx.extend(rest);
+        Ok(())
     }
 
     fn subtype(&mut self, a: &Type, b: &Type) -> Result<(), String> {
+        println!("{:?}", self.ctx);
+
         use Type::*;
         match (a, b) {
             // Rule <: Unit
@@ -140,14 +194,16 @@ impl Context {
             // Rule <: Exvar
             (Exist(a), Exist(b)) if a == b => Ok(()),
             // Rule <: ->
-            (Arrow(a1, a2), Arrow(b1, b2)) => self.subtype(b1, a1).and(self.subtype(b2, a2)),
+            (Arrow(a1, a2), Arrow(b1, b2)) => {
+                self.subtype(b1, a1)?;
+                self.subtype(&self.apply(*a2.clone()), &self.apply(*b2.clone()))
+            }
             // Rule <: forall. L
             (Univ(a), b) => {
                 let alpha = self.fresh_ev();
                 let mut a_ = *a.clone();
                 a_.subst(b);
-                self.with_scope(|f| {
-                    f.ctx.push(Element::Marker(alpha));
+                self.with_scope(Element::Marker(alpha), |f| {
                     f.ctx.push(Element::Exist(alpha));
                     f.subtype(&a_, b)
                 })
@@ -155,32 +211,21 @@ impl Context {
             // Rule <: forall. R
             (a, Univ(b)) => {
                 let alpha = self.fresh_ev();
-                self.with_scope(|f| {
-                    f.ctx.push(Element::Exist(alpha));
-                    f.subtype(a, b)
-                })
+                self.with_scope(Element::Exist(alpha), |f| f.subtype(a, b))
             }
             // Rule <: InstantiateL
-            (Exist(alpha), a) => {
-                // println!("FV({:?}) contains {} {}", a, alpha, a.freevars().contains(alpha));
-                self.instantiateL(*alpha, a)
-            }
+            (Exist(alpha), a) if !a.freevars().contains(alpha) => self.instantiateL(*alpha, a),
             // Rule <: InstantiateR
-            (a, Exist(alpha)) => {
-                // println!("FV({:?}) contains {} {}", a, alpha, a.freevars().contains(alpha));
-                self.instantiateR(a, *alpha)
-            }
+            (a, Exist(alpha)) if !a.freevars().contains(alpha) => self.instantiateR(a, *alpha),
             (a, b) => Err(format!("{:?} is not a subtype of {:?}", a, b)),
         }
     }
 
     fn instantiateL(&mut self, alpha: usize, a: &Type) -> Result<(), String> {
-        println!("InstL Exist({}) <: {:?}", alpha, a);
+        // println!("InstL Exist({}) <: {:?}", alpha, a);
         // InstLSolve
         if a.monotype() {
-            *self.hole(alpha).unwrap() = Element::Solved(alpha, a.clone());
-            dbg!(&self.ctx);
-            Ok(())
+            self.splice_hole(alpha, |ctx| ctx.push(Element::Solved(alpha, a.clone())))
         } else {
             match a {
                 // InstLArr
@@ -195,11 +240,10 @@ impl Context {
     }
 
     fn instantiateR(&mut self, a: &Type, alpha: usize) -> Result<(), String> {
-        println!("InstR {:?} <: Exist({}) ", a, alpha);
+        // println!("InstR {:?} <: Exist({}) ", a, alpha);
         // InstRSolve
         if a.monotype() {
-            *self.hole(alpha).unwrap() = Element::Solved(alpha, a.clone());
-            Ok(())
+            self.splice_hole(alpha, |ctx| ctx.push(Element::Solved(alpha, a.clone())))
         } else {
             match a {
                 // InstRArr
@@ -214,16 +258,17 @@ impl Context {
     }
 
     // Pop off any stack growth incurred from calling `f`
-    fn with_scope<T, F: Fn(&mut Context) -> T>(&mut self, f: F) -> T {
-        let n = self.ctx.len();
+    fn with_scope<T, F: Fn(&mut Context) -> T>(&mut self, e: Element, f: F) -> T {
+        self.ctx.push(e.clone());
         let t = f(self);
-        while self.ctx.len() > n {
+        while self.ctx[self.ctx.len() - 1] != e {
             self.ctx.pop();
         }
         t
     }
 
     fn infer(&mut self, e: &Expr) -> Result<Type, String> {
+        println!("{:?}", self.ctx);
         match e {
             // Rule 1l=>
             Expr::Unit => Ok(Type::Unit),
@@ -233,7 +278,7 @@ impl Context {
                 Ok(*ty.clone())
             }
             // Rule Var
-            Expr::Var(x) => self.get_ann(*x).cloned().ok_or(format!("unbound db {:?}", x)),
+            Expr::Var(x) => self.find_annotation(*x).cloned().ok_or(format!("unbound db {:?}", x)),
             // Rule ->I =>
             Expr::Abs(e) => {
                 let alpha = self.fresh_ev();
@@ -244,10 +289,7 @@ impl Context {
                 self.ctx.push(Element::Exist(beta));
 
                 // Check the function body against Beta
-                self.with_scope(|f| {
-                    f.ctx.push(Element::Ann(0, Type::Exist(alpha)));
-                    f.check(e, &Type::Exist(beta))
-                })?;
+                self.with_scope(Element::Ann(Type::Exist(alpha)), |f| f.check(e, &Type::Exist(beta)))?;
 
                 // alpha and beta stay on the stack, since they appear in the output type
                 Ok(Type::Arrow(Box::new(Type::Exist(alpha)), Box::new(Type::Exist(beta))))
@@ -262,17 +304,23 @@ impl Context {
     }
 
     fn infer_app(&mut self, ty: &Type, e2: &Expr) -> Result<Type, String> {
+        println!("{:?}", self.ctx);
+
         match ty {
             // Rule alpha_hat App
             Type::Exist(alpha) => {
                 let a1 = self.fresh_ev();
                 let a2 = self.fresh_ev();
-                self.ctx.push(Element::Exist(a2));
-                self.ctx.push(Element::Exist(a1));
-                self.ctx.push(Element::Solved(
-                    *alpha,
-                    Type::Arrow(Box::new(Type::Exist(a1)), Box::new(Type::Exist(a2))),
-                ));
+
+                self.splice_hole(*alpha, |ctx| {
+                    ctx.push(Element::Exist(a2));
+                    ctx.push(Element::Exist(a1));
+                    ctx.push(Element::Solved(
+                        *alpha,
+                        Type::Arrow(Box::new(Type::Exist(a1)), Box::new(Type::Exist(a2))),
+                    ));
+                })?;
+
                 self.check(e2, &Type::Exist(a1))?;
                 Ok(Type::Exist(a2))
             }
@@ -286,7 +334,6 @@ impl Context {
                 let alpha = self.fresh_ev();
                 let mut a_prime = a.clone();
                 a_prime.subst(&Type::Exist(alpha));
-
                 self.ctx.push(Element::Exist(alpha));
                 self.infer_app(&a_prime, e2)
             }
@@ -299,15 +346,9 @@ impl Context {
             // Rule 1l
             (Expr::Unit, Type::Unit) => Ok(()),
             // Rule ->I
-            (Expr::Abs(body), Type::Arrow(a1, a2)) => self.with_scope(|f| {
-                f.ctx.push(Element::Ann(0, *a1.clone()));
-                f.check(body, a2)
-            }),
+            (Expr::Abs(body), Type::Arrow(a1, a2)) => self.with_scope(Element::Ann(*a1.clone()), |f| f.check(body, a2)),
             // Rule forall. I
-            (e, Type::Univ(ty)) => self.with_scope(|f| {
-                f.ctx.push(Element::Var(0));
-                f.check(e, &ty)
-            }),
+            (e, Type::Univ(ty)) => self.with_scope(Element::Var(0), |f| f.check(e, &ty)),
             // Rule Sub
             (e, b) => {
                 let a = self.infer(e)?;
@@ -347,11 +388,16 @@ macro_rules! ann {
 fn main() {
     println!("Hello, world!");
 
-    let id = app!(abs!(var!(0)), Expr::Unit);
+    // \f. \x. f x
+    // : (e0 -> e1) -> e0 -> e1
+    let t1 = abs!(abs!(abs!(app!(var!(2), app!(var!(1), var!(0))))));
+    // let id = app!(abs!(var!(0)), Expr::Unit);
 
     let mut ctx = Context::default();
 
-    let inf = ctx.infer(&id).unwrap();
+    let inf = ctx.infer(&t1).unwrap();
+    // dbg!(&inf);
+    println!("final {:?}\n{:?}", &ctx.ctx, inf);
     let app = ctx.apply(inf);
-    dbg!(app);
+    println!("typed as {:?}", &app);
 }
