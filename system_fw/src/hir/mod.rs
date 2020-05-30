@@ -1,3 +1,5 @@
+pub mod bidir;
+
 use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
@@ -154,7 +156,7 @@ impl fmt::Debug for Type {
             Type::Infer => write!(f, "_"),
             Type::Error => write!(f, "!"),
             Type::Unclear => write!(f, "?"),
-            Type::Var(v) => write!(f, "{}", &v.name),
+            Type::Var(v) => write!(f, "{}", &v.idx),
             Type::Sum(v) => write!(
                 f,
                 "{}",

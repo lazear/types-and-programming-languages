@@ -1,11 +1,9 @@
-use super::*;
-
-use crate::hir::{self, Constructor, DeBruijn, HirId};
-use crate::stack::Stack;
-use crate::syntax::pmc::InitMatrix;
+use super::ast::*;
+use super::hir::{self, Constructor, DeBruijn, HirId};
+use super::stack::Stack;
+use super::syntax::visit::*;
 use std::collections::{HashMap, HashSet};
 use std::iter::IntoIterator;
-use util::span::Span;
 
 /// Validate that a [`Program`] is closed, e.g. it has no free
 /// term or type variables. We traverse the program in execution order,
@@ -16,14 +14,17 @@ pub struct ElaborationContext<'s> {
     tyvars: Stack<&'s str>,
     tmvars: Stack<&'s str>,
 
-    // defined_values: HashMap<String, HirId>,
-    // defined_types: HashMap<String, HirId>,
     namespaces: Vec<Namespace>,
     current: usize,
-
     constructors: HashMap<HirId, Constructor>,
     elaborated: HashMap<HirId, hir::Decl>,
     next_hir_id: HirId,
+}
+
+pub struct Elaborated {
+    pub constructors: HashMap<HirId, Constructor>,
+    pub elaborated: HashMap<HirId, hir::Decl>,
+    pub decls: Vec<HirId>,
 }
 
 #[derive(Default)]
@@ -45,6 +46,23 @@ pub enum ElabError {
 
 /// Housekeeping, namespace methods
 impl<'s> ElaborationContext<'s> {
+    pub fn new() -> Self {
+        let mut ec = Self::default();
+        let global_ns = Namespace::default();
+        ec.namespaces.push(global_ns);
+        ec
+    }
+
+    pub fn elaborate(program: &'s Program) -> Result<Elaborated, ElabError> {
+        let mut ec = Self::new();
+        let decls = ec.elab_program(program)?;
+        Ok(Elaborated {
+            constructors: ec.constructors,
+            elaborated: ec.elaborated,
+            decls,
+        })
+    }
+
     /// Keep track of the type variable stack, while executing the combinator
     /// function `f` on `self`. Any stack growth is popped off after `f`
     /// returns.
@@ -124,6 +142,8 @@ impl<'s> ElaborationContext<'s> {
         }
     }
 
+    /// Starting from the current [`Namespace`], search for a bound name.
+    /// If it's not found, then recursively search parent namespaces
     fn lexical_value(&self, s: &str) -> Option<HirId> {
         let mut ptr = &self.namespaces[self.current];
         loop {
@@ -134,6 +154,7 @@ impl<'s> ElaborationContext<'s> {
         }
     }
 
+    /// Search for a variable bound in a temporary lexical scope (i.e. a function)
     fn debruijn_value(&self, s: &str) -> Option<hir::Expr> {
         self.tmvars.lookup(&s).map(|idx| {
             hir::Expr::LocalVar(DeBruijn {
@@ -143,6 +164,8 @@ impl<'s> ElaborationContext<'s> {
         })
     }
 
+    /// Search for a value binding, starting with any temporary lambda captures,
+    /// and then working upwards through top level definitions
     fn lookup_value(&self, s: &str) -> Option<hir::Expr> {
         if let Some(db) = self.debruijn_value(s) {
             return Some(db);
@@ -169,13 +192,6 @@ impl<'s> ElaborationContext<'s> {
         })
     }
 
-    pub fn new() -> Self {
-        let mut ec = Self::default();
-        let global_ns = Namespace::default();
-        ec.namespaces.push(global_ns);
-        ec
-    }
-
     fn enter_namespace(&mut self) -> usize {
         let id = self.namespaces.len();
         self.namespaces.push(Namespace {
@@ -195,6 +211,8 @@ impl<'s> ElaborationContext<'s> {
         }
     }
 
+    /// Perform all bindings within `f` in a fresh [`Namespace`],
+    /// and then return to the current one
     fn with_new_namespace<T, F: Fn(&mut ElaborationContext<'s>) -> T>(&mut self, f: F) -> T {
         self.enter_namespace();
         let t = f(self);
@@ -554,7 +572,7 @@ impl<'s> ElaborationContext<'s> {
         ty: &'s Type,
     ) -> Result<HirId, ElabError> {
         // Quickly collection all names that this type points to
-        let mut coll = super::TyNameCollector::default();
+        let mut coll = TyNameCollector::default();
         coll.visit_ty(&ty);
         let is_recur = coll.definitions.contains(name);
 
@@ -790,14 +808,14 @@ impl<'s> ElaborationContext<'s> {
                     .into_iter()
                     .rev()
                     .fold(case, |acc, ty| hir::Expr::Abs(Box::new(ty), Box::new(acc)));
-                let fun = hir::Expr::Abs(
-                    Box::new(hir::Type::Arrow(
-                        Box::new(hir::Type::Infer),
-                        Box::new(hir::Type::Infer),
-                    )),
-                    Box::new(fun),
-                );
-                let fun = hir::Expr::Fix(Box::new(fun));
+                // let fun = hir::Expr::Abs(
+                //     Box::new(hir::Type::Arrow(
+                //         Box::new(hir::Type::Infer),
+                //         Box::new(hir::Type::Infer),
+                //     )),
+                //     Box::new(fun),
+                // );
+                // let fun = hir::Expr::Fix(Box::new(fun));
 
                 Ok(f.define_value(name.into(), fun))
             })
@@ -848,5 +866,66 @@ impl PatternMatrix {
             });
         }
         arms
+    }
+}
+
+/// Helper struct for walking top-level declarations and extracting
+/// bound type and value names. This does no validation or checking
+#[derive(Default)]
+struct DeclNames<'s> {
+    values: Vec<&'s str>,
+    types: Vec<&'s str>,
+}
+
+impl<'s> DeclVisitor<'s> for DeclNames<'s> {
+    fn visit_datatype(&mut self, _: &'s [Type], name: &'s str, ty: &'s Type) {
+        self.types.push(name);
+        if let TypeKind::Sum(vars) = &ty.kind {
+            for v in vars {
+                self.values.push(&v.label);
+            }
+        }
+    }
+
+    fn visit_type(&mut self, _: &'s [Type], name: &'s str, _: &'s Type) {
+        self.types.push(name);
+    }
+
+    fn visit_value(&mut self, _: &'s [Type], pat: &'s Pattern, _: &'s Expr) {
+        self.visit_pattern(pat);
+    }
+
+    fn visit_function(&mut self, _: &'s [Type], name: &'s str, _: &'s [FnArm]) {
+        self.values.push(name);
+    }
+
+    fn visit_and_decl(&mut self, d1: &'s Decl, d2: &'s Decl) {
+        self.visit_decl(d1);
+        self.visit_decl(d2);
+    }
+
+    fn visit_toplevel_expr(&mut self, _: &'s Expr) {}
+}
+
+impl<'s> PatVisitor<'s> for DeclNames<'s> {
+    fn visit_variable(&mut self, s: &'s str) {
+        self.values.push(s);
+    }
+}
+
+/// Collect type variables and references to defined names
+#[derive(Default, Debug, Clone)]
+pub struct TyNameCollector<'s> {
+    pub tyvars: HashSet<&'s str>,
+    pub definitions: HashSet<&'s str>,
+}
+
+impl<'s> TypeVisitor<'s> for TyNameCollector<'s> {
+    fn visit_variable(&mut self, s: &'s str) {
+        self.tyvars.insert(s);
+    }
+
+    fn visit_defined(&mut self, s: &'s str) {
+        self.definitions.insert(s);
     }
 }
