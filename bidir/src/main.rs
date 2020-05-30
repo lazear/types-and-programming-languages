@@ -179,6 +179,7 @@ impl Context {
         // InstLSolve
         if a.monotype() {
             *self.hole(alpha).unwrap() = Element::Solved(alpha, a.clone());
+            dbg!(&self.ctx);
             Ok(())
         } else {
             match a {
@@ -253,27 +254,41 @@ impl Context {
             }
             // Rule ->E
             Expr::App(e1, e2) => {
-                let A = self.infer(&e1)?;
-                let A = self.apply(A);
-                self.infer_app(&A, e2)
+                let a = self.infer(&e1)?;
+                let a = self.apply(a);
+                self.infer_app(&a, e2)
             }
         }
     }
 
     fn infer_app(&mut self, ty: &Type, e2: &Expr) -> Result<Type, String> {
         match ty {
-            Type::Exist(alpha) => unimplemented!(),
-            Type::Arrow(A, C) => {
-                self.check(e2, A)?;
-                Ok(*C.clone())
+            // Rule alpha_hat App
+            Type::Exist(alpha) => {
+                let a1 = self.fresh_ev();
+                let a2 = self.fresh_ev();
+                self.ctx.push(Element::Exist(a2));
+                self.ctx.push(Element::Exist(a1));
+                self.ctx.push(Element::Solved(
+                    *alpha,
+                    Type::Arrow(Box::new(Type::Exist(a1)), Box::new(Type::Exist(a2))),
+                ));
+                self.check(e2, &Type::Exist(a1))?;
+                Ok(Type::Exist(a2))
             }
-            Type::Univ(A) => {
+            // Rule ->App
+            Type::Arrow(a, b) => {
+                self.check(e2, a)?;
+                Ok(*b.clone())
+            }
+            // Rule forall. App
+            Type::Univ(a) => {
                 let alpha = self.fresh_ev();
-                let mut A_ = A.clone();
-                A_.subst(&Type::Exist(alpha));
+                let mut a_prime = a.clone();
+                a_prime.subst(&Type::Exist(alpha));
 
                 self.ctx.push(Element::Exist(alpha));
-                self.infer_app(&A_, e2)
+                self.infer_app(&a_prime, e2)
             }
             _ => Err(format!("Cannot appl ty {:?} to expr {:?}", e2, ty)),
         }
@@ -336,5 +351,7 @@ fn main() {
 
     let mut ctx = Context::default();
 
-    dbg!(ctx.infer(&id));
+    let inf = ctx.infer(&id).unwrap();
+    let app = ctx.apply(inf);
+    dbg!(app);
 }
