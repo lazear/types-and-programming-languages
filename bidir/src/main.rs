@@ -10,6 +10,8 @@ use std::collections::HashSet;
 #[derive(Clone, Debug, PartialEq)]
 enum Type {
     Unit,
+    Int,
+    Bool,
     Var(usize),
     Arrow(Box<Type>, Box<Type>),
     Exist(usize),
@@ -29,7 +31,7 @@ impl Type {
     fn freevars(&self) -> Vec<usize> {
         fn walk(ty: &Type, vec: &mut Vec<usize>) {
             match ty {
-                Type::Unit | Type::Var(_) => {}
+                Type::Unit | Type::Int | Type::Bool | Type::Var(_) => {}
                 Type::Exist(v) => vec.push(*v),
                 Type::Arrow(a, b) => {
                     walk(a, vec);
@@ -87,6 +89,10 @@ impl Type {
 enum Expr {
     /// The unit expression, ()
     Unit,
+    True,
+    False,
+    If(Box<Expr>, Box<Expr>, Box<Expr>),
+    Int(usize),
     /// A term variable, given in de Bruijn notation
     Var(usize),
     /// A lambda abstraction, with it's body. (\x. body)
@@ -142,7 +148,7 @@ impl Context {
             Type::Univ(alpha) => self.with_scope(Element::Var, |f| f.well_formed(&alpha)),
             Type::Var(idx) => self.find_type_var(*idx),
             Type::Arrow(a, b) => self.well_formed(&a) && self.well_formed(&b),
-            Type::Unit => true,
+            Type::Unit | Type::Int | Type::Bool => true,
         }
     }
 
@@ -172,7 +178,7 @@ impl Context {
     /// in the context onto the type, if it contains a matching existential
     fn apply(&self, ty: Type) -> Type {
         match ty {
-            Type::Unit | Type::Var(_) => ty,
+            Type::Unit | Type::Int | Type::Bool | Type::Var(_) => ty,
             Type::Arrow(a, b) => Type::Arrow(Box::new(self.apply(*a)), Box::new(self.apply(*b))),
             Type::Univ(ty) => Type::Univ(Box::new(self.apply(*ty))),
             Type::Exist(n) => {
@@ -267,6 +273,8 @@ impl Context {
 
         use Type::*;
         match (a, b) {
+            (Bool, Bool) => Ok(()),
+            (Int, Int) => Ok(()),
             // Rule <: Unit
             (Unit, Unit) => Ok(()),
             // Rule <: Var
@@ -290,7 +298,7 @@ impl Context {
             }
             // Rule <: forall. R
             (a, Univ(b)) => {
-                let alpha = self.fresh_ev();
+                // let alpha = self.fresh_ev();
                 self.with_scope(Element::Var, |f| f.subtype(a, b))
             }
             // Rule <: InstantiateL
@@ -421,6 +429,8 @@ impl Context {
     fn infer(&mut self, e: &Expr) -> Result<Type, String> {
         // println!("{:?}", self.ctx);
         match e {
+            Expr::True | Expr::False => Ok(Type::Bool),
+            Expr::Int(_) => Ok(Type::Int),
             // Rule 1l=>
             Expr::Unit => Ok(Type::Unit),
             // Rule Anno
@@ -451,6 +461,14 @@ impl Context {
                 let a = self.infer(&e1)?;
                 let a = self.apply(a);
                 self.infer_app(&a, e2)
+            }
+
+            Expr::If(e1, e2, e3) => {
+                self.check(e1, &Type::Bool)?;
+
+                let t1 = self.infer(e2)?;
+                self.check(e3, &t1)?;
+                Ok(t1)
             }
         }
     }
@@ -493,6 +511,9 @@ impl Context {
 
     fn check(&mut self, e: &Expr, a: &Type) -> Result<(), String> {
         match (e, a) {
+            (Expr::Int(_), Type::Int) => Ok(()),
+            (Expr::False, Type::Bool) => Ok(()),
+            (Expr::True, Type::Bool) => Ok(()),
             // Rule 1l
             (Expr::Unit, Type::Unit) => Ok(()),
             // Rule ->I
@@ -535,6 +556,12 @@ macro_rules! ann {
     };
 }
 
+macro_rules! ife {
+    ($a:expr, $b:expr, $c:expr) => {
+        Expr::If(Box::new($a), Box::new($b), Box::new($c))
+    };
+}
+
 fn main() {
     println!("Hello, world!");
 
@@ -543,11 +570,15 @@ fn main() {
     // : (a -> b) -> ((c -> a) -> (c -> b))
     let t1 = abs!(abs!(abs!(app!(var!(2), app!(var!(1), var!(0))))));
     let id = abs!(var!(0));
+    let t2 = app!(t1.clone(), id);
+
+    let tif = ife!(app!(abs!(var!(0)), Expr::False), Expr::Int(10), Expr::Int(20));
+
     // let id = ann!(id, Type::Univ(Box::new(Type::Arrow(Box::new(Type::Var(0)), Box::new(Type::Var(0))))));
 
     let mut ctx = Context::default();
 
-    let inf = ctx.infer(&t1).unwrap();
+    let inf = ctx.infer(&tif).unwrap();
     // dbg!(&inf);
     println!("final {:?}\n{:?}", &ctx.ctx, inf);
     let app = ctx.apply(inf);
