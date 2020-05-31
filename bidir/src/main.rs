@@ -4,7 +4,8 @@
 //! Also see very useful Haskell implementation:
 //! https://github.com/lexi-lambda/higher-rank/
 
-use std::collections::HashSet;
+#[macro_use]
+mod helpers;
 
 /// A source-level type
 #[derive(Clone, Debug, PartialEq)]
@@ -532,34 +533,10 @@ impl Context {
     }
 }
 
-macro_rules! var {
-    ($x:expr) => {
-        Expr::Var($x)
-    };
-}
-
-macro_rules! app {
-    ($x:expr, $y:expr) => {
-        Expr::App(Box::new($x), Box::new($y))
-    };
-}
-
-macro_rules! abs {
-    ($x:expr) => {
-        Expr::Abs(Box::new($x))
-    };
-}
-
-macro_rules! ann {
-    ($x:expr, $t:expr) => {
-        Expr::Ann(Box::new($x), Box::new($t))
-    };
-}
-
-macro_rules! ife {
-    ($a:expr, $b:expr, $c:expr) => {
-        Expr::If(Box::new($a), Box::new($b), Box::new($c))
-    };
+fn infer(ex: &Expr) -> Result<Type, String> {
+    let mut ctx = Context::default();
+    let inf = ctx.infer(ex)?;
+    Ok(ctx.apply(inf))
 }
 
 fn main() {
@@ -569,18 +546,57 @@ fn main() {
     // : (e6 -> e7) -> ((e14 -> e6) -> (e14 -> e7))
     // : (a -> b) -> ((c -> a) -> (c -> b))
     let t1 = abs!(abs!(abs!(app!(var!(2), app!(var!(1), var!(0))))));
-    let id = abs!(var!(0));
-    let t2 = app!(t1.clone(), id);
 
-    let tif = ife!(app!(abs!(var!(0)), Expr::False), Expr::Int(10), Expr::Int(20));
+    println!("{} : {}", t1, infer(&t1).unwrap());
+}
 
-    // let id = ann!(id, Type::Univ(Box::new(Type::Arrow(Box::new(Type::Var(0)), Box::new(Type::Var(0))))));
+#[cfg(test)]
+mod test {
+    use super::*;
+    use helpers::*;
 
-    let mut ctx = Context::default();
+    #[test]
+    fn identity() {
+        let id = abs!(var!(0));
+        let id_ann = ann!(
+            id.clone(),
+            Type::Univ(Box::new(Type::Arrow(Box::new(Type::Var(0)), Box::new(Type::Var(0)))))
+        );
 
-    let inf = ctx.infer(&tif).unwrap();
-    // dbg!(&inf);
-    println!("final {:?}\n{:?}", &ctx.ctx, inf);
-    let app = ctx.apply(inf);
-    println!("typed as {:?}", &app);
+        let id_ex = arrow!(Type::Exist(0), Type::Exist(0));
+        let id_ann_ex = Type::Univ(Box::new(arrow!(Type::Var(0), Type::Var(0))));
+        assert_eq!(infer(&id), Ok(id_ex));
+        assert_eq!(infer(&id_ann), Ok(id_ann_ex));
+    }
+
+    #[test]
+    fn application() {
+        // \f. \g. \x. f (g x)
+        // x: C
+        // g: C -> A
+        // f: A -> B
+        // (A -> B) -> (C -> A) -> C -> B
+        let t = abs!(abs!(abs!(app!(var!(2), app!(var!(1), var!(0))))));
+        let ty = infer(&t).unwrap();
+        assert_eq!(ty.to_string(), "((a->b)->((c->a)->(c->b)))");
+    }
+
+    #[test]
+    fn application2() {
+        // \x. if x then 1 else 0 : Bool -> Int
+        let f = abs!(ife!(var!(0), Expr::Int(1), Expr::Int(0)));
+
+        // \f. \g. \x. f (g x)
+        // : (e6 -> e7) -> ((e14 -> e6) -> (e14 -> e7))
+        // : (a -> b) -> ((c -> a) -> (c -> b))
+        let t1 = abs!(abs!(abs!(app!(var!(2), app!(var!(1), var!(0))))));
+
+        // : ((c -> bool) -> (c -> int))
+        let f2 = app!(t1.clone(), f);
+        // : (c -> int)
+        let f3 = app!(f2, abs!(Expr::True));
+        let f4 = app!(f3, Expr::Unit);
+
+        assert_eq!(infer(&f4), Ok(Type::Int))
+    }
 }
