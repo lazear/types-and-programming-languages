@@ -43,11 +43,27 @@ impl Type {
         v
     }
 
-    /// Perform subsitution of type `s` into self, algorithm from TAPL
-    fn subst(&mut self, s: &Type) {
-        fn walk<F: Fn(&mut Type)>(t: &mut Type, c: usize, f: &F) {
+    /// Perform de Bruijn shifting, algorithm from TAPL
+    fn shift(&mut self, s: isize) {
+        fn walk(t: &mut Type, c: usize, s: isize) {
             match t {
-                Type::Var(n) if *n == c => f(t),
+                Type::Var(n) if *n >= c => *n = (*n as isize + s) as usize,
+                Type::Arrow(a, b) => {
+                    walk(a, c, s);
+                    walk(b, c, s);
+                }
+                Type::Univ(a) => walk(a, c + 1, s),
+                _ => {}
+            }
+        }
+        walk(self, 0, s);
+    }
+
+    /// Perform subsitution of type `s` into self, algorithm from TAPL
+    fn subst(&mut self, s: &mut Type) {
+        fn walk<F: Fn(&mut Type, usize)>(t: &mut Type, c: usize, f: &F) {
+            match t {
+                Type::Var(n) if *n == c => f(t, c),
                 Type::Arrow(a, b) => {
                     walk(a, c, f);
                     walk(b, c, f);
@@ -56,7 +72,13 @@ impl Type {
                 _ => {}
             }
         }
-        walk(self, 0, &|f| *f = s.clone());
+        s.shift(1);
+        walk(self, 0, &|f, c| {
+            let mut s = s.clone();
+            s.shift(c as isize);
+            *f = s
+        });
+        self.shift(-1);
     }
 }
 
@@ -220,20 +242,9 @@ impl Context {
     /// of bindings where an unsolved existential (or marker, in the paper) was
     /// previously located
     fn splice_hole<F: Fn(&mut Vec<Element>)>(&mut self, exist: usize, f: F) -> Result<(), String> {
-        let mut ret = None;
-        for (idx, el) in self.ctx.iter().enumerate() {
-            match el {
-                Element::Exist(n) if *n == exist => ret = Some(idx),
-                _ => {}
-            }
-        }
-        let idx = ret.ok_or_else(|| format!("{} not bound in ctx", exist))?;
-        // println!("splicing {} {}", exist);
-        let rest = self.ctx.split_off(idx + 1);
-        self.ctx.pop();
-        println!("splicing {}, {:?}, {:?}", exist, self.ctx, rest);
-        f(&mut self.ctx);
-        self.ctx.extend(rest);
+        let (l, r) = self.split_context(exist)?;
+        f(&mut l.ctx);
+        l.ctx.extend(r);
         Ok(())
     }
 
@@ -271,7 +282,7 @@ impl Context {
             (Univ(a), b) => {
                 let alpha = self.fresh_ev();
                 let mut a_ = *a.clone();
-                a_.subst(b);
+                a_.subst(&mut b.clone());
                 self.with_scope(Element::Marker(alpha), |f| {
                     f.ctx.push(Element::Exist(alpha));
                     f.subtype(&a_, b)
@@ -292,42 +303,63 @@ impl Context {
 
     fn instantiateL(&mut self, alpha: usize, a: &Type) -> Result<(), String> {
         println!("InstL Exist({}) <: {:?}", alpha, a);
+
+        // We need to split our context into Γ1, alpha, Γ2 so that we
+        // can ensure that alpha is a well formed Existenial in Γ1, e.g.
+        // that alpha appears in Γ1. This ensures that alpha is declared
+        // "to the left" (outer scope) of the type `a`
         let (l, r) = self.split_context(alpha)?;
-        // InstLSolve
         if a.monotype() && l.well_formed(a) {
-            println!("{:?}", l.ctx);
             l.ctx.push(Element::Solved(alpha, a.clone()));
             l.ctx.extend(r);
             return Ok(());
-        // self.splice_hole(alpha, |ctx| ctx.push(Element::Solved(alpha, a.clone())))
-        } else {
-            l.ctx.push(Element::Exist(alpha));
-            l.ctx.extend(r);
         }
+
+        // Okay, alpha is *not* well-formed, but that's okay. `split_context`
+        // removed alpha from the context, so we add it back and then reform
+        // Γ1, alpha, Γ2 into a full context again. When we add it back
+        // and reform the context depends on how we dispatch below
         match a {
             // InstLArr
             Type::Arrow(A1, A2) => {
-                let a1 = self.fresh_ev();
-                let a2 = self.fresh_ev();
+                let a1 = l.fresh_ev();
+                let a2 = l.fresh_ev();
 
-                self.splice_hole(alpha, |ctx| {
-                    ctx.push(Element::Exist(a2));
-                    ctx.push(Element::Exist(a1));
-                    ctx.push(Element::Solved(
-                        alpha,
-                        Type::Arrow(Box::new(Type::Exist(a1)), Box::new(Type::Exist(a2))),
-                    ));
-                })?;
+                // Rather than reforming, then calling splice, we can just
+                // directly push to `l`, since it currently points at the
+                // hole corresponding to [^]
+                l.ctx.push(Element::Exist(a2));
+                l.ctx.push(Element::Exist(a1));
+                l.ctx.push(Element::Solved(
+                    alpha,
+                    Type::Arrow(Box::new(Type::Exist(a1)), Box::new(Type::Exist(a2))),
+                ));
+                l.ctx.extend(r);
                 self.instantiateR(A1, a1)?;
                 let A2_ = self.apply(*A2.clone());
                 self.instantiateL(a2, &A2_)
             }
             // InstLAllR
-            Type::Univ(beta) => unimplemented!(),
+            Type::Univ(beta) => {
+                l.ctx.push(Element::Exist(alpha));
+                l.ctx.extend(r);
+                self.with_scope(Element::Var, |f| f.instantiateL(alpha, &Type::Univ(beta.clone())))
+            }
             // InstLReach
             Type::Exist(beta) => {
                 println!("InstLReach {:?}", l);
-                self.splice_hole(*beta, |ctx| ctx.push(Element::Solved(*beta, Type::Exist(alpha))))
+
+                // We need to ensure that beta only appears to the right of alpha,
+                // e.g. that beta is well-formed in Γ2, so we make a temporary
+                // context so that we can call the splice_hole method
+                let mut gamma = Context { ctx: r, ev: 0 };
+                gamma.splice_hole(*beta, |ctx| ctx.push(Element::Solved(*beta, Type::Exist(alpha))))?;
+                // As explained above, Exist(alpha) was popped off of `l` in the
+                // `split_context` method, so we need to add it back in. We
+                // now have some context such that Γ[alpha][beta=alpha]
+                l.ctx.push(Element::Exist(alpha));
+                l.ctx.extend(gamma.ctx);
+                Ok(())
             }
             _ => Err(format!("Could not instantiate Exist({}) to {:?}", alpha, a)),
         }
@@ -335,42 +367,53 @@ impl Context {
 
     fn instantiateR(&mut self, a: &Type, alpha: usize) -> Result<(), String> {
         println!("InstR {:?} <: Exist({}) ", a, alpha);
-        // InstRSolve
         let (l, r) = self.split_context(alpha)?;
-        // InstLSolve
         if a.monotype() && l.well_formed(a) {
-            println!("{:?}", l.ctx);
             l.ctx.push(Element::Solved(alpha, a.clone()));
             l.ctx.extend(r);
             return Ok(());
-        // self.splice_hole(alpha, |ctx| ctx.push(Element::Solved(alpha, a.clone())))
-        } else {
-            l.ctx.push(Element::Exist(alpha));
-            l.ctx.extend(r);
         }
         match a {
             // InstRArr
             Type::Arrow(A1, A2) => {
-                let a1 = self.fresh_ev();
-                let a2 = self.fresh_ev();
+                let a1 = l.fresh_ev();
+                let a2 = l.fresh_ev();
 
-                self.splice_hole(alpha, |ctx| {
-                    ctx.push(Element::Exist(a2));
-                    ctx.push(Element::Exist(a1));
-                    ctx.push(Element::Solved(
-                        alpha,
-                        Type::Arrow(Box::new(Type::Exist(a1)), Box::new(Type::Exist(a2))),
-                    ));
-                })?;
+                l.ctx.push(Element::Exist(a2));
+                l.ctx.push(Element::Exist(a1));
+                l.ctx.push(Element::Solved(
+                    alpha,
+                    Type::Arrow(Box::new(Type::Exist(a1)), Box::new(Type::Exist(a2))),
+                ));
+                l.ctx.extend(r);
+
+                // Much the same as InstLArr, except the following lines are swapped
                 self.instantiateL(a1, &A1)?;
                 let A2_ = self.apply(*A2.clone());
                 self.instantiateR(&A2_, a2)
-                // unimplemented!()
             }
-            // InstalRAllR
-            Type::Univ(beta) => unimplemented!(),
-            // InstallRReach
-            Type::Exist(beta) => self.splice_hole(*beta, |ctx| ctx.push(Element::Solved(*beta, Type::Exist(alpha)))),
+            // InstRAllL
+            Type::Univ(beta) => {
+                l.ctx.push(Element::Exist(alpha));
+                l.ctx.extend(r);
+
+                let b = self.fresh_ev();
+
+                let mut beta_prime = *beta.clone();
+                beta_prime.subst(&mut Type::Exist(b));
+
+                self.with_scope(Element::Exist(b), |f| {
+                    f.instantiateR(&Type::Univ(Box::new(beta_prime.clone())), alpha)
+                })
+            }
+            // InstRReach
+            Type::Exist(beta) => {
+                let mut gamma = Context { ctx: r, ev: 0 };
+                gamma.splice_hole(*beta, |ctx| ctx.push(Element::Solved(*beta, Type::Exist(alpha))))?;
+                l.ctx.push(Element::Exist(alpha));
+                l.ctx.extend(gamma.ctx);
+                Ok(())
+            }
             _ => Err(format!("Could not instantiate Exist({}) to {:?}", alpha, a)),
         }
     }
@@ -440,7 +483,7 @@ impl Context {
             Type::Univ(a) => {
                 let alpha = self.fresh_ev();
                 let mut a_prime = a.clone();
-                a_prime.subst(&Type::Exist(alpha));
+                a_prime.subst(&mut Type::Exist(alpha));
                 self.ctx.push(Element::Exist(alpha));
                 self.infer_app(&a_prime, e2)
             }
