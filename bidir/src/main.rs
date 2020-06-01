@@ -157,21 +157,20 @@ impl Context {
         if self.well_formed(ty) {
             Ok(true)
         } else {
-            dbg!(&self.ctx);
             Err(format!("Type {:?} is not well formed!", ty))
         }
     }
 
     // Pop off any stack growth incurred from calling `f`
     fn with_scope<T, F: Fn(&mut Context) -> T>(&mut self, e: Element, f: F) -> T {
-        println!("\u{001b}[31msaving scope @ {:?} \u{001b}[0m", e);
         self.ctx.push(e.clone());
         let t = f(self);
 
-        while self.ctx[self.ctx.len() - 1] != e {
-            println!("\u{001b}[31mpopping scope @ {:?} \u{001b}[0m", self.ctx.pop());
+        while let Some(elem) = self.ctx.pop() {
+            if elem == e {
+                break;
+            }
         }
-        self.ctx.pop();
         t
     }
 
@@ -311,8 +310,6 @@ impl Context {
     }
 
     fn instantiateL(&mut self, alpha: usize, a: &Type) -> Result<(), String> {
-        println!("InstL Exist({}) <: {:?}", alpha, a);
-
         // We need to split our context into Γ1, alpha, Γ2 so that we
         // can ensure that alpha is a well formed Existenial in Γ1, e.g.
         // that alpha appears in Γ1. This ensures that alpha is declared
@@ -356,8 +353,6 @@ impl Context {
             }
             // InstLReach
             Type::Exist(beta) => {
-                println!("InstLReach {:?}", l);
-
                 // We need to ensure that beta only appears to the right of alpha,
                 // e.g. that beta is well-formed in Γ2, so we make a temporary
                 // context so that we can call the splice_hole method
@@ -375,7 +370,6 @@ impl Context {
     }
 
     fn instantiateR(&mut self, a: &Type, alpha: usize) -> Result<(), String> {
-        println!("InstR {:?} <: Exist({}) ", a, alpha);
         let (l, r) = self.split_context(alpha)?;
         if a.monotype() && l.well_formed(a) {
             l.ctx.push(Element::Solved(alpha, a.clone()));
@@ -428,7 +422,6 @@ impl Context {
     }
 
     fn infer(&mut self, e: &Expr) -> Result<Type, String> {
-        // println!("{:?}", self.ctx);
         match e {
             Expr::True | Expr::False => Ok(Type::Bool),
             Expr::Int(_) => Ok(Type::Int),
@@ -466,10 +459,13 @@ impl Context {
 
             Expr::If(e1, e2, e3) => {
                 self.check(e1, &Type::Bool)?;
+                let alpha = self.fresh_ev();
+                self.ctx.push(Element::Exist(alpha));
 
-                let t1 = self.infer(e2)?;
-                self.check(e3, &t1)?;
-                Ok(t1)
+                let exist = Type::Exist(alpha);
+                self.check(&e2, &exist)?;
+                self.check(&e3, &exist)?;
+                Ok(exist)
             }
         }
     }
@@ -515,6 +511,11 @@ impl Context {
             (Expr::Int(_), Type::Int) => Ok(()),
             (Expr::False, Type::Bool) => Ok(()),
             (Expr::True, Type::Bool) => Ok(()),
+            (Expr::If(e1, e2, e3), a) => {
+                self.check(&e1, &Type::Bool)?;
+                self.check(&e2, a)?;
+                self.check(&e3, a)
+            }
             // Rule 1l
             (Expr::Unit, Type::Unit) => Ok(()),
             // Rule ->I
@@ -540,14 +541,17 @@ fn infer(ex: &Expr) -> Result<Type, String> {
 }
 
 fn main() {
-    println!("Hello, world!");
-
     // \f. \g. \x. f (g x)
     // : (e6 -> e7) -> ((e14 -> e6) -> (e14 -> e7))
     // : (a -> b) -> ((c -> a) -> (c -> b))
     let t1 = abs!(abs!(abs!(app!(var!(2), app!(var!(1), var!(0))))));
 
-    println!("{} : {}", t1, infer(&t1).unwrap());
+    let id_id = app!(abs!(var!(0)), abs!(var!(0)));
+    // \x. if x then 1 else 0 : Bool -> Int
+    let f = abs!(ife!(var!(0), Expr::Int(1), Expr::Int(0)));
+    let f2 = ife!(Expr::True, Expr::Int(1), Expr::Int(0));
+
+    println!("{} : {:?}", f2, infer(&f2).unwrap());
 }
 
 #[cfg(test)]
