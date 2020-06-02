@@ -328,7 +328,7 @@ impl Context {
     }
 
     fn subtype(&mut self, a: &Type, b: &Type) -> Result<(), String> {
-        // println!("{:?}", self.ctx);
+        println!("{:?} <: {:?}", a, b);
 
         use Type::*;
         match (a, b) {
@@ -521,6 +521,7 @@ impl Context {
             Expr::App(e1, e2) => {
                 let a = self.infer(&e1)?;
                 let a = self.apply(a);
+                println!("{:?} {:?} {:?} {:?}", a, &e1, &e2, &self.ctx);
                 self.infer_app(&a, e2)
             }
             Expr::If(e1, e2, e3) => {
@@ -678,7 +679,7 @@ impl Context {
                 let a = self.infer(e)?;
                 let a = self.apply(a);
                 let b = self.apply(b.clone());
-                dbg!(&self.ctx);
+                dbg!(&e, &self.ctx);
                 self.subtype(&a, &b)?;
                 Ok(())
             }
@@ -693,36 +694,18 @@ fn infer(ex: &Expr) -> Result<Type, String> {
 }
 
 fn main() {
-    // \f. \g. \x. f (g x)
-    // : (e6 -> e7) -> ((e14 -> e6) -> (e14 -> e7))
-    // : (a -> b) -> ((c -> a) -> (c -> b))
-    let t1 = abs!(abs!(abs!(app!(var!(2), app!(var!(1), var!(0))))));
-
-    let ty = sum!(Type::Unit, Type::Bool);
-    let f_ty = arrow!(ty.clone(), Type::Int);
-
-    let f = abs!(
-        case!(var!(0), inj!(l; Expr::Unit, ty.clone()) => Expr::Int(0), inj!(r; Expr::Var(0), ty.clone()) => var!(0))
+    // \x. (x 1, x True) : forall A. (A -> A) -> (Int, Bool)
+    let h = abs!(pair!(app!(var!(0), Expr::Int(1)), app!(var!(0), Expr::True)));
+    let h = ann!(
+        h,
+        arrow!(
+            forall!(arrow!(Type::Var(0), Type::Var(0))),
+            product!(Type::Int, Type::Bool)
+        )
     );
-    // let f = ann!(f, f_ty);
+    let g = app!(h, abs!(var!(0)));
 
-    let a = arrow!(Type::Univ(Box::new(arrow!(Type::Var(0), Type::Var(0)))), ty.clone());
-    let f = abs!(ife!(
-        Expr::True,
-        inj!(l; app!(var!(0), Expr::Unit), ty.clone()),
-        inj!(r; app!(var!(0), Expr::False), ty.clone())
-    ));
-    let f = ann!(f, a);
-
-    let f = ann!(
-        abs!(proj!(r; var!(0))),
-        Type::Univ(Box::new(arrow!(
-            Type::Product(Box::new(Type::Var(0)), Box::new(Type::Var(0))),
-            Type::Var(0)
-        )))
-    );
-    let f = app!(f, pair!(Expr::Int(1), Expr::Int(1)));
-    println!("{} : {:?}", f, infer(&f).unwrap());
+    println!("{} : {:?}", g, infer(&g));
 }
 
 #[cfg(test)]
@@ -773,5 +756,55 @@ mod test {
         let f4 = app!(f3, Expr::Unit);
 
         assert_eq!(infer(&f4), Ok(Type::Int))
+    }
+
+    #[test]
+    fn sum_type() {
+        let ty = sum!(Type::Unit, Type::Bool);
+        let f_ty = arrow!(ty.clone(), Type::Int);
+
+        // \x. case x of inl () => 0 | inr True => 1
+        let f = abs!(
+            case!(var!(0), inj!(l; Expr::Unit, ty.clone()) => Expr::Int(0), inj!(r; Expr::True, ty.clone()) => Expr::Int(1))
+        );
+        let f = ann!(f, f_ty);
+
+        infer(&f).unwrap();
+
+        let a = arrow!(Type::Univ(Box::new(arrow!(Type::Var(0), Type::Var(0)))), ty.clone());
+        // \x. if True then inl (x ()) else inr (x False) : (forall A. (A -> A)) -> (() + Bool)
+        let f = abs!(ife!(
+            Expr::True,
+            inj!(l; app!(var!(0), Expr::Unit), ty.clone()),
+            inj!(r; app!(var!(0), Expr::False), ty.clone())
+        ));
+        let f = ann!(f, a);
+
+        infer(&f).unwrap();
+    }
+
+    #[test]
+    fn product_type() {
+        // \x. r.0 : forall A. (A, A) -> A
+        let f = ann!(
+            abs!(proj!(r; var!(0))),
+            forall!(arrow!(product!(Type::Var(0), Type::Var(0)), Type::Var(0)))
+        );
+        // (\x. fst 0) (1, 1)
+        let f = app!(f, pair!(Expr::Int(1), Expr::Int(1)));
+
+        assert_eq!(infer(&f), Ok(Type::Int));
+
+        // \x. (x 1, x True) : (forall A. (A -> A)) -> (Int, Bool)
+        let h = abs!(pair!(app!(var!(0), Expr::Int(1)), app!(var!(0), Expr::True)));
+        let h = ann!(
+            h,
+            arrow!(
+                forall!(arrow!(Type::Var(0), Type::Var(0))),
+                product!(Type::Int, Type::Bool)
+            )
+        );
+        let g = app!(h, abs!(var!(0)));
+        assert_eq!(infer(&g), Ok(product!(Type::Int, Type::Bool)))
     }
 }

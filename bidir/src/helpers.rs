@@ -36,6 +36,12 @@ macro_rules! arrow {
     };
 }
 
+macro_rules! forall {
+    ($t1:expr) => {
+        Type::Univ(Box::new($t1))
+    };
+}
+
 macro_rules! case {
     ($ex:expr, $pat1:expr => $arm1:expr, $pat2:expr => $arm2:expr) => {
         Expr::Case(
@@ -79,6 +85,12 @@ macro_rules! pair {
 macro_rules! sum {
     ($a:expr, $b:expr) => {
         Type::Sum(Box::new($a), Box::new($b))
+    };
+}
+
+macro_rules! product {
+    ($a:expr, $b:expr) => {
+        Type::Product(Box::new($a), Box::new($b))
     };
 }
 
