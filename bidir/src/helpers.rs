@@ -36,6 +36,52 @@ macro_rules! arrow {
     };
 }
 
+macro_rules! case {
+    ($ex:expr, $pat1:expr => $arm1:expr, $pat2:expr => $arm2:expr) => {
+        Expr::Case(
+            Box::new($ex),
+            Arm {
+                pat: Box::new($pat1),
+                expr: Box::new($arm1),
+            },
+            Arm {
+                pat: Box::new($pat2),
+                expr: Box::new($arm2),
+            },
+        )
+    };
+}
+
+macro_rules! inj {
+    (l; $ex:expr, $ty:expr) => {
+        Expr::Inj(LR::Left, Box::new($ex), Box::new($ty))
+    };
+    (r; $ex:expr, $ty:expr) => {
+        Expr::Inj(LR::Right, Box::new($ex), Box::new($ty))
+    };
+}
+
+macro_rules! proj {
+    (l; $ex:expr) => {
+        Expr::Proj(LR::Left, Box::new($ex))
+    };
+    (r; $ex:expr) => {
+        Expr::Proj(LR::Right, Box::new($ex))
+    };
+}
+
+macro_rules! pair {
+    ($a:expr, $b:expr) => {
+        Expr::Pair(Box::new($a), Box::new($b))
+    };
+}
+
+macro_rules! sum {
+    ($a:expr, $b:expr) => {
+        Type::Sum(Box::new($a), Box::new($b))
+    };
+}
+
 fn ty_display(ty: &Type) -> String {
     use std::collections::HashMap;
     let mut map = HashMap::new();
@@ -50,6 +96,8 @@ fn ty_display(ty: &Type) -> String {
             Type::Univ(ty) => format!("forall {}. {}", vc, walk(ty, map)),
             Type::Exist(idx) => format!("{}", map.entry(*idx).or_insert(nc)),
             Type::Var(idx) => format!("{}", map.entry(0xdeadbeef + *idx).or_insert(vc)),
+            Type::Sum(a, b) => format!("{} + {}", walk(a, map), walk(b, map)),
+            Type::Product(a, b) => format!("({} x {})", walk(a, map), walk(b, map)),
         }
     }
     walk(ty, &mut map)
@@ -77,7 +125,20 @@ fn expr_display(ex: &Expr) -> String {
                 let vc = ('a' as u8 + i as u8) as char;
                 format!("{}", map.entry(i).or_insert(vc))
             }
-            Expr::Ann(e, ty) => format!("{} : {}", walk(e, map), ty_display(ty)),
+            Expr::Ann(e, ty) => format!("<{} : {}>", walk(e, map), ty_display(ty)),
+            Expr::Inj(LR::Left, e, ty) => format!("inl {}", walk(e, map)),
+            Expr::Inj(LR::Right, e, ty) => format!("inr {}", walk(e, map)),
+            Expr::Case(e, la, ra) => format!(
+                "case {} of {} => {}, {} => {}",
+                walk(e, map),
+                walk(&la.pat, map),
+                walk(&la.expr, map),
+                walk(&ra.pat, map),
+                walk(&ra.expr, map)
+            ),
+            Expr::Proj(LR::Left, e) => format!("{}.0", walk(e, map)),
+            Expr::Proj(LR::Right, e) => format!("{}.1", walk(e, map)),
+            Expr::Pair(a, b) => format!("({},{})", walk(a, map), walk(b, map)),
         }
     }
     walk(ex, &mut map)

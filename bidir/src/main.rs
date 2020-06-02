@@ -4,6 +4,7 @@
 //! Also see very useful Haskell implementation:
 //! https://github.com/lexi-lambda/higher-rank/
 
+#![allow(non_snake_case)]
 #[macro_use]
 mod helpers;
 
@@ -13,10 +14,18 @@ enum Type {
     Unit,
     Int,
     Bool,
+    /// A type variable
     Var(usize),
+    /// The type of functions
     Arrow(Box<Type>, Box<Type>),
+    /// Existential type variable that can be instantiated to a monotype
     Exist(usize),
+    /// Universally quantified type, forall. A
     Univ(Box<Type>),
+    /// Class left/right sum type
+    Sum(Box<Type>, Box<Type>),
+    /// Simple pair type
+    Product(Box<Type>, Box<Type>),
 }
 
 impl Type {
@@ -38,6 +47,14 @@ impl Type {
                     walk(a, vec);
                     walk(b, vec);
                 }
+                Type::Sum(a, b) => {
+                    walk(a, vec);
+                    walk(b, vec);
+                }
+                Type::Product(a, b) => {
+                    walk(a, vec);
+                    walk(b, vec);
+                }
                 Type::Univ(a) => walk(a, vec),
             }
         }
@@ -55,8 +72,17 @@ impl Type {
                     walk(a, c, s);
                     walk(b, c, s);
                 }
+                Type::Sum(a, b) => {
+                    walk(a, c, s);
+                    walk(b, c, s);
+                }
+                Type::Product(a, b) => {
+                    walk(a, c, s);
+                    walk(b, c, s);
+                }
                 Type::Univ(a) => walk(a, c + 1, s),
-                _ => {}
+                Type::Unit | Type::Int | Type::Bool | Type::Var(_) => {}
+                Type::Exist(_) => {}
             }
         }
         walk(self, 0, s);
@@ -71,8 +97,17 @@ impl Type {
                     walk(a, c, f);
                     walk(b, c, f);
                 }
+                Type::Sum(a, b) => {
+                    walk(a, c, f);
+                    walk(b, c, f);
+                }
+                Type::Product(a, b) => {
+                    walk(a, c, f);
+                    walk(b, c, f);
+                }
                 Type::Univ(a) => walk(a, c + 1, f),
-                _ => {}
+                Type::Unit | Type::Int | Type::Bool | Type::Var(_) => {}
+                Type::Exist(_) => {}
             }
         }
         s.shift(1);
@@ -83,6 +118,12 @@ impl Type {
         });
         self.shift(-1);
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum LR {
+    Left,
+    Right,
 }
 
 /// An expression in our simply typed lambda calculus
@@ -102,6 +143,20 @@ enum Expr {
     App(Box<Expr>, Box<Expr>),
     /// Explicit type annotation of a term, (x : A)
     Ann(Box<Expr>, Box<Type>),
+    /// Injection left/right into a sum type x1
+    Inj(LR, Box<Expr>, Box<Type>),
+    /// Simplified case expr
+    Case(Box<Expr>, Arm, Arm),
+    /// Introduction of a pair
+    Pair(Box<Expr>, Box<Expr>),
+    /// Projection left/right from a pair
+    Proj(LR, Box<Expr>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct Arm {
+    pat: Box<Expr>,
+    expr: Box<Expr>,
 }
 
 /// An element in the typing context
@@ -149,6 +204,8 @@ impl Context {
             Type::Univ(alpha) => self.with_scope(Element::Var, |f| f.well_formed(&alpha)),
             Type::Var(idx) => self.find_type_var(*idx),
             Type::Arrow(a, b) => self.well_formed(&a) && self.well_formed(&b),
+            Type::Sum(a, b) => self.well_formed(&a) && self.well_formed(&b),
+            Type::Product(a, b) => self.well_formed(&a) && self.well_formed(&b),
             Type::Unit | Type::Int | Type::Bool => true,
         }
     }
@@ -180,6 +237,8 @@ impl Context {
         match ty {
             Type::Unit | Type::Int | Type::Bool | Type::Var(_) => ty,
             Type::Arrow(a, b) => Type::Arrow(Box::new(self.apply(*a)), Box::new(self.apply(*b))),
+            Type::Sum(a, b) => Type::Sum(Box::new(self.apply(*a)), Box::new(self.apply(*b))),
+            Type::Product(a, b) => Type::Product(Box::new(self.apply(*a)), Box::new(self.apply(*b))),
             Type::Univ(ty) => Type::Univ(Box::new(self.apply(*ty))),
             Type::Exist(n) => {
                 match self.find_solved(n) {
@@ -285,6 +344,14 @@ impl Context {
             (Arrow(a1, a2), Arrow(b1, b2)) => {
                 self.subtype(b1, a1)?;
                 self.subtype(&self.apply(*a2.clone()), &self.apply(*b2.clone()))
+            }
+            (Sum(l1, r1), Sum(l2, r2)) => {
+                self.subtype(l1, l2)?;
+                self.subtype(&self.apply(*r1.clone()), &self.apply(*r2.clone()))
+            }
+            (Product(l1, r1), Product(l2, r2)) => {
+                self.subtype(l1, l2)?;
+                self.subtype(&self.apply(*r1.clone()), &self.apply(*r2.clone()))
             }
             // Rule <: forall. L
             (Univ(a), b) => {
@@ -456,7 +523,6 @@ impl Context {
                 let a = self.apply(a);
                 self.infer_app(&a, e2)
             }
-
             Expr::If(e1, e2, e3) => {
                 self.check(e1, &Type::Bool)?;
                 let alpha = self.fresh_ev();
@@ -467,6 +533,70 @@ impl Context {
                 self.check(&e3, &exist)?;
                 Ok(exist)
             }
+            Expr::Inj(lr, e, ty) => {
+                self.check_wf(ty)?;
+                match ty.as_ref() {
+                    Type::Sum(l, r) => {
+                        match lr {
+                            LR::Left => self.check(e, l)?,
+                            LR::Right => self.check(e, r)?,
+                        }
+                        Ok(*ty.clone())
+                    }
+                    _ => Err(format!("{:?} is not a sum type!", ty)),
+                }
+            }
+            Expr::Case(scrutinee, la, ra) => {
+                let ty = self.infer(scrutinee)?;
+                let ty = self.apply(ty);
+                if let Type::Sum(left, right) = &ty {
+                    self.check(&la.pat, &ty)?;
+                    self.check(&ra.pat, &ty)?;
+
+                    fn bind_infer(ctx: &mut Context, arm: &Arm, left: &Type, right: &Type) -> Result<Type, String> {
+                        match arm.pat.as_ref() {
+                            Expr::Inj(lr, ex, _) => match (ex.as_ref(), lr) {
+                                (Expr::Var(_), LR::Left) => {
+                                    ctx.with_scope(Element::Ann(left.clone()), |f| f.infer(&arm.expr))
+                                }
+                                (Expr::Var(_), LR::Right) => {
+                                    ctx.with_scope(Element::Ann(right.clone()), |f| f.infer(&arm.expr))
+                                }
+                                _ => ctx.infer(&arm.expr),
+                            },
+                            _ => Err(format!("Not injection expressions!")),
+                        }
+                    }
+
+                    let l = bind_infer(self, la, &left, &right)?;
+                    let r = bind_infer(self, ra, &left, &right)?;
+                    if l == r {
+                        Ok(l)
+                    } else {
+                        Err(format!("Case arms have different return types!"))
+                    }
+                } else {
+                    Err(format!("{:?} is not a sum type!", ty))
+                }
+            }
+            Expr::Pair(a, b) => {
+                let ta = self.infer(a)?;
+                let ta = self.apply(ta);
+                let tb = self.infer(b)?;
+                let tb = self.apply(tb);
+                Ok(Type::Product(Box::new(ta), Box::new(tb)))
+            }
+            Expr::Proj(lr, ex) => {
+                let ty = self.infer(ex)?;
+                let ty = self.apply(ty);
+                match ty {
+                    Type::Product(left, right) => match lr {
+                        LR::Left => Ok(*left),
+                        LR::Right => Ok(*right),
+                    },
+                    _ => Err(format!("{:?} is not a pair!", ex)),
+                }
+            } // _ => panic!("cant infer {:?}", e)
         }
     }
 
@@ -516,6 +646,27 @@ impl Context {
                 self.check(&e2, a)?;
                 self.check(&e3, a)
             }
+            (Expr::Inj(lr, ex, tagged), Type::Sum(left, right)) => {
+                self.subtype(&tagged, &a)?;
+                match lr {
+                    LR::Left => self.check(ex, left),
+                    LR::Right => self.check(ex, right),
+                }
+            }
+            (Expr::Pair(a, b), Type::Product(t1, t2)) => {
+                self.check(a, t1)?;
+                self.check(b, t2)
+            }
+            // (Expr::Proj(lr, expr), t) => {
+            //     let ty = self.infer(expr)?;
+            //     let ty = self.apply(ty);
+            //     dbg!(&self.ctx);
+            //     match (ty, lr) {
+            //         (Type::Product(left, _), LR::Left) => self.subtype(&left, t),
+            //         (Type::Product(right, _), LR::Right) => self.subtype(&right, t),
+            //         _ => Err(format!("{:?} is not a product type", t))
+            //     }
+            // }
             // Rule 1l
             (Expr::Unit, Type::Unit) => Ok(()),
             // Rule ->I
@@ -527,6 +678,7 @@ impl Context {
                 let a = self.infer(e)?;
                 let a = self.apply(a);
                 let b = self.apply(b.clone());
+                dbg!(&self.ctx);
                 self.subtype(&a, &b)?;
                 Ok(())
             }
@@ -546,12 +698,31 @@ fn main() {
     // : (a -> b) -> ((c -> a) -> (c -> b))
     let t1 = abs!(abs!(abs!(app!(var!(2), app!(var!(1), var!(0))))));
 
-    let id_id = app!(abs!(var!(0)), abs!(var!(0)));
-    // \x. if x then 1 else 0 : Bool -> Int
-    let f = abs!(ife!(var!(0), Expr::Int(1), Expr::Int(0)));
-    let f2 = ife!(Expr::True, Expr::Int(1), Expr::Int(0));
+    let ty = sum!(Type::Unit, Type::Bool);
+    let f_ty = arrow!(ty.clone(), Type::Int);
 
-    println!("{} : {:?}", f2, infer(&f2).unwrap());
+    let f = abs!(
+        case!(var!(0), inj!(l; Expr::Unit, ty.clone()) => Expr::Int(0), inj!(r; Expr::Var(0), ty.clone()) => var!(0))
+    );
+    // let f = ann!(f, f_ty);
+
+    let a = arrow!(Type::Univ(Box::new(arrow!(Type::Var(0), Type::Var(0)))), ty.clone());
+    let f = abs!(ife!(
+        Expr::True,
+        inj!(l; app!(var!(0), Expr::Unit), ty.clone()),
+        inj!(r; app!(var!(0), Expr::False), ty.clone())
+    ));
+    let f = ann!(f, a);
+
+    let f = ann!(
+        abs!(proj!(r; var!(0))),
+        Type::Univ(Box::new(arrow!(
+            Type::Product(Box::new(Type::Var(0)), Box::new(Type::Var(0))),
+            Type::Var(0)
+        )))
+    );
+    let f = app!(f, pair!(Expr::Int(1), Expr::Int(1)));
+    println!("{} : {:?}", f, infer(&f).unwrap());
 }
 
 #[cfg(test)]
