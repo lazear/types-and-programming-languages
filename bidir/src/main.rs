@@ -8,6 +8,12 @@
 #[macro_use]
 mod helpers;
 
+#[derive(Clone, Debug, PartialEq)]
+enum Kind {
+    Star,
+    Arrow(Box<Kind>, Box<Kind>),
+}
+
 /// A source-level type
 #[derive(Clone, Debug, PartialEq)]
 enum Type {
@@ -21,17 +27,20 @@ enum Type {
     /// Existential type variable that can be instantiated to a monotype
     Exist(usize),
     /// Universally quantified type, forall. A
-    Univ(Box<Type>),
+    Univ(Box<Kind>, Box<Type>),
     /// Class left/right sum type
     Sum(Box<Type>, Box<Type>),
     /// Simple pair type
     Product(Box<Type>, Box<Type>),
+
+    Abs(Box<Kind>, Box<Type>),
+    App(Box<Type>, Box<Type>),
 }
 
 impl Type {
     fn monotype(&self) -> bool {
         match &self {
-            Type::Univ(_) => false,
+            Type::Univ(_, _) => false,
             Type::Arrow(t1, t2) => t1.monotype() && t2.monotype(),
             _ => true,
         }
@@ -55,7 +64,12 @@ impl Type {
                     walk(a, vec);
                     walk(b, vec);
                 }
-                Type::Univ(a) => walk(a, vec),
+                Type::Univ(k, a) => walk(a, vec),
+                Type::Abs(k, a) => walk(a, vec),
+                Type::App(a, b) => {
+                    walk(a, vec);
+                    walk(b, vec);
+                }
             }
         }
         let mut v = Vec::new();
@@ -80,7 +94,12 @@ impl Type {
                     walk(a, c, s);
                     walk(b, c, s);
                 }
-                Type::Univ(a) => walk(a, c + 1, s),
+                Type::Univ(k, a) => walk(a, c + 1, s),
+                Type::Abs(k, a) => walk(a, c + 1, s),
+                Type::App(a, b) => {
+                    walk(a, c, s);
+                    walk(b, c, s);
+                }
                 Type::Unit | Type::Int | Type::Bool | Type::Var(_) => {}
                 Type::Exist(_) => {}
             }
@@ -105,7 +124,12 @@ impl Type {
                     walk(a, c, f);
                     walk(b, c, f);
                 }
-                Type::Univ(a) => walk(a, c + 1, f),
+                Type::Univ(k, a) => walk(a, c + 1, f),
+                Type::Abs(k, a) => walk(a, c + 1, f),
+                Type::App(a, b) => {
+                    walk(a, c, f);
+                    walk(b, c, f);
+                }
                 Type::Unit | Type::Int | Type::Bool | Type::Var(_) => {}
                 Type::Exist(_) => {}
             }
@@ -163,7 +187,7 @@ struct Arm {
 #[derive(Clone, Debug, PartialEq)]
 enum Element {
     /// Universal type variable
-    Var,
+    Var(Kind),
     /// Term variable typing x : A. We differ from the paper in that we use
     /// de Bruijn indices for variables, so we don't need to mark which var
     /// this annotation belongs to - it always belongs to the innermost binding (idx 0)
@@ -201,11 +225,13 @@ impl Context {
     fn well_formed(&mut self, ty: &Type) -> bool {
         match ty {
             Type::Exist(alpha) => self.ctx.contains(&Element::Exist(*alpha)) || self.find_solved(*alpha).is_some(),
-            Type::Univ(alpha) => self.with_scope(Element::Var, |f| f.well_formed(&alpha)),
-            Type::Var(idx) => self.find_type_var(*idx),
+            Type::Univ(k, alpha) => self.with_scope(Element::Var(*k.clone()), |f| f.well_formed(&alpha)),
+            Type::Var(idx) => self.find_type_var(*idx).is_some(),
             Type::Arrow(a, b) => self.well_formed(&a) && self.well_formed(&b),
             Type::Sum(a, b) => self.well_formed(&a) && self.well_formed(&b),
             Type::Product(a, b) => self.well_formed(&a) && self.well_formed(&b),
+            Type::Abs(k, a) => self.with_scope(Element::Var(*k.clone()), |f| f.well_formed(&a)),
+            Type::App(a, b) => self.well_formed(&a) && self.well_formed(&b),
             Type::Unit | Type::Int | Type::Bool => true,
         }
     }
@@ -219,7 +245,7 @@ impl Context {
     }
 
     // Pop off any stack growth incurred from calling `f`
-    fn with_scope<T, F: Fn(&mut Context) -> T>(&mut self, e: Element, f: F) -> T {
+    fn with_scope<T, F: FnMut(&mut Context) -> T>(&mut self, e: Element, mut f: F) -> T {
         self.ctx.push(e.clone());
         let t = f(self);
 
@@ -239,7 +265,9 @@ impl Context {
             Type::Arrow(a, b) => Type::Arrow(Box::new(self.apply(*a)), Box::new(self.apply(*b))),
             Type::Sum(a, b) => Type::Sum(Box::new(self.apply(*a)), Box::new(self.apply(*b))),
             Type::Product(a, b) => Type::Product(Box::new(self.apply(*a)), Box::new(self.apply(*b))),
-            Type::Univ(ty) => Type::Univ(Box::new(self.apply(*ty))),
+            Type::Abs(k, a) => Type::Abs(k, Box::new(self.apply(*a))),
+            Type::App(a, b) => Type::App(Box::new(self.apply(*a)), Box::new(self.apply(*b))),
+            Type::Univ(k, ty) => Type::Univ(k, Box::new(self.apply(*ty))),
             Type::Exist(n) => {
                 match self.find_solved(n) {
                     // Apply to the solved variable also - this is important
@@ -274,20 +302,20 @@ impl Context {
     /// Find the term annotation corresponding to de Bruijn index `idx`.
     /// We traverse the stack in a reversed order, counting each annotation
     /// we come across
-    fn find_type_var(&self, idx: usize) -> bool {
+    fn find_type_var(&self, idx: usize) -> Option<&Kind> {
         let mut ix = 0;
         for elem in self.ctx.iter().rev() {
             match &elem {
-                Element::Var => {
+                Element::Var(k) => {
                     if ix == idx {
-                        return true;
+                        return Some(&k);
                     }
                     ix += 1
                 }
                 _ => {}
             }
         }
-        false
+        None
     }
 
     /// Find the monotype associated with a solved existential variable `alpha`
@@ -327,9 +355,54 @@ impl Context {
         Ok((self, rest))
     }
 
-    fn subtype(&mut self, a: &Type, b: &Type) -> Result<(), String> {
-        println!("{:?} <: {:?}", a, b);
+    fn kinding(&mut self, ty: &Type) -> Option<Kind> {
+        Some(Kind::Star)
+    }
 
+    fn beta_reduce(&mut self, ty: &mut Type) -> Result<(), String> {
+        match ty {
+            Type::Unit | Type::Int | Type::Bool | Type::Var(_) => Ok(()),
+            Type::Exist(v) => Ok(()),
+            Type::Arrow(a, b) => {
+                self.beta_reduce(a)?;
+                self.beta_reduce(b)
+            }
+            Type::Sum(a, b) => {
+                self.beta_reduce(a)?;
+                self.beta_reduce(b)
+            }
+            Type::Product(a, b) => {
+                self.beta_reduce(a)?;
+                self.beta_reduce(b)
+            }
+            Type::Univ(k, a) => self.with_scope(Element::Var(*k.clone()), |f| f.beta_reduce(a)),
+            Type::Abs(k, a) => self.with_scope(Element::Var(*k.clone()), |f| f.beta_reduce(a)),
+            Type::App(a, b) => {
+                self.beta_reduce(a)?;
+                self.beta_reduce(b)?;
+                if let Type::Abs(k, body) = a.as_mut() {
+                    match self.kinding(b) {
+                        Some(arg_kind) => {
+                            if &arg_kind == k.as_ref() {
+                                body.subst(b);
+                                *ty = *body.clone();
+                            } else {
+                                return Err(format!("kind mismatch"));
+                            }
+                        }
+                        None => return Err(format!("No kind!?")),
+                    }
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn subtype(&mut self, mut a: Type, mut b: Type) -> Result<(), String> {
+        println!("{:?} <: {:?}", a, b);
+        self.beta_reduce(&mut a)?;
+        self.beta_reduce(&mut b)?;
+        println!("{:?} <: {:?}", a, b);
         use Type::*;
         match (a, b) {
             (Bool, Bool) => Ok(()),
@@ -342,36 +415,36 @@ impl Context {
             (Exist(a), Exist(b)) if a == b => Ok(()),
             // Rule <: ->
             (Arrow(a1, a2), Arrow(b1, b2)) => {
-                self.subtype(b1, a1)?;
-                self.subtype(&self.apply(*a2.clone()), &self.apply(*b2.clone()))
+                self.subtype(*b1, *a1)?;
+                self.subtype(self.apply(*a2), self.apply(*b2))
             }
             (Sum(l1, r1), Sum(l2, r2)) => {
-                self.subtype(l1, l2)?;
-                self.subtype(&self.apply(*r1.clone()), &self.apply(*r2.clone()))
+                self.subtype(*l1, *l2)?;
+                self.subtype(self.apply(*r1), self.apply(*r2))
             }
             (Product(l1, r1), Product(l2, r2)) => {
-                self.subtype(l1, l2)?;
-                self.subtype(&self.apply(*r1.clone()), &self.apply(*r2.clone()))
+                self.subtype(*l1, *l2)?;
+                self.subtype(self.apply(*r1), self.apply(*r2))
             }
             // Rule <: forall. L
-            (Univ(a), b) => {
+            (Univ(k, a), b) => {
                 let alpha = self.fresh_ev();
-                let mut a_ = *a.clone();
+                let mut a_ = *a;
                 a_.subst(&mut b.clone());
                 self.with_scope(Element::Marker(alpha), |f| {
                     f.ctx.push(Element::Exist(alpha));
-                    f.subtype(&a_, b)
+                    f.subtype(a_.clone(), b.clone())
                 })
             }
             // Rule <: forall. R
-            (a, Univ(b)) => {
+            (a, Univ(k, b)) => {
                 // let alpha = self.fresh_ev();
-                self.with_scope(Element::Var, |f| f.subtype(a, b))
+                self.with_scope(Element::Var(*k.clone()), |f| f.subtype(a.clone(), *b.clone()))
             }
             // Rule <: InstantiateL
-            (Exist(alpha), a) if !a.freevars().contains(alpha) => self.instantiateL(*alpha, a),
+            (Exist(alpha), a) if !a.freevars().contains(&alpha) => self.instantiateL(alpha, &a),
             // Rule <: InstantiateR
-            (a, Exist(alpha)) if !a.freevars().contains(alpha) => self.instantiateR(a, *alpha),
+            (a, Exist(alpha)) if !a.freevars().contains(&alpha) => self.instantiateR(&a, alpha),
             (a, b) => Err(format!("{:?} is not a subtype of {:?}", a, b)),
         }
     }
@@ -413,10 +486,12 @@ impl Context {
                 self.instantiateL(a2, &A2_)
             }
             // InstLAllR
-            Type::Univ(beta) => {
+            Type::Univ(k, beta) => {
                 l.ctx.push(Element::Exist(alpha));
                 l.ctx.extend(r);
-                self.with_scope(Element::Var, |f| f.instantiateL(alpha, &Type::Univ(beta.clone())))
+                self.with_scope(Element::Var(*k.clone()), |f| {
+                    f.instantiateL(alpha, &Type::Univ(k.clone(), beta.clone()))
+                })
             }
             // InstLReach
             Type::Exist(beta) => {
@@ -463,7 +538,7 @@ impl Context {
                 self.instantiateR(&A2_, a2)
             }
             // InstRAllL
-            Type::Univ(beta) => {
+            Type::Univ(k, beta) => {
                 l.ctx.push(Element::Exist(alpha));
                 l.ctx.extend(r);
 
@@ -473,7 +548,7 @@ impl Context {
                 beta_prime.subst(&mut Type::Exist(b));
 
                 self.with_scope(Element::Exist(b), |f| {
-                    f.instantiateR(&Type::Univ(Box::new(beta_prime.clone())), alpha)
+                    f.instantiateR(&Type::Univ(k.clone(), Box::new(beta_prime.clone())), alpha)
                 })
             }
             // InstRReach
@@ -536,6 +611,8 @@ impl Context {
             }
             Expr::Inj(lr, e, ty) => {
                 self.check_wf(ty)?;
+                let mut ty = ty.clone();
+                self.beta_reduce(&mut ty)?;
                 match ty.as_ref() {
                     Type::Sum(l, r) => {
                         match lr {
@@ -544,7 +621,7 @@ impl Context {
                         }
                         Ok(*ty.clone())
                     }
-                    _ => Err(format!("{:?} is not a sum type!", ty)),
+                    _ => Err(format!("#Expr::Inj {:?} is not a sum type!", ty)),
                 }
             }
             Expr::Case(scrutinee, la, ra) => {
@@ -626,7 +703,7 @@ impl Context {
                 Ok(*b.clone())
             }
             // Rule forall. App
-            Type::Univ(a) => {
+            Type::Univ(k, a) => {
                 let alpha = self.fresh_ev();
                 let mut a_prime = a.clone();
                 a_prime.subst(&mut Type::Exist(alpha));
@@ -648,7 +725,7 @@ impl Context {
                 self.check(&e3, a)
             }
             (Expr::Inj(lr, ex, tagged), Type::Sum(left, right)) => {
-                self.subtype(&tagged, &a)?;
+                self.subtype(*tagged.clone(), a.clone())?;
                 match lr {
                     LR::Left => self.check(ex, left),
                     LR::Right => self.check(ex, right),
@@ -673,14 +750,20 @@ impl Context {
             // Rule ->I
             (Expr::Abs(body), Type::Arrow(a1, a2)) => self.with_scope(Element::Ann(*a1.clone()), |f| f.check(body, a2)),
             // Rule forall. I
-            (e, Type::Univ(ty)) => self.with_scope(Element::Var, |f| f.check(e, &ty)),
+            (e, Type::Univ(k, ty)) => self.with_scope(Element::Var(*k.clone()), |f| f.check(e, &ty)),
             // Rule Sub
             (e, b) => {
+                let mut a = a.clone();
+                let mut b = b.clone();
+
+                self.beta_reduce(&mut a)?;
+                self.beta_reduce(&mut b)?;
+
                 let a = self.infer(e)?;
                 let a = self.apply(a);
                 let b = self.apply(b.clone());
                 dbg!(&e, &self.ctx);
-                self.subtype(&a, &b)?;
+                self.subtype(a, b)?;
                 Ok(())
             }
         }
@@ -705,7 +788,22 @@ fn main() {
     );
     let g = app!(h, abs!(var!(0)));
 
-    println!("{} : {:?}", g, infer(&g));
+    let ty = Type::Abs(Box::new(Kind::Star), Box::new(Type::Var(0)));
+    let ty = Type::App(Box::new(ty), Box::new(Type::Int));
+    let f = ann!(Expr::Int(99), ty);
+
+    let ty_opt = Type::Abs(Box::new(Kind::Star), Box::new(sum!(Type::Var(0), Type::Unit)));
+    // \x. inl x of [\X::* => X + ()] @ 'A
+    let some = abs!(inj!(l; var!(0), Type::App(Box::new(ty_opt.clone()), Box::new(Type::Var(0)))));
+    let some = ann!(
+        some,
+        forall!(arrow!(
+            Type::Var(0),
+            Type::App(Box::new(ty_opt.clone()), Box::new(Type::Var(0)))
+        ))
+    );
+
+    println!("{} : {:?}", some, infer(&some));
 }
 
 #[cfg(test)]
@@ -716,13 +814,10 @@ mod test {
     #[test]
     fn identity() {
         let id = abs!(var!(0));
-        let id_ann = ann!(
-            id.clone(),
-            Type::Univ(Box::new(Type::Arrow(Box::new(Type::Var(0)), Box::new(Type::Var(0)))))
-        );
+        let id_ann = ann!(id.clone(), forall!(arrow!(Type::Var(0), Type::Var(0))));
 
         let id_ex = arrow!(Type::Exist(0), Type::Exist(0));
-        let id_ann_ex = Type::Univ(Box::new(arrow!(Type::Var(0), Type::Var(0))));
+        let id_ann_ex = forall!(arrow!(Type::Var(0), Type::Var(0)));
         assert_eq!(infer(&id), Ok(id_ex));
         assert_eq!(infer(&id_ann), Ok(id_ann_ex));
     }
@@ -771,7 +866,7 @@ mod test {
 
         infer(&f).unwrap();
 
-        let a = arrow!(Type::Univ(Box::new(arrow!(Type::Var(0), Type::Var(0)))), ty.clone());
+        let a = arrow!(forall!(arrow!(Type::Var(0), Type::Var(0))), ty.clone());
         // \x. if True then inl (x ()) else inr (x False) : (forall A. (A -> A)) -> (() + Bool)
         let f = abs!(ife!(
             Expr::True,

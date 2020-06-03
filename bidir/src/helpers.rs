@@ -36,9 +36,18 @@ macro_rules! arrow {
     };
 }
 
+macro_rules! karrow {
+    ($t1:expr, $t2:expr) => {
+        Kind::Arrow(Box::new($t1), Box::new($t2))
+    };
+}
+
 macro_rules! forall {
     ($t1:expr) => {
-        Type::Univ(Box::new($t1))
+        Type::Univ(Box::new(Kind::Star), Box::new($t1))
+    };
+    ($k:expr, $t1:expr) => {
+        Type::Univ(Box::new($k), Box::new($t1))
     };
 }
 
@@ -105,11 +114,12 @@ fn ty_display(ty: &Type) -> String {
             Type::Bool => "bool".into(),
             Type::Int => "int".into(),
             Type::Arrow(a, b) => format!("({}->{})", walk(a, map), walk(b, map)),
-            Type::Univ(ty) => format!("forall {}. {}", vc, walk(ty, map)),
+            Type::Univ(k, ty) => format!("forall {}. {}", vc, walk(ty, map)),
             Type::Exist(idx) => format!("{}", map.entry(*idx).or_insert(nc)),
             Type::Var(idx) => format!("{}", map.entry(0xdeadbeef + *idx).or_insert(vc)),
             Type::Sum(a, b) => format!("{} + {}", walk(a, map), walk(b, map)),
             Type::Product(a, b) => format!("({} x {})", walk(a, map), walk(b, map)),
+            _ => "".into(),
         }
     }
     walk(ty, &mut map)
@@ -151,6 +161,7 @@ fn expr_display(ex: &Expr) -> String {
             Expr::Proj(LR::Left, e) => format!("{}.0", walk(e, map)),
             Expr::Proj(LR::Right, e) => format!("{}.1", walk(e, map)),
             Expr::Pair(a, b) => format!("({},{})", walk(a, map), walk(b, map)),
+            _ => "".into(),
         }
     }
     walk(ex, &mut map)
