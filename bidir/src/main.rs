@@ -144,7 +144,7 @@ impl Type {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum LR {
     Left,
     Right,
@@ -386,14 +386,16 @@ impl Context {
                             if &arg_kind == k.as_ref() {
                                 body.subst(b);
                                 *ty = *body.clone();
+                                self.beta_reduce(ty)
                             } else {
-                                return Err(format!("kind mismatch"));
+                                Err(format!("kind mismatch"))
                             }
                         }
-                        None => return Err(format!("No kind!?")),
+                        None => Err(format!("No kind!?")),
                     }
+                } else {
+                    Ok(())
                 }
-                Ok(())
             }
         }
     }
@@ -611,15 +613,24 @@ impl Context {
             }
             Expr::Inj(lr, e, ty) => {
                 self.check_wf(ty)?;
-                let mut ty = ty.clone();
+                let mut ty = self.apply(*ty.clone());
                 self.beta_reduce(&mut ty)?;
-                match ty.as_ref() {
+
+                match &ty {
                     Type::Sum(l, r) => {
                         match lr {
                             LR::Left => self.check(e, l)?,
                             LR::Right => self.check(e, r)?,
                         }
-                        Ok(*ty.clone())
+                        Ok(ty.clone())
+                    }
+                    Type::Abs(_, _) => {
+                        let arg_ty = self.infer(e)?;
+                        self.infer(&Expr::Inj(
+                            *lr,
+                            e.clone(),
+                            Box::new(Type::App(Box::new(ty.clone()), Box::new(arg_ty))),
+                        ))
                     }
                     _ => Err(format!("#Expr::Inj {:?} is not a sum type!", ty)),
                 }
@@ -753,11 +764,11 @@ impl Context {
             (e, Type::Univ(k, ty)) => self.with_scope(Element::Var(*k.clone()), |f| f.check(e, &ty)),
             // Rule Sub
             (e, b) => {
-                let mut a = a.clone();
-                let mut b = b.clone();
+                // let mut a = a.clone();
+                // let mut b = b.clone();
 
-                self.beta_reduce(&mut a)?;
-                self.beta_reduce(&mut b)?;
+                // self.beta_reduce(&mut a)?;
+                // self.beta_reduce(&mut b)?;
 
                 let a = self.infer(e)?;
                 let a = self.apply(a);
@@ -773,7 +784,9 @@ impl Context {
 fn infer(ex: &Expr) -> Result<Type, String> {
     let mut ctx = Context::default();
     let inf = ctx.infer(ex)?;
-    Ok(ctx.apply(inf))
+    let mut ty = ctx.apply(inf);
+    ctx.beta_reduce(&mut ty)?;
+    Ok(ty)
 }
 
 fn main() {
@@ -794,7 +807,7 @@ fn main() {
 
     let ty_opt = Type::Abs(Box::new(Kind::Star), Box::new(sum!(Type::Var(0), Type::Unit)));
     // \x. inl x of [\X::* => X + ()] @ 'A
-    let some = abs!(inj!(l; var!(0), Type::App(Box::new(ty_opt.clone()), Box::new(Type::Var(0)))));
+    let some = abs!(inj!(l; var!(0), ty_opt.clone()));
     let some = ann!(
         some,
         forall!(arrow!(
@@ -802,6 +815,8 @@ fn main() {
             Type::App(Box::new(ty_opt.clone()), Box::new(Type::Var(0)))
         ))
     );
+
+    // let some = app!(some, Expr::Int(10));
 
     println!("{} : {:?}", some, infer(&some));
 }
