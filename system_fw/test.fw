@@ -20,7 +20,7 @@ fun lookup env i = i
 
 fun extend env x = x
 
-fun step (c: expr) (e: env) (k: kont) =
+fun step (c: expr) (e: env) (k: kont) : (expr, env, kont) =
     case (c, e, k) of 
         | (Var i, e, k) => (lookup e i, e, k)
         | (App (e1, e2), e, k) => (e1, e, Arg (e2, e, k))
@@ -29,5 +29,3 @@ fun step (c: expr) (e: env) (k: kont) =
         | (c, e, Mt) => (c, e, Mt)
         | (_, _, _) => (Var 0, Nil, Mt)
     end
-
-

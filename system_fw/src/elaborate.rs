@@ -762,6 +762,20 @@ impl<'s> ElaborationContext<'s> {
         Ok(self.define_value(String::default(), e))
     }
 
+    fn elab_decl_and(&mut self, a: &'s Decl, b: &'s Decl) -> Result<HirId, ElabError> {
+        let mut names = DeclNames::default();
+        names.visit_decl(a);
+        names.visit_decl(b);
+
+        for name in names.values {
+            // Insert first, so we can be recursive if we need to
+            let id = self.allocate_hir_id();
+            self.namespaces[self.current].values.insert(name.into(), id);
+        }
+
+        unimplemented!()
+    }
+
     fn elab_decl(&mut self, decl: &'s Decl) -> Result<HirId, ElabError> {
         match &decl.kind {
             DeclKind::Datatype(tyvars, name, ty) => self.elab_decl_datatype(tyvars, name, ty),
@@ -812,41 +826,40 @@ struct DeclNames<'s> {
     types: Vec<&'s str>,
 }
 
-// impl<'s> DeclVisitor<'s> for DeclNames<'s> {
-//     fn visit_datatype(&mut self, _: &'s [Type], name: &'s str, ty: &'s Type) {
-//         self.types.push(name);
-//         if let TypeKind::Sum(vars) = &ty.kind {
-//             for v in vars {
-//                 self.values.push(&v.label);
-//             }
-//         }
-//     }
+impl<'s> DeclNames<'s> {
+    fn visit_pat(&mut self, pat: &'s Pattern) {
+        match &pat.kind {
+            PatKind::Variable(s) => self.values.push(&s),
+            PatKind::Product(sub) => {
+                for p in sub {
+                    self.visit_pat(p);
+                }
+            }
+            PatKind::Record(sub) => {
+                for p in sub {
+                    self.values.push(p);
+                }
+            }
+            PatKind::Ascribe(pat, ty) => self.visit_pat(&pat),
+            PatKind::Application(con, arg) => self.visit_pat(&arg),
+            _ => {}
+        }
+    }
 
-//     fn visit_type(&mut self, _: &'s [Type], name: &'s str, _: &'s Type) {
-//         self.types.push(name);
-//     }
-
-//     fn visit_value(&mut self, _: &'s [Type], pat: &'s Pattern, _: &'s Expr) {
-//         self.visit_pattern(pat);
-//     }
-
-//     fn visit_function(&mut self, _: &'s [Type], name: &'s str, _: &'s [FnArm]) {
-//         self.values.push(name);
-//     }
-
-//     fn visit_and_decl(&mut self, d1: &'s Decl, d2: &'s Decl) {
-//         self.visit_decl(d1);
-//         self.visit_decl(d2);
-//     }
-
-//     fn visit_toplevel_expr(&mut self, _: &'s Expr) {}
-// }
-
-// impl<'s> PatVisitor<'s> for DeclNames<'s> {
-//     fn visit_variable(&mut self, s: &'s str) {
-//         self.values.push(s);
-//     }
-// }
+    fn visit_decl(&mut self, d: &'s Decl) {
+        match &d.kind {
+            DeclKind::Datatype(_, name, ty) => self.types.push(&name),
+            DeclKind::Type(_, name, ty) => self.types.push(&name),
+            DeclKind::Value(_, pat, expr) => self.visit_pat(pat),
+            DeclKind::And(d1, d2) => {
+                self.visit_decl(d1);
+                self.visit_decl(d2);
+            }
+            DeclKind::Function(_, name, arms) => self.values.push(&name),
+            _ => {}
+        }
+    }
+}
 
 /// Collect type variables and references to defined names
 #[derive(Default, Debug, Clone)]
