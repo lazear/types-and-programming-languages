@@ -6,6 +6,8 @@ pub const T_INT: Tycon = Tycon { id: 1, arity: 0 };
 pub const T_UNIT: Tycon = Tycon { id: 2, arity: 0 };
 pub const T_BOOL: Tycon = Tycon { id: 3, arity: 0 };
 
+pub type Subst = HashMap<usize, Type>;
+
 #[derive(Copy, Clone, PartialEq, PartialOrd, Eq)]
 pub struct Tycon {
     id: usize,
@@ -91,7 +93,7 @@ impl Type {
         }
     }
 
-    fn subst(self, map: &HashMap<usize, Type>) -> Type {
+    fn subst(self, map: &Subst) -> Type {
         match self {
             Type::Var(x) => map.get(&x).cloned().unwrap_or(Type::Var(x)),
             Type::Con(tc, vars) => Type::Con(tc, vars.into_iter().map(|ty| ty.subst(map)).collect()),
@@ -133,6 +135,48 @@ pub enum Scheme {
 //         }
 //     }
 // }
+
+fn compose(s1: Subst, s2: Subst) -> Subst {
+    let mut s2 = s2.into_iter().map(|(k, v)| (k, v.subst(&s1))).collect::<Subst>();
+    for (k, v) in s1 {
+        if !s2.contains_key(&k) {
+            s2.insert(k, v);
+        }
+    }
+    s2
+}
+
+fn var_bind(var: usize, ty: Type) -> Subst {
+    if ty.occurs(var) {
+        panic!("cyclic type!");
+    }
+    let mut sub = HashMap::new();
+    match ty {
+        Type::Var(x) if x == var => {}
+        _ => {
+            sub.insert(var, ty);
+        }
+    }
+    sub
+}
+
+pub fn unify(a: Type, b: Type) -> Subst {
+    println!("unify {:?} {:?}", a, b);
+    match (a, b) {
+        (Type::Con(a, a_args), Type::Con(b, b_args)) => {
+            let mut map = HashMap::new();
+            if a_args.len() == b_args.len() && a == b {
+                for (a, b) in a_args.into_iter().zip(b_args.into_iter()) {
+                    let tmp = unify(a.subst(&map), b.subst(&map));
+                    map = compose(map, tmp);
+                }
+            }
+            map
+        }
+        (Type::Var(tv), b) => var_bind(tv, b),
+        (a, Type::Var(tv)) => var_bind(tv, a),
+    }
+}
 
 #[derive(Default, Debug)]
 struct Elaborator {
@@ -260,7 +304,15 @@ fn main() {
             Some(tm) => {
                 let c = gen.elaborate(&tm);
                 dbg!(&c);
-                dbg!(&gen.constraints);
+
+                let mut sub = HashMap::new();
+                println!("{:?}", gen.constraints);
+                for (a, b) in &gen.constraints {
+                    let tmp = unify(a.clone().subst(&sub), b.clone().subst(&sub));
+                    sub = compose(sub, tmp);
+                }
+
+                dbg!(sub);
             }
             None => println!("parse error!"),
         }
