@@ -304,15 +304,15 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn if_expr(&mut self) -> Option<Box<Term>> {
-        let _ = self.expect(TokenKind::If)?;
-        let guard = self.expect_term()?;
-        let _ = self.expect(TokenKind::Then)?;
-        let csq = self.expect_term()?;
-        let _ = self.expect(TokenKind::Else)?;
-        let alt = self.expect_term()?;
-        Some(Term::If(guard, csq, alt).into())
-    }
+    // fn if_expr(&mut self) -> Option<Box<Term>> {
+    //     let _ = self.expect(TokenKind::If)?;
+    //     let guard = self.expect_term()?;
+    //     let _ = self.expect(TokenKind::Then)?;
+    //     let csq = self.expect_term()?;
+    //     let _ = self.expect(TokenKind::Else)?;
+    //     let alt = self.expect_term()?;
+    //     Some(Term::If(guard, csq, alt).into())
+    // }
 
     /// Parse an atomic term
     /// LPAREN term RPAREN | var
@@ -333,7 +333,7 @@ impl<'s> Parser<'s> {
                 self.expect(TokenKind::Unit)?;
                 Some(Term::Unit.into())
             }
-            TokenKind::If => self.if_expr(),
+            // TokenKind::If => self.if_expr(),
             TokenKind::Lambda => self.lambda(),
             TokenKind::Ident(s) => {
                 let sp = self.consume()?.span;
