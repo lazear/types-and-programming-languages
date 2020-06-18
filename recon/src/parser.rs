@@ -351,7 +351,7 @@ impl<'s> Parser<'s> {
             TokenKind::Ident(s) => {
                 let sp = self.consume()?.span;
                 match self.ctx.lookup(&s) {
-                    Some(idx) => Some(Term::Var(idx).into()),
+                    Some(idx) => Some(Term::Var(idx, s).into()),
                     None => {
                         eprintln!("Unbound variable {}", s);
                         None
