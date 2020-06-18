@@ -18,6 +18,8 @@ pub enum TokenKind {
     If,
     Then,
     Else,
+    True,
+    False,
     LParen,
     RParen,
     Invalid(char),
@@ -121,6 +123,8 @@ impl<'s> Lexer<'s> {
             "if" => TokenKind::If,
             "then" => TokenKind::Then,
             "else" => TokenKind::Else,
+            "true" => TokenKind::True,
+            "false" => TokenKind::False,
             _ => TokenKind::Ident(data),
         };
         Token::new(kind, span)
@@ -272,9 +276,10 @@ impl<'s> Parser<'s> {
     fn let_expr(&mut self) -> Option<Box<Term>> {
         let start = self.expect(TokenKind::Let)?;
         let var = self.ident()?;
-        self.ctx.push(var);
+
         let _ = self.expect(TokenKind::Equals)?;
         let bind = self.expect_term()?;
+        self.ctx.push(var);
         let _ = self.expect(TokenKind::In)?;
         let body = self.expect_term()?;
         self.ctx.pop();
@@ -304,15 +309,15 @@ impl<'s> Parser<'s> {
         }
     }
 
-    // fn if_expr(&mut self) -> Option<Box<Term>> {
-    //     let _ = self.expect(TokenKind::If)?;
-    //     let guard = self.expect_term()?;
-    //     let _ = self.expect(TokenKind::Then)?;
-    //     let csq = self.expect_term()?;
-    //     let _ = self.expect(TokenKind::Else)?;
-    //     let alt = self.expect_term()?;
-    //     Some(Term::If(guard, csq, alt).into())
-    // }
+    fn if_expr(&mut self) -> Option<Box<Term>> {
+        let _ = self.expect(TokenKind::If)?;
+        let guard = self.expect_term()?;
+        let _ = self.expect(TokenKind::Then)?;
+        let csq = self.expect_term()?;
+        let _ = self.expect(TokenKind::Else)?;
+        let alt = self.expect_term()?;
+        Some(Term::If(guard, csq, alt).into())
+    }
 
     /// Parse an atomic term
     /// LPAREN term RPAREN | var
@@ -322,6 +327,14 @@ impl<'s> Parser<'s> {
             TokenKind::Int(i) => {
                 self.consume()?;
                 Some(Term::Int(i as usize).into())
+            }
+            TokenKind::True => {
+                self.consume();
+                Some(Term::Bool(true).into())
+            }
+            TokenKind::False => {
+                self.consume();
+                Some(Term::Bool(false).into())
             }
             TokenKind::LParen => {
                 self.expect(TokenKind::LParen)?;
@@ -333,7 +346,7 @@ impl<'s> Parser<'s> {
                 self.expect(TokenKind::Unit)?;
                 Some(Term::Unit.into())
             }
-            // TokenKind::If => self.if_expr(),
+            TokenKind::If => self.if_expr(),
             TokenKind::Lambda => self.lambda(),
             TokenKind::Ident(s) => {
                 let sp = self.consume()?.span;
