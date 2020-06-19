@@ -1,144 +1,9 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 
 pub mod parser;
-pub const T_ARROW: Tycon = Tycon { id: 0, arity: 2 };
-pub const T_INT: Tycon = Tycon { id: 1, arity: 0 };
-pub const T_UNIT: Tycon = Tycon { id: 2, arity: 0 };
-pub const T_BOOL: Tycon = Tycon { id: 3, arity: 0 };
+pub mod types;
 
-pub type Subst = HashMap<TypeVar, Type>;
-
-#[derive(Copy, Clone, Default, PartialEq, PartialOrd, Eq, Hash)]
-pub struct TypeVar(pub usize);
-
-#[derive(Copy, Clone, PartialEq, PartialOrd, Eq)]
-pub struct Tycon {
-    id: usize,
-    arity: usize,
-}
-
-#[derive(Clone)]
-pub enum Type {
-    Var(TypeVar),
-    Con(Tycon, Vec<Type>),
-}
-
-impl std::fmt::Debug for Tycon {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self.id {
-            0 => write!(f, "->"),
-            1 => write!(f, "int"),
-            2 => write!(f, "unit"),
-            3 => write!(f, "bool"),
-            _ => write!(f, "??"),
-        }
-    }
-}
-
-fn fresh_name(x: usize) -> String {
-    let last = ((x % 26) as u8 + 'a' as u8) as char;
-    (0..x / 26)
-        .map(|_| 'z')
-        .chain(std::iter::once(last))
-        .collect::<String>()
-}
-
-impl std::fmt::Debug for TypeVar {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.write_str(&fresh_name(self.0))
-    }
-}
-
-impl std::fmt::Debug for Type {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Type::Var(x) => write!(f, "{:?}", x),
-            Type::Con(T_ARROW, tys) => write!(f, "({:?} -> {:?})", tys[0], tys[1]),
-            Type::Con(tc, tys) => write!(
-                f,
-                "{:?} {}",
-                tc,
-                tys.iter()
-                    .map(|ty| format!("{:?}", ty))
-                    .collect::<Vec<String>>()
-                    .join(" ")
-            ),
-        }
-    }
-}
-
-impl Type {
-    fn arrow(a: Type, b: Type) -> Type {
-        Type::Con(T_ARROW, vec![a, b])
-    }
-
-    fn bool() -> Type {
-        Type::Con(T_BOOL, vec![])
-    }
-
-    fn occurs(&self, exist: TypeVar) -> bool {
-        match self {
-            Type::Var(x) => *x == exist,
-            Type::Con(_, tys) => tys.iter().any(|ty| ty.occurs(exist)),
-        }
-    }
-
-    fn de_arrow(&self) -> (&Type, &Type) {
-        match self {
-            Type::Con(T_ARROW, v) => (&v[0], &v[1]),
-            _ => panic!("Not arrow type! {:?}", self),
-        }
-    }
-
-    fn ftv(&self) -> HashSet<TypeVar> {
-        let mut set = HashSet::new();
-        let mut queue = VecDeque::new();
-        queue.push_back(self);
-
-        while let Some(ty) = queue.pop_front() {
-            match ty {
-                Type::Var(x) => {
-                    set.insert(*x);
-                }
-                Type::Con(_, tys) => {
-                    for ty in tys {
-                        queue.push_back(ty);
-                    }
-                }
-            }
-        }
-        set
-    }
-
-    fn subst(self, map: &Subst) -> Type {
-        match self {
-            Type::Var(x) => map.get(&x).cloned().unwrap_or(Type::Var(x)),
-            Type::Con(tc, vars) => Type::Con(tc, vars.into_iter().map(|ty| ty.subst(map)).collect()),
-        }
-    }
-}
-
-impl Scheme {
-    fn ftv(&self) -> HashSet<TypeVar> {
-        match self {
-            Scheme::Mono(ty) => ty.ftv(),
-            Scheme::Poly(vars, ty) => ty.ftv(),
-        }
-    }
-
-    fn subst(self, map: &Subst) -> Scheme {
-        match self {
-            Scheme::Mono(ty) => Scheme::Mono(ty.subst(map)),
-            Scheme::Poly(vars, ty) => {
-                let mut map: HashMap<TypeVar, Type> = map.clone();
-                for v in &vars {
-                    map.remove(v);
-                }
-                Scheme::Poly(vars, ty.subst(&map))
-            }
-        }
-    }
-}
+use types::*;
 
 #[derive(Debug)]
 pub enum Term {
@@ -170,23 +35,7 @@ pub struct SystemF {
     ty: Type,
 }
 
-#[derive(Debug, Clone)]
-pub enum Scheme {
-    Mono(Type),
-    Poly(Vec<TypeVar>, Type),
-}
-
-fn compose(s1: Subst, s2: Subst) -> Subst {
-    let mut s2 = s2.into_iter().map(|(k, v)| (k, v.subst(&s1))).collect::<Subst>();
-    for (k, v) in s1 {
-        if !s2.contains_key(&k) {
-            s2.insert(k, v);
-        }
-    }
-    s2
-}
-
-fn var_bind(var: TypeVar, ty: Type) -> Result<Subst, (Type, Type)> {
+fn var_bind(var: TypeVar, ty: Type) -> Result<HashMap<TypeVar, Type>, (Type, Type)> {
     if ty.occurs(var) {
         return Err((Type::Var(var), ty));
     }
@@ -200,17 +49,11 @@ fn var_bind(var: TypeVar, ty: Type) -> Result<Subst, (Type, Type)> {
     Ok(sub)
 }
 
-pub fn unify(a: Type, b: Type) -> Result<Subst, (Type, Type)> {
-    println!("unify {:?} {:?}", a, b);
+pub fn unify(a: Type, b: Type) -> Result<HashMap<TypeVar, Type>, (Type, Type)> {
     match (a, b) {
         (Type::Con(a, a_args), Type::Con(b, b_args)) => {
-            let mut map = HashMap::new();
             if a_args.len() == b_args.len() && a == b {
-                for (a, b) in a_args.into_iter().zip(b_args.into_iter()) {
-                    let tmp = unify(a.subst(&map), b.subst(&map))?;
-                    map = compose(tmp, map);
-                }
-                Ok(map)
+                solve(a_args.into_iter().zip(b_args.into_iter()))
             } else {
                 Err((Type::Con(a, a_args), Type::Con(b, b_args)))
             }
@@ -220,10 +63,19 @@ pub fn unify(a: Type, b: Type) -> Result<Subst, (Type, Type)> {
     }
 }
 
+pub fn solve<I: Iterator<Item = (Type, Type)>>(constraints: I) -> Result<HashMap<TypeVar, Type>, (Type, Type)> {
+    let mut sub = HashMap::new();
+    for (a, b) in constraints {
+        let tmp = unify(a.clone().apply(&sub), b.clone().apply(&sub))?;
+        sub = compose(tmp, sub);
+    }
+    Ok(sub)
+}
+
 pub enum Constraint {
     Eq(Type, Type),
     Inst(Type, Scheme),
-    Gen(Type, Scheme),
+    Gen(Type, Vec<TypeVar>, Type),
 }
 
 #[derive(Default, Debug)]
@@ -243,6 +95,24 @@ impl SystemF {
     }
 }
 
+impl Substitution for Elaborator {
+    fn ftv(&self) -> HashSet<TypeVar> {
+        let mut set = HashSet::new();
+        for s in &self.context {
+            set.extend(s.ftv());
+        }
+        set
+    }
+
+    fn apply(self, map: &HashMap<TypeVar, Type>) -> Self {
+        Elaborator {
+            exist: self.exist,
+            context: self.context.into_iter().map(|sch| sch.apply(map)).collect(),
+            constraints: self.constraints,
+        }
+    }
+}
+
 impl Elaborator {
     fn fresh(&mut self) -> TypeVar {
         let ex = self.exist;
@@ -259,27 +129,12 @@ impl Elaborator {
         None
     }
 
-    fn ftv(&self) -> HashSet<TypeVar> {
-        let mut set = HashSet::new();
-        for s in &self.context {
-            set.extend(s.ftv());
-        }
-        set
-    }
-
     fn generalize(&mut self, ty: Type) -> Scheme {
         let set: HashSet<TypeVar> = ty.ftv().difference(&self.ftv()).copied().collect();
 
-        // println!("{:?} {:?} {:?}", ty, set, self.ftv());
         if set.is_empty() {
             Scheme::Mono(ty)
         } else {
-            // let freshv: Vec<TypeVar> = (0..set.len()).map(|_| self.fresh()).collect();
-            // let map = set
-            //     .into_iter()
-            //     .zip(freshv.iter())
-            //     .map(|(v, f)| (v, Type::Var(*f)))
-            //     .collect::<Subst>();
             Scheme::Poly(set.into_iter().collect(), ty)
         }
     }
@@ -293,8 +148,8 @@ impl Elaborator {
                     .into_iter()
                     .zip(freshv.iter())
                     .map(|(v, f)| (v, Type::Var(*f)))
-                    .collect::<Subst>();
-                ty.subst(&map)
+                    .collect::<HashMap<TypeVar, Type>>();
+                ty.apply(&map)
             }
         }
     }
@@ -344,21 +199,13 @@ impl Elaborator {
             Term::Let(t1, t2) => {
                 let (t1, ty1) = self.elaborate(t1).de();
 
-                let mut sub = HashMap::new();
-                for (a, b) in self.constraints.iter().cloned() {
-                    let tmp = unify(a.clone().subst(&sub), b.clone().subst(&sub)).unwrap();
-                    sub = compose(tmp, sub);
-                }
+                let sub = solve(self.constraints.drain(..)).unwrap();
+                self.context = self.context.drain(..).map(|sch| sch.apply(&sub)).collect();
+                let scheme = self.generalize(ty1.clone().apply(&sub));
 
-                self.context = self.context.drain(..).map(|s| s.subst(&sub)).collect();
+                // Add back any leftover constraints
+                self.constraints.extend(sub.into_iter().map(|(k, v)| (Type::Var(k), v)));
 
-                println!("{:?}, {:?} ", self.constraints, ty1);
-
-                let scheme = self.generalize(ty1.clone());
-                println!(
-                    "{:?} scheme generalized: {:?}, {:?}, {:?}",
-                    t1, ty1, scheme, self.context
-                );
                 self.context.push(scheme);
                 let (t2, ty2) = self.elaborate(t2).de();
                 self.context.pop();
@@ -391,7 +238,7 @@ impl Elaborator {
 }
 
 impl TypedTerm {
-    fn subst(self, s: &Subst) -> TypedTerm {
+    fn subst(self, s: &HashMap<TypeVar, Type>) -> TypedTerm {
         use TypedTerm::*;
         match self {
             Abs(a) => Abs(Box::new(a.subst(s))),
@@ -404,10 +251,10 @@ impl TypedTerm {
 }
 
 impl SystemF {
-    fn subst(self, s: &Subst) -> SystemF {
+    fn subst(self, s: &HashMap<TypeVar, Type>) -> SystemF {
         SystemF {
             expr: self.expr.subst(s),
-            ty: self.ty.subst(s),
+            ty: self.ty.apply(s),
         }
     }
 }
@@ -428,13 +275,13 @@ fn main() {
                 let mut sub = HashMap::new();
                 println!("{:?}", gen.constraints);
                 for (a, b) in &gen.constraints {
-                    let tmp = unify(a.clone().subst(&sub), b.clone().subst(&sub)).unwrap();
+                    let tmp = unify(a.clone().apply(&sub), b.clone().apply(&sub)).unwrap();
                     sub = compose(tmp, sub);
                 }
 
                 println!("tm {:#?} :{:?}", tm, ty);
 
-                println!("tm {:#?} :{:?}", tm.subst(&sub), ty.subst(&sub));
+                println!("tm {:#?} :{:?}", tm.subst(&sub), ty.apply(&sub));
 
                 dbg!(sub);
             }
