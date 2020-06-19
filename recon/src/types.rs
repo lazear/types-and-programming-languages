@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd, Eq, Hash)]
-pub struct TypeVar(pub u32, pub u32);
+pub struct TypeVar(pub usize);
 
 #[derive(Copy, Clone, PartialEq, PartialOrd, Eq)]
 pub struct Tycon {
@@ -13,12 +13,6 @@ pub struct Tycon {
 pub enum Type {
     Var(TypeVar),
     Con(Tycon, Vec<Type>),
-}
-
-#[derive(Debug, Clone)]
-pub enum Scheme {
-    Mono(Type),
-    Poly(Vec<TypeVar>, Type),
 }
 
 pub trait Substitution {
@@ -64,11 +58,8 @@ impl Type {
         Type::Con(T_BOOL, vec![])
     }
 
-    pub fn occurs(&self, exist: TypeVar) -> bool {
-        match self {
-            Type::Var(x) => *x == exist,
-            Type::Con(_, tys) => tys.iter().any(|ty| ty.occurs(exist)),
-        }
+    pub fn int() -> Type {
+        Type::Con(T_INT, vec![])
     }
 
     pub fn de_arrow(&self) -> (&Type, &Type) {
@@ -92,28 +83,6 @@ pub fn compose(s1: HashMap<TypeVar, Type>, s2: HashMap<TypeVar, Type>) -> HashMa
     s2
 }
 
-impl Substitution for Scheme {
-    fn ftv(&self) -> HashSet<TypeVar> {
-        match self {
-            Scheme::Mono(ty) => ty.ftv(),
-            Scheme::Poly(vars, ty) => ty.ftv(),
-        }
-    }
-
-    fn apply(self, map: &HashMap<TypeVar, Type>) -> Scheme {
-        match self {
-            Scheme::Mono(ty) => Scheme::Mono(ty.apply(map)),
-            Scheme::Poly(vars, ty) => {
-                let mut map: HashMap<TypeVar, Type> = map.clone();
-                for v in &vars {
-                    map.remove(v);
-                }
-                Scheme::Poly(vars, ty.apply(&map))
-            }
-        }
-    }
-}
-
 pub const T_ARROW: Tycon = Tycon { id: 0, arity: 2 };
 pub const T_INT: Tycon = Tycon { id: 1, arity: 0 };
 pub const T_UNIT: Tycon = Tycon { id: 2, arity: 0 };
@@ -131,7 +100,7 @@ impl std::fmt::Debug for Tycon {
     }
 }
 
-fn fresh_name(x: u32) -> String {
+fn fresh_name(x: usize) -> String {
     let last = ((x % 26) as u8 + 'a' as u8) as char;
     (0..x / 26)
         .map(|_| 'z')
