@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 pub mod parser;
 pub mod types;
@@ -95,6 +95,66 @@ pub enum Con {
     Let(Box<Scheme>, Box<Con>),
 }
 
+pub enum Uni {
+    True,
+    And(Box<Uni>, Box<Uni>),
+    Exist(Vec<TypeVar>, Box<Uni>),
+    Eq(Vec<Type>),
+}
+
+impl Uni {
+    pub fn ftv(&self) -> HashSet<TypeVar> {
+        let mut set = HashSet::new();
+        let mut queue = VecDeque::new();
+        queue.push_back(self);
+        while let Some(uni) = queue.pop_front() {
+            use Uni::*;
+            match uni {
+                True => {}
+                And(u1, u2) => {
+                    queue.push_back(u1);
+                    queue.push_back(u2);
+                }
+                Exist(tvars, u) => {
+                    set.extend(tvars.iter().copied());
+                    queue.push_back(u);
+                }
+                Eq(tys) => {
+                    for ty in tys {
+                        set.extend(ty.ftv());
+                    }
+                }
+            }
+        }
+        set
+    }
+
+    // pub fn simplify(u: Uni) -> Uni {
+    //     use Uni::*;
+    //     match u {
+    //         And(u1, u2) => {
+    //             match (*u1, *u2) {
+    //                 (Exist(vars, u1), u2) => {
+    //                     // u2.ftv();
+    //                     Exist(vars, Box::new(And(u1, Box::new(u2))))
+    //                 }
+    //                 (Eq(mut v1), Eq(v2)) => {
+    //                     v1.extend(v2);
+    //                     Eq(v1)
+    //                 }
+    //                 (u, True) => u,
+    //                 (True, u) => u,
+    //                 (u1, u2) => And(Box::new(u1), Box::new(u2))
+    //              }
+    //         }
+    //     }
+    // }
+}
+
+// impl Con {
+//     pub fn simply(c1: Con, c2: Con)
+// }
+
 pub struct Gen {
     exist: usize,
 }
@@ -138,6 +198,59 @@ impl Gen {
         }
     }
 }
+
+#[derive(Default, Debug)]
+pub struct Solver {
+    context: Vec<Scheme>,
+    eqs: Vec<(Type, Type)>,
+}
+
+impl Solver {
+    fn get(&self, index: usize) -> &Scheme {
+        for (idx, s) in self.context.iter().rev().enumerate() {
+            if idx == index {
+                return s;
+            }
+        }
+        panic!("unbound scheme")
+    }
+
+    pub fn solve(&mut self, con: Con) {
+        dbg!(&con);
+        match con {
+            Con::Let(s, c) => {
+                self.context.push(*s);
+                let r = self.solve(*c);
+                self.context.pop();
+                r
+            }
+            Con::Eq(t1, t2) => {
+                self.eqs.push((t1, t2));
+            }
+            Con::Exist(tv, con) => {
+                self.solve(*con);
+            }
+            Con::Inst(x, ty) => {
+                let s = self.get(x);
+                println!("inst {:?} {:?}", s, ty);
+                match s {
+                    Scheme::Mono(m) => self.eqs.push((m.clone(), ty)),
+                    Scheme::Poly(vars, con, poly) => {
+                        // let mut map = vars.into_iter().map(|v| (v, Type::Var(self.fresh()))).collect();
+                        // poly.apply(map);
+                        self.eqs.push((poly.clone(), ty));
+                    }
+                }
+                // s.instantiate
+            }
+            Con::And(c1, c2) => {
+                self.solve(*c1);
+                self.solve(*c2);
+            }
+        }
+    }
+}
+
 fn main() {
     use std::io::prelude::*;
 
@@ -150,8 +263,14 @@ fn main() {
         match parser::Parser::new(&buffer).parse_term() {
             Some(tm) => {
                 let mut gen = Gen { exist: 0 };
-                let f = Type::Var(gen.fresh());
-                dbg!(gen.gen(&tm, f));
+                let fresh = gen.fresh();
+                let f = Type::Var(fresh);
+                let cons = Con::Exist(fresh, Box::new(gen.gen(&tm, f)));
+
+                let mut solv = Solver::default();
+                solv.solve(cons);
+
+                dbg!(solv.eqs);
             }
             None => println!("parse error!"),
         }
