@@ -15,6 +15,15 @@ pub struct DisjointSet<T> {
     components: Cell<usize>,
 }
 
+impl<T> Default for DisjointSet<T> {
+    fn default() -> Self {
+        DisjointSet {
+            elements: Vec::new(),
+            components: Cell::new(0),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub struct Element(usize);
 
@@ -142,7 +151,7 @@ impl Unification {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Unifier {
     set: disjoint::DisjointSet<Unification>,
     map: HashMap<Type, Variable>,
@@ -204,14 +213,30 @@ impl Unifier {
         Ok(())
     }
 
+    pub fn subst(&self) -> HashMap<TypeVar, Type> {
+        let mut map = HashMap::new();
+        for (ty, var) in &self.map {
+            match ty {
+                Type::Var(x) => {
+                    map.insert(*x, self.decode(self.set.find(*var)));
+                }
+                _ => {}
+            }
+        }
+
+        map
+    }
+
     pub fn unify(&mut self, a_: Variable, b_: Variable) -> Result<(), String> {
+        if a_ == b_ {
+            return Ok(());
+        }
         if a_ == self.set.find_repr(b_) || b_ == self.set.find_repr(a_) {
             return Ok(());
         }
         let a = self.set.find(a_).clone();
         let b = self.set.find(b_).clone();
         use Unification::*;
-        // println!("{:?} {:?}", a, b);
         match (a, b) {
             (Unknown(a), b) => self.var_bind(a, a_, &b, b_),
             (a, Unknown(b)) => self.var_bind(b, b_, &a, a_),

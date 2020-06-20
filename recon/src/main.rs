@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 pub mod disjoint;
+pub mod mutation;
 pub mod naive;
 pub mod parser;
 pub mod types;
@@ -31,9 +32,9 @@ pub enum TypedTerm {
 }
 
 #[derive(Debug)]
-pub struct SystemF {
+pub struct SystemF<T = Type> {
     expr: TypedTerm,
-    ty: Type,
+    ty: T,
 }
 
 pub enum Constraint {
@@ -47,6 +48,8 @@ struct Elaborator {
     exist: TypeVar,
     context: Vec<Scheme>,
     constraints: Vec<(Type, Type)>,
+
+    uni: disjoint::Unifier,
 }
 
 impl SystemF {
@@ -59,29 +62,19 @@ impl SystemF {
     }
 }
 
-impl Substitution for Elaborator {
+impl Elaborator {
+    fn fresh(&mut self) -> TypeVar {
+        let ex = self.exist;
+        self.exist.0 += 1;
+        ex
+    }
+
     fn ftv(&self) -> HashSet<TypeVar> {
         let mut set = HashSet::new();
         for s in &self.context {
             set.extend(s.ftv());
         }
         set
-    }
-
-    fn apply(self, map: &HashMap<TypeVar, Type>) -> Self {
-        Elaborator {
-            exist: self.exist,
-            context: self.context.into_iter().map(|sch| sch.apply(map)).collect(),
-            constraints: self.constraints,
-        }
-    }
-}
-
-impl Elaborator {
-    fn fresh(&mut self) -> TypeVar {
-        let ex = self.exist;
-        self.exist.0 += 1;
-        ex
     }
 
     fn get_scheme(&self, index: usize) -> Option<&Scheme> {
@@ -118,6 +111,12 @@ impl Elaborator {
         }
     }
 
+    fn push(&mut self, ty: (Type, Type)) {
+        let a = self.uni.intern(ty.0);
+        let b = self.uni.intern(ty.1);
+        self.uni.unify(a, b).unwrap();
+    }
+
     fn elaborate(&mut self, term: &Term) -> SystemF {
         // dbg!(term);
         match term {
@@ -152,8 +151,7 @@ impl Elaborator {
                 let (t2, ty2) = self.elaborate(t2).de();
 
                 let v = self.fresh();
-                self.constraints
-                    .push((ty1.clone(), Type::arrow(ty2.clone(), Type::Var(v))));
+                self.push((ty1.clone(), Type::arrow(ty2.clone(), Type::Var(v))));
 
                 SystemF::new(
                     TypedTerm::App(Box::new(SystemF::new(t1, ty1)), Box::new(SystemF::new(t2, ty2))),
@@ -163,15 +161,21 @@ impl Elaborator {
             Term::Let(t1, t2) => {
                 let (t1, ty1) = self.elaborate(t1).de();
 
-                let sub = naive::solve(self.constraints.drain(..)).unwrap();
+                // let sub = disjoint::solve(self.constraints.drain(..)).unwrap();
+                // for (a, b) in self.constraints.drain(..) {
+                //     let a = self.uni.intern(a);
+                //     let b = self.uni.intern(b);
+                //     self.uni.unify(a, b).unwrap();
+                // }
 
-                // let sub = disjoint::solve(self.constraints.drain(..).collect()).unwrap();
+                let sub = self.uni.subst();
+                // dbg!(&sub);
 
                 self.context = self.context.drain(..).map(|sch| sch.apply(&sub)).collect();
                 let scheme = self.generalize(ty1.clone().apply(&sub));
 
                 // Add back any leftover constraints
-                self.constraints.extend(sub.into_iter().map(|(k, v)| (Type::Var(k), v)));
+                // self.constraints.extend(sub.into_iter().map(|(k, v)| (Type::Var(k), v)));
 
                 self.context.push(scheme);
                 let (t2, ty2) = self.elaborate(t2).de();
@@ -187,9 +191,9 @@ impl Elaborator {
                 let (t3, ty3) = self.elaborate(t3).de();
 
                 let fresh = self.fresh();
-                self.constraints.push((ty1.clone(), Type::bool()));
-                self.constraints.push((ty2.clone(), Type::Var(fresh)));
-                self.constraints.push((ty3.clone(), Type::Var(fresh)));
+                self.push((ty1.clone(), Type::bool()));
+                self.push((ty2.clone(), Type::Var(fresh)));
+                self.push((ty3.clone(), Type::Var(fresh)));
 
                 SystemF::new(
                     TypedTerm::If(
@@ -231,41 +235,52 @@ fn main() {
     use std::time::{Duration, Instant};
 
     let input = "fn m. let y = m in let x = y true in x";
+    let input = "
+    let id = fn x. x in 
+        let g = id id in 
+        let f = id true in 
+        let h = (id id) 1 in 
+        let j = id 10 in 
+        g f";
     let tm = parser::Parser::new(input).parse_term().unwrap();
 
     let start = Instant::now();
-    let mut gen = Elaborator::default();
-    let u = disjoint::Unifier::new();
-    let (tm, ty) = gen.elaborate(&u, &tm).de();
+    let mut gen = mutation::Elaborator::default();
+    let tm = gen.elaborate(&tm);
+    // let sub = gen.uni.subst();
     // let sub =  disjoint.solve(gen.constraints);
-    let sub = u.solve(gen.constraints.into_iter());
+    // let sub = disjoint::solve(gen.constraints.into_iter());
     let end1 = start.elapsed().as_micros();
-    println!("{:?} {:?}", end1, sub);
-    // loop {
-    //     let mut buffer = String::new();
-    //     print!("repl: ");
-    //     std::io::stdout().flush().unwrap();
-    //     std::io::stdin().read_to_string(&mut buffer).unwrap();
-    //     let mut gen = Elaborator::default();
-    //     match parser::Parser::new(&buffer).parse_term() {
-    //         Some(tm) => {
-    //             let (tm, ty) = gen.elaborate(&tm).de();
+    println!("{:?} {:?}", end1, tm);
 
-    //             // let mut sub = HashMap::new();
-    //             // println!("{:?}", gen.constraints);
-    //             // for (a, b) in &gen.constraints {
-    //             //     let tmp = unify(a.clone().apply(&sub), b.clone().apply(&sub)).unwrap();
-    //             //     sub = compose(tmp, sub);
-    //             // }
-    //             let sub =  disjoint::solve(gen.constraints.clone());
-    //             println!("{:?}", sub);
-    //             // println!("tm {:#?} :{:?}", tm, ty);
+    loop {
+        let mut buffer = String::new();
+        print!("repl: ");
+        std::io::stdout().flush().unwrap();
+        std::io::stdin().read_to_string(&mut buffer).unwrap();
+        // let mut gen = Elaborator::default();
+        match parser::Parser::new(&buffer).parse_term() {
+            Some(tm) => {
+                // let (tm, ty) = gen.elaborate(&tm).de();
 
-    //             // println!("tm {:#?} :{:?}", tm.subst(&sub), ty.apply(&sub));
+                let mut e = mutation::Elaborator::default();
+                dbg!(e.elaborate(&tm));
 
-    //             // dbg!(sub);
-    //         }
-    //         None => println!("parse error!"),
-    //     }
-    // }
+                // let mut sub = HashMap::new();
+                // println!("{:?}", gen.constraints);
+                // for (a, b) in &gen.constraints {
+                //     let tmp = unify(a.clone().apply(&sub), b.clone().apply(&sub)).unwrap();
+                //     sub = compose(tmp, sub);
+                // }
+                // let sub =  disjoint::solve(gen.constraints.clone());
+                // println!("{:?}", sub);
+                // println!("tm {:#?} :{:?}", tm, ty);
+
+                // println!("tm {:#?} :{:?}", tm.subst(&sub), ty.apply(&sub));
+
+                // dbg!(sub);
+            }
+            None => println!("parse error!"),
+        }
+    }
 }

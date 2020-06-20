@@ -15,7 +15,7 @@ fn var_bind(var: TypeVar, ty: Type) -> Result<HashMap<TypeVar, Type>, String> {
 }
 
 pub fn unify(a: Type, b: Type) -> Result<HashMap<TypeVar, Type>, String> {
-    println!("{:?} {:?}", a, b);
+    // println!("{:?} {:?}", a, b);
     match (a, b) {
         (Type::Con(a, a_args), Type::Con(b, b_args)) => {
             if a_args.len() == b_args.len() && a == b {
@@ -32,10 +32,6 @@ pub fn unify(a: Type, b: Type) -> Result<HashMap<TypeVar, Type>, String> {
         (a, Type::Var(tv)) => var_bind(tv, a),
     }
 }
-
-// pub fn solve<I: Iterator<Item = (Type, Type)>>(constraints: I) -> Result<HashMap<TypeVar, Type>, (Type, Type)> {
-
-// }
 
 pub fn solve<I: Iterator<Item = (Type, Type)>>(iter: I) -> Result<HashMap<TypeVar, Type>, String> {
     let mut sub = HashMap::new();
