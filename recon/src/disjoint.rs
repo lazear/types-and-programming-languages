@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 struct SetElement<T> {
-    data: T,
+    data: Option<T>,
     rank: Cell<u32>,
     parent: Cell<usize>,
 }
@@ -34,7 +34,7 @@ impl<T> DisjointSet<T> {
     pub fn singleton(&mut self, data: T) -> Element {
         let n = self.elements.len();
         let elem = SetElement {
-            data,
+            data: Some(data),
             rank: Cell::new(0),
             parent: Cell::new(n),
         };
@@ -68,23 +68,19 @@ impl<T> DisjointSet<T> {
         Element(self.find_set(element.0))
     }
 
-    pub fn data(&self, element: Element) -> &T {
-        &self.elements[element.0].data
-    }
-
-    pub fn data_mut(&mut self, element: Element) -> &mut T {
-        &mut self.elements[element.0].data
+    pub fn data(&self, element: Element) -> Option<&T> {
+        self.elements[element.0].data.as_ref()
     }
 
     pub fn find(&self, element: Element) -> &T {
-        &self.elements[self.find_set(element.0)].data
+        // Invariant that the representative element is always "Some"
+        self.elements[self.find_set(element.0)]
+            .data
+            .as_ref()
+            .expect("Invariant violated")
     }
 
-    pub fn union(&self, a: Element, b: Element) {
-        self.union_key(|_, _| Choice::Left, a, b)
-    }
-
-    pub fn union_key<F: Fn(&T, &T) -> Choice>(&self, f: F, a: Element, b: Element) {
+    pub fn union<F: Fn(T, T) -> T>(&mut self, f: F, a: Element, b: Element) {
         let pa = self.find_set(a.0);
         let pb = self.find_set(b.0);
 
@@ -92,71 +88,46 @@ impl<T> DisjointSet<T> {
             return;
         }
 
-        let a = &self.elements[pa];
-        let b = &self.elements[pb];
+        // Move data out first to appease borrowck
+        let a_data = self.elements[pa].data.take().expect("Invariant violated");
+        let b_data = self.elements[pb].data.take().expect("Invariant violated");
 
         self.components.replace(self.components.get() - 1);
-        match a.rank.cmp(&b.rank) {
-            Ordering::Equal => match f(&a.data, &b.data) {
-                Choice::Left => {
-                    b.parent.replace(pa);
-                    a.rank.replace(a.rank.get() + 1);
-                }
-                Choice::Right => {
-                    a.parent.replace(pb);
-                    b.rank.replace(b.rank.get() + 1);
-                }
-            },
+        match self.elements[pa].rank.cmp(&self.elements[pb].rank) {
+            Ordering::Equal => {
+                self.elements[pa].data = Some(f(a_data, b_data));
+                self.elements[pb].parent.replace(pa);
+                self.elements[pa].rank.replace(self.elements[pa].rank.get() + 1);
+            }
             Ordering::Less => {
-                a.parent.replace(pb);
-                b.rank.replace(b.rank.get() + 1);
+                self.elements[pb].data = Some(f(a_data, b_data));
+                self.elements[pa].parent.replace(pb);
+                self.elements[pb].rank.replace(self.elements[pb].rank.get() + 1);
             }
             Ordering::Greater => {
-                b.parent.replace(pa);
-                a.rank.replace(a.rank.get() + 1);
+                self.elements[pa].data = Some(f(a_data, b_data));
+                self.elements[pb].parent.replace(pa);
+                self.elements[pa].rank.replace(self.elements[pa].rank.get() + 1);
             }
         }
     }
 
-    pub fn union2<F: Fn(&T, &T) -> Choice>(&self, f: F, a: Element, b: Element) {
-        let pa = self.find_set(a.0);
-        let pb = self.find_set(b.0);
-
-        if pa == pb {
-            return;
-        }
-
-        let a = &self.elements[pa];
-        let b = &self.elements[pb];
-
-        self.components.replace(self.components.get() - 1);
-        match f(&a.data, &b.data) {
-            Choice::Left => {
-                b.parent.replace(pa);
-                a.rank.replace(a.rank.get() + 1);
-            }
-            Choice::Right => {
-                a.parent.replace(pb);
-                b.rank.replace(b.rank.get() + 1);
-            }
-        }
-    }
-
-    pub fn partition(&self) -> HashMap<usize, Vec<&T>> {
-        let mut v = HashMap::new();
+    pub fn partition(&self) -> Vec<&T> {
+        let mut v = HashSet::new();
 
         for idx in 0..self.elements.len() {
-            let parent = self.find_set(idx);
-            v.entry(parent).or_insert_with(Vec::new).push(&self.elements[idx].data);
+            v.insert(self.find_set(idx));
         }
-        v
+        v.into_iter()
+            .map(|idx| self.elements[idx].data.as_ref().unwrap())
+            .collect()
     }
 }
 
 use super::*;
 type Variable = Element;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Unification {
     Unknown(TypeVar),
     Constr(Tycon, Vec<Variable>),
@@ -188,19 +159,16 @@ impl Unifier {
     pub fn occurs_check(&self, v: TypeVar, u: &Unification) -> bool {
         match u {
             Unification::Unknown(x) => *x == v,
-            Unification::Constr(_, vars) => vars.iter().any(|x| self.occurs_check(v, self.set.data(*x))),
+            Unification::Constr(_, vars) => vars.iter().any(|x| self.occurs_check(v, self.set.find(*x))),
         }
     }
 
     pub fn decode(&self, uni: &Unification) -> Type {
         match uni {
             Unification::Unknown(x) => Type::Var(*x),
-            Unification::Constr(tc, vars) => Type::Con(
-                *tc,
-                vars.into_iter()
-                    .map(|v| self.decode(self.set.find(*v).clone()))
-                    .collect(),
-            ),
+            Unification::Constr(tc, vars) => {
+                Type::Con(*tc, vars.into_iter().map(|v| self.decode(self.set.find(*v))).collect())
+            }
         }
     }
 
@@ -221,14 +189,14 @@ impl Unifier {
         v
     }
 
-    fn var_bind(&self, v: TypeVar, v_: Variable, u: &Unification, u_: Variable) -> Result<(), String> {
+    fn var_bind(&mut self, v: TypeVar, v_: Variable, u: &Unification, u_: Variable) -> Result<(), String> {
         if self.occurs_check(v, u) {
             return Err(format!("Failed occurs check {:?} {:?}", v, u));
         }
-        self.set.union2(
+        self.set.union(
             |a, b| match (a, b) {
-                (Unification::Constr(_, _), _) => Choice::Left,
-                _ => Choice::Right,
+                (a @ Unification::Constr(_, _), _) => a,
+                (_, b) => b,
             },
             u_,
             v_,
@@ -236,17 +204,17 @@ impl Unifier {
         Ok(())
     }
 
-    pub fn unify(&self, a_: Variable, b_: Variable) -> Result<(), String> {
-        if a_ == self.set.find_repr(b_) || b_ == self.set.find_repr(a_){
-            return Ok(())
+    pub fn unify(&mut self, a_: Variable, b_: Variable) -> Result<(), String> {
+        if a_ == self.set.find_repr(b_) || b_ == self.set.find_repr(a_) {
+            return Ok(());
         }
-        let a = self.set.find(a_);
-        let b = self.set.find(b_);
+        let a = self.set.find(a_).clone();
+        let b = self.set.find(b_).clone();
         use Unification::*;
         // println!("{:?} {:?}", a, b);
         match (a, b) {
-            (Unknown(a), b) => self.var_bind(*a, a_, b, b_),
-            (a, Unknown(b)) => self.var_bind(*b, b_, a, a_),
+            (Unknown(a), b) => self.var_bind(a, a_, &b, b_),
+            (a, Unknown(b)) => self.var_bind(b, b_, &a, a_),
             (Constr(a, a_vars), Constr(b, b_vars)) => {
                 if a != b {
                     return Err(format!("Can't unify constructors {:?} and {:?}", a, b));
@@ -255,13 +223,13 @@ impl Unifier {
                     return Err(format!("Can't unify argument lists {:?} and {:?}", a_vars, b_vars));
                 }
                 for (c, d) in a_vars.into_iter().zip(b_vars) {
-                    self.set.union2(
+                    self.set.union(
                         |a, b| match (a, b) {
-                            (Unification::Constr(_, _), _) => Choice::Left,
-                            _ => Choice::Right,
+                            (a @ Unification::Constr(_, _), _) => a,
+                            (_, b) => b,
                         },
-                        *c,
-                        *d,
+                        c,
+                        d,
                     );
                 }
                 Ok(())
@@ -270,13 +238,12 @@ impl Unifier {
     }
 }
 
-pub fn solve(constraints: Vec<(Type, Type)>) -> Result<HashMap<TypeVar, Type>, String> {
+pub fn solve<I: Iterator<Item = (Type, Type)>>(iter: I) -> Result<HashMap<TypeVar, Type>, String> {
     let mut un = Unifier::new();
-    let vars = constraints
-        .into_iter()
-        .map(|(a, b)| (un.intern(a), un.intern(b)))
-        .collect::<Vec<_>>();
-    for (a, b) in vars {
+
+    for (a, b) in iter {
+        let a = un.intern(a);
+        let b = un.intern(b);
         un.unify(a, b)?;
     }
     let mut map = HashMap::new();
@@ -296,8 +263,8 @@ impl<T: std::fmt::Debug> std::fmt::Debug for DisjointSet<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let part = self.partition();
         writeln!(f, "{{")?;
-        for (key, values) in part {
-            write!(f, "\t{:?}: {:?}\n", self.elements[key].data, values)?;
+        for values in part {
+            write!(f, "\t{:?}\n", values)?;
         }
         writeln!(f, "}}")
     }
@@ -317,9 +284,9 @@ mod tests {
         let d = set.singleton(29);
         let e = set.singleton(1);
 
-        set.union_key(|a, b| if a >= b { Choice::Left } else { Choice::Right }, a, d);
-        set.union_key(|a, b| if a >= b { Choice::Left } else { Choice::Right }, d, c);
-        set.union_key(|a, b| if a >= b { Choice::Left } else { Choice::Right }, a, e);
+        set.union(|a, b| a, a, d);
+        set.union(|a, b| a, d, c);
+        set.union(|a, b| a, a, e);
 
         assert_eq!(set.find(a), &29);
         assert_eq!(set.find(e), &29);

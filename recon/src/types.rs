@@ -3,13 +3,13 @@ use std::collections::{HashMap, HashSet, VecDeque};
 #[derive(Copy, Clone, Default, PartialEq, PartialOrd, Eq, Hash)]
 pub struct TypeVar(pub u32, pub u32);
 
-#[derive(Copy, Clone, PartialEq, PartialOrd, Eq)]
+#[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Hash)]
 pub struct Tycon {
     id: usize,
     arity: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, PartialOrd, Eq, Hash)]
 pub enum Type {
     Var(TypeVar),
     Con(Tycon, Vec<Type>),
