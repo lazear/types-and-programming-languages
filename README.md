@@ -27,4 +27,6 @@ let func = (\x: Var. case x of | A => 0 | B y => succ x | C y => pred x) in func
 
 - `dependent` is WIP, implementing a simple, dependently typed lambda calculus as discussed in ATAPL.
 
-- `bidir` is is an implementation of the bidirectional typechecker from 'Complete and Easy Bidirectional Typechecking', extended with booleans, product, and sum types.
+- `bidir` is is an implementation of the bidirectional typechecker from 'Complete and Easy Bidirectional Typechecking', extended with booleans, product, and sum types. I make no claims on the correctness of the implementation for the extended features not present in the paper.
+
+- `recon` contains several implementations of Hindley-Milner based type reconstruction from the untyped lambda calculus to System F, with let-polymorphism. Both Algorithm W (the more common) and Algorithm J (the more efficient) are presented. For Alg. W, both a naive equality constraint solver, and a faster union-find (with path compression) solver are provided. Algorithm J makes use shared mutable references to promote type sharing instead.
