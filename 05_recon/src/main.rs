@@ -125,17 +125,11 @@ impl Elaborator {
             Term::Int(i) => SystemF::new(TypedTerm::Int(*i), Type::Con(T_INT, vec![])),
             // x has type T iff T is an instance of the type scheme associated with x
             Term::Var(x, s) => {
-                // let fresh = self.fresh();
                 let scheme = self.get_scheme(*x).cloned().expect("Unbound variable!");
                 let ty = self.instantiate(scheme.clone());
-                // println!("{:?} scheme inst {:?} -> {:?}", s, scheme, ty);
-
-                // self.constraints.push((Type::Var(fresh), scheme));
                 SystemF::new(TypedTerm::Var(*x, s.clone()), ty)
             }
-            // \z. t has type T iff for some X1 and X2:
-            //  (i)  under the assumption that z has type X1, t has type X2
-            //  (ii) T is a supertype of X1 -> X2
+
             Term::Abs(body) => {
                 let arg = self.fresh();
 
@@ -169,13 +163,8 @@ impl Elaborator {
                 // }
 
                 let sub = self.uni.subst();
-                // dbg!(&sub);
-
                 self.context = self.context.drain(..).map(|sch| sch.apply(&sub)).collect();
                 let scheme = self.generalize(ty1.clone().apply(&sub));
-
-                // Add back any leftover constraints
-                // self.constraints.extend(sub.into_iter().map(|(k, v)| (Type::Var(k), v)));
 
                 self.context.push(scheme);
                 let (t2, ty2) = self.elaborate(t2).de();

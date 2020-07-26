@@ -14,4 +14,4 @@ jobs:
     - name: Run tests
       run: |
         cargo test --verbose
-        cargo run --bin system_f ./system_f/test.sf
+        cargo run --bin system_f ./06_system_f/test.sf
