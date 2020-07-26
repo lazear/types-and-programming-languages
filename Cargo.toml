@@ -1,2 +1,2 @@
 [workspace]
-members = ["arith", "bidir", "dependent", "lambda", "typedarith", "stlc", "system_f", "system_fw", "recon", "util"]
+members = ["01_arith", "02_lambda",  "03_typedarith", "04_stlc", "05_recon",  "06_system_f", "07_system_fw", "x1_bidir", "x2_dependent", "util"]

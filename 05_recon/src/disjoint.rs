@@ -294,31 +294,3 @@ impl<T: std::fmt::Debug> std::fmt::Debug for DisjointSet<T> {
         writeln!(f, "}}")
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let mut set = DisjointSet::new();
-
-        let a = set.singleton(10);
-        let b = set.singleton(12);
-        let c = set.singleton(14);
-        let d = set.singleton(29);
-        let e = set.singleton(1);
-
-        set.union(|a, b| a, a, d);
-        set.union(|a, b| a, d, c);
-        set.union(|a, b| a, a, e);
-
-        assert_eq!(set.find(a), &29);
-        assert_eq!(set.find(e), &29);
-        assert_eq!(set.find(c), &29);
-        assert_eq!(set.find(d), &29);
-        assert!(set.find(a) != set.find(b));
-
-        assert_eq!(set.components.get(), 2);
-    }
-}
